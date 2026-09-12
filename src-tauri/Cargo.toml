@@ -1,0 +1,87 @@
+[package]
+name = "hamster-hub"
+version = "0.1.0"
+description = "仓鼠Hub —— 把桌面，囤进一个窝。Windows 上的 iOS 风格桌面"
+authors = ["hamster-hub"]
+edition = "2021"
+rust-version = "1.77"
+
+[workspace]
+members = [
+    "crates/hamster-platform",
+    "crates/hamster-watchdog",
+    # bench（代理工作台）：vendor 自 Molto 的域层 crate，零 Tauri 依赖
+    "crates/molto-core",
+    "crates/molto-adapters",
+    "crates/molto-runtime",
+    "crates/molto-index",
+]
+
+# vendor crate 以 workspace = true 引用的共享依赖（与 Molto 仓库同版本）
+[workspace.package]
+version = "0.2.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+thiserror = "2"
+sha2 = "0.10"
+similar = "2"
+tempfile = "3"
+toml_edit = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+ts-rs = { version = "10", features = ["serde-json-impl"] }
+specta = { version = "=2.0.0-rc.22", features = ["derive"] }
+portable-pty = "0.8"
+uuid = { version = "1", features = ["v4"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+molto-core = { path = "crates/molto-core" }
+molto-adapters = { path = "crates/molto-adapters" }
+
+[lib]
+name = "hamster_hub_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "protocol-asset", "devtools", "specta"] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-global-shortcut = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+rusqlite = { version = "0.32", features = ["bundled"] }
+window-vibrancy = "0.5"
+walkdir = "2"
+lnk = "0.5"
+pinyin = "0.10"
+notify = "7"
+chrono = "0.4"
+sysinfo = "0.36"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# 平台层（任务栏/图标接管、快照、图标提取、Shell 启动）
+hamster-platform = { path = "crates/hamster-platform" }
+
+# bench（代理工作台）：vendor 自 Molto 的域层
+molto-core = { path = "crates/molto-core" }
+molto-adapters = { path = "crates/molto-adapters" }
+molto-runtime = { path = "crates/molto-runtime" }
+molto-index = { path = "crates/molto-index" }
+
+# IPC 类型生成（Rust → TypeScript 单一事实源）
+tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"] }
+specta = "=2.0.0-rc.22"
+specta-typescript = "0.0.9"
+tauri-plugin-dialog = "2.0.0-rc.8"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

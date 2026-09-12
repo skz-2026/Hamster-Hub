@@ -1,0 +1,11 @@
+# Windows schannel 在吊销服务器不可达时 HTTPS 会握手失败（CRYPT_E_REVOCATION_OFFLINE）
+[http]
+check-revoke = false
+
+[net]
+retry = 3
+
+# bench（vendor 自 Molto 的 crate）：ts-rs 类型导出目录。
+# 相对各 crate 的 manifest（crates/<pkg>）计算，../../ 即 src-tauri/，target 已 gitignore
+[env]
+TS_RS_EXPORT_DIR = "../../target/ts-rs-bindings"

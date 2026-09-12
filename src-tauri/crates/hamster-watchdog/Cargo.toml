@@ -1,0 +1,19 @@
+[package]
+name = "hamster-watchdog"
+version = "0.1.0"
+edition = "2021"
+description = "仓鼠Hub 看门狗：主进程异常退出时按快照还原任务栏/桌面图标"
+
+[[bin]]
+name = "hamster-watchdog"
+path = "src/main.rs"
+
+[dependencies]
+hamster-platform = { path = "../hamster-platform" }
+
+[dependencies.windows]
+version = "0.61"
+features = [
+    "Win32_Foundation",
+    "Win32_System_Threading",
+]

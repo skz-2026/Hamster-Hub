@@ -1,0 +1,224 @@
+@import "tailwindcss";
+
+/* ===== 设计 Token（SDD §7.2）===== */
+:root {
+  --accent: #ff8a3d;
+  --accent-strong: #f0700f;
+  --accent-weak: rgba(255, 138, 61, 0.16);
+}
+
+:root[data-theme='dark'] {
+  --bg: #17151b;
+  --panel: rgba(255, 255, 255, 0.055);
+  --panel-strong: rgba(255, 255, 255, 0.1);
+  --border: rgba(255, 255, 255, 0.09);
+  --text: #f4f0ea;
+  --text-muted: #a79e96;
+  --hover: rgba(255, 255, 255, 0.07);
+}
+
+:root[data-theme='light'] {
+  --bg: #faf6f0;
+  --panel: rgba(255, 255, 255, 0.62);
+  --panel-strong: rgba(255, 255, 255, 0.85);
+  --border: rgba(28, 26, 32, 0.08);
+  --text: #2a2521;
+  --text-muted: #8b8178;
+  --hover: rgba(28, 26, 32, 0.05);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: transparent; /* 让 Tauri 亚克力透出 */
+  color: var(--text);
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    'SF Pro Display',
+    'MiSans',
+    'HarmonyOS Sans',
+    'Segoe UI Variable',
+    'Segoe UI',
+    'Microsoft YaHei',
+    system-ui,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+}
+
+::selection {
+  background: rgba(255, 138, 61, 0.35);
+}
+
+/* 通用卡片 */
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  backdrop-filter: blur(14px);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ===== iOS 主屏组件（SDD §7.2）===== */
+.ios-ease {
+  transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* iOS 超椭圆近似 */
+.squircle {
+  border-radius: 22.5%;
+  overflow: hidden;
+}
+
+/* 长按编辑抖动（±2° 相位交替） */
+@keyframes jiggle {
+  0% {
+    transform: rotate(-2deg) translateY(0);
+  }
+  50% {
+    transform: rotate(2deg) translateY(-1px);
+  }
+  100% {
+    transform: rotate(-2deg) translateY(0);
+  }
+}
+.jiggling {
+  animation: jiggle 0.3s ease-in-out infinite;
+}
+
+/* iOS Dock：毛玻璃圆角容器（macOS 质感：内侧高光 + 更强饱和度） */
+.ios-dock {
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(28px) saturate(1.8);
+  -webkit-backdrop-filter: blur(28px) saturate(1.8);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+/* iOS 文件夹打开面板 */
+.ios-folder-panel {
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(30px) saturate(1.6);
+  -webkit-backdrop-filter: blur(30px) saturate(1.6);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.3);
+  animation: folder-zoom 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+}
+@keyframes folder-zoom {
+  from {
+    transform: scale(0.86);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* 分页容器滚动回弹手感 */
+.home-pages {
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+}
+.home-page {
+  scroll-snap-align: center;
+}
+
+/* 桌面主页入场（错落上浮，iOS 曲线） */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise-in {
+  animation: rise-in 0.55s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+/* 控制中心音量滑条（输入框为高命中区，轨道/手柄自绘细条） */
+.cc-range::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.25);
+}
+.cc-range::-webkit-slider-thumb {
+  appearance: none;
+  margin-top: -5px;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+
+/* ===== 代理工作台（bench）：markdown 正文 ===== */
+.bench-md p { margin: 0.35em 0; }
+.bench-md p:first-child { margin-top: 0; }
+.bench-md p:last-child { margin-bottom: 0; }
+.bench-md ul, .bench-md ol { margin: 0.35em 0; padding-left: 1.4em; }
+.bench-md ul { list-style: disc; }
+.bench-md ol { list-style: decimal; }
+.bench-md li { margin: 0.15em 0; }
+.bench-md h1, .bench-md h2, .bench-md h3 { margin: 0.6em 0 0.3em; font-weight: 600; }
+.bench-md h1:first-child, .bench-md h2:first-child, .bench-md h3:first-child { margin-top: 0; }
+.bench-md h1 { font-size: 1.15em; }
+.bench-md h2 { font-size: 1.08em; }
+.bench-md h3 { font-size: 1em; }
+.bench-md code:not(pre code) {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  padding: 0.1em 0.35em;
+  font-size: 0.9em;
+  font-family: 'Cascadia Code', Consolas, monospace;
+}
+.bench-md pre {
+  margin: 0.5em 0;
+  padding: 0.75em 1em;
+  overflow-x: auto;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.bench-md pre code {
+  font-size: 12px;
+  line-height: 1.55;
+  font-family: 'Cascadia Code', Consolas, monospace;
+  background: transparent;
+  padding: 0;
+}
+.bench-md a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.bench-md blockquote {
+  margin: 0.4em 0;
+  padding: 0.2em 0.9em;
+  border-left: 3px solid var(--accent-weak);
+  color: var(--text-muted);
+}
+.bench-md table { border-collapse: collapse; margin: 0.5em 0; font-size: 0.95em; }
+.bench-md th, .bench-md td { border: 1px solid var(--border); padding: 0.25em 0.7em; }
+.bench-md hr { border: 0; border-top: 1px solid var(--border); margin: 0.7em 0; }

@@ -1,0 +1,33 @@
+# deps
+node_modules/
+
+# build
+dist/
+src-tauri/target/
+src-tauri/gen/
+
+# generated（可重新生成，提交以方便纯前端改动）
+# src/shared/types/ipc.ts
+
+# editor / os
+.vscode/
+.idea/
+*.local
+.DS_Store
+Thumbs.db
+
+# logs
+*.log
+pnpm-debug.log*
+
+# test / local artifacts
+test-results/
+playwright-report/
+
+# local agent session files
+.zcode/
+
+# temp debug scripts
+.dbg*.mjs
+.dd*.mjs
+.reg*.mjs
