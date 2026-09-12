@@ -500,3 +500,72 @@ src-tauri/
     交互计数→私有存储持久）
   - 后续挂点：插件管理页（启用/停用/删除）、manifest permissions 声明式放开受控 IPC、
     桌面主页插件卡位、插件市场目录格式
+- ✅ **M4 阶段四收尾：插件生命周期管理 + 受控 IPC 桥 + 桌面插件卡位（2026-09-12，门禁全绿）**：
+  - **受控 IPC 桥**（permissions 双门）：plugin.json 增 `permissions: ["todo.add"|...]`；
+    `plugin_bridge_call` 能力白名单（todo.list/todo.add/apps.launch/apps.search）∧ manifest
+    声明 双重校验；前端 `usePluginApi(manifest)` 仅暴露声明的能力，桥接写操作自动失效
+    相关查询缓存（todo.add→['todo']、apps.launch→apps/top+all——不受全局 staleTime 30s
+    拖延，插件改动即时反映 UI）
+  - **插件管理卡**（设置页 PluginManageCard）：启停开关（KV `plugins.disabled`，已加入
+    KV_ALLOWED_KEYS；停用 = 选择器隐藏 + 槽位「插件已停用」占位）+ 两步确认删除
+    （`plugin_delete` 整目录移除，canonicalize 防逃逸）
+  - **桌面主页插件卡位**：内置 4 卡之后追加未停用插件（上限 2，保持一行排布）
+  - hello-hamster 示例升级演示权限桥：「记一条到待办」按钮 → ctx.api.todoAdd → 工作台
+    待办卡计数即时 +1（e2e 全链路断言）
+  - e2e 扩到 **8/8**（含：插件添加渲染/私有存储计数/权限桥记待办/退出桌面回工作台核验）
+  - 待办挂点：插件管理页富化（详情/权限展示已做基础版）、桌面主页卡位用户可配、
+    通知中心联动、主屏 agent 状态小组件
+- ✅ **M3 收尾：search+files 真实页（2026-09-12，StubRoute 占位补齐；门禁全绿）**：
+  - **/search 搜索页**：Spotlight 的常驻页面形态——应用（拼音/首字母）/文件（FTS5）/网页/问 AI
+    四路结果聚合 + 分组标题（应用→文件→网页→AI 与 Spotlight 同序）+ ↑↓/Enter 键盘导航
+    （Esc 不劫持，桌面接管子页由 AppShell 统一处理返回）
+  - **/files 文件页**：最近文件（mtime 降序，limit 50）+ 输入即检索 + 类型药丸（从当前数据
+    派生，kind 空归「文件」）+ 行级「打开 / 资源管理器定位」+ 右上角手动重建索引；
+    大小/时间右对齐列
+  - **检索去重**：新 hook `features/search/useUnifiedSearch`（app_search + file_search 两路，
+    limits 参数化）——Spotlight 覆盖层与 /search 页共用同一检索语义（Spotlight 渲染不动，
+    只换数据源）
+  - mock 层：MOCK_FILES 补 代码/压缩包/音频 三类（类型药丸有料可筛）；fileSearch/recentFiles
+    透传 limit（原先写死 slice 6）
+  - e2e 10→**12**（+搜索页四路聚合断言 / 文件页最近+类型筛选+检索断言）；选择器一律限定
+    `main` + exact（Dock tooltip 与路径列会重名，strict mode 连炸两次的教训）
+  - 浏览器截图验证（test-results/pages-verify/）：搜索页四路分组/选中高亮、文件页排序/药丸/行
+    布局全部达标
+  - 同轮对工作区存量改动做了一次全门禁收尾验证（此前已写好但未记录的两块，本次确认全绿）：
+    ① **dock 上抬修复**（desktop_mode.rs：工作区两段落值 settle_workarea——先落值静置 250ms
+    等 explorer 的 AppBar 预留写回再落终值，dock 定位/显示挪到最后一次工作区变更之后；巡检每轮
+    兜底重钉；退出改按**可见任务栏实际矩形**重算工作区，替代盲信进入前快照值——SW_HIDE/SW_SHOW
+    不触发 shell 重算，回放旧值会把上一轮污染值代代相传；hamster-platform/workarea.rs 新增
+    recompute_from_primary_taskbar 四向贴边判定）；② **导航丝滑**（侧栏新增「桌面」直达进入、
+    「主屏」未接管自动 enter 后落 /home 不被弹回；桌面子页左上角返回胶囊 + Esc（输入框聚焦
+    不劫持）；设置页桌面模式按钮状态感知切换）
+- 剩余可选项（本次时点）：托盘右键转发（M3 收尾）· 通知中心 v1（agent 异步通知承载）·
+  代码签名（发布前必须）· MCP 审计 UI 与「agent 正在操作」宣告（M4）· 插件管理页富化 /
+  桌面主页卡位用户可配 / 主屏 agent 状态小组件
+- ✅ **M4 阶段五：真机两处 UI 缺陷修复（2026-09-13，用户实测反馈；门禁全绿）**：
+  - **桌面子页底部被任务栏遮挡（快问输入框看不到的根源）**：真机桌面接管下主窗口整屏全屏，
+    底部 68 逻辑 px 被独立置顶 taskbar 窗遮住，而 AppShell 的 `<main>` 不留底部余量——所有
+    桌面子页页底内容（快问/助手 composer、设置页最后一行）都被盖住。浏览器预览的 Dock 是
+    flex 流内嵌不遮挡，故 e2e 一直未暴露。修复：`desktop && isTauri` 时 `<main>` 追加
+    `pb-[80px]`（浏览器/E2E 路径不变）。验证：浏览器模拟「pb + 假 68px 遮挡层」量测
+    composer 底 896 < 遮挡线 1012
+  - **/agent 统一输入栏（用户定调「一个风格的输入框 + toggle 放输入框上面」）**：
+    模式切换（桌面助手/快问）从顶栏移到输入框正上方；两种模式共用底部同一只玻璃输入框、
+    同一位置——助手会话建立后 bench ChatThread 的 composer 经 **React portal** 渲染进底栏
+    槽位（assistant-ui context 穿透 portal，流式/停止/续问全保留），AssistantPanel 去内部
+    输入框改 forwardRef+useImperativeHandle（startSession）+ onStateChange 上报；未开会话时
+    统一输入框首问即启动会话。ChatThread 加 composerHost/placeholder 参数（bench 页缺省
+    内嵌行为不变，ScrollToBottom 偏移随之区分）；快问建议药丸、AI_UNCONFIGURED 引导、
+    Spotlight pendingQ 链路不变
+  - 门禁：vitest 31 / tsc+build / e2e 12/12（agent 场景重写：首问启动 → portal composer
+    落同一槽位断言 → 快问同框 ai_chat 直连）
+  - **居中改版（用户定调「放正中央」）**：空会话（欢迎态）时整组「欢迎内容 + toggle +
+    输入框」垂直居中（ChatGPT 首屏式），开聊后输入栏落回底部——两种模式一致。
+    踩坑：初版把 AssistantPanel 在 hero/消息区各渲染一份，布局切换时组件卸载重建
+    导致 bench 会话状态丢失（页面弹回欢迎态）；改为**单实例**渲染、仅容器类名随
+    isEmpty 切换。e2e 环境教训两条：① playwright `reuseExistingServer: true` 会复用
+    长跑 dev server——经历过大量 HMR 后 vite 模块图可能陈旧（stream-registry 事件
+    总线状态分裂），表现成「流式回合不渲染/页面重置」的假 bug，杀旧 server 即愈；
+    ② 冷启动 server 首访 /home 有按需编译延迟，e2e 固定 waitForTimeout 会假失败，
+    改用带 timeout 的 expect 断言。vitest 33（含并行的 layout customized 用例 2 个）/
+    build / e2e 12/12 连续两轮全绿

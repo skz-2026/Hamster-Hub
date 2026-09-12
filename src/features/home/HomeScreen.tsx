@@ -69,6 +69,7 @@ export default function HomeScreen() {
   const cellEls = useRef(new Map<string, HTMLElement>());
   const longPressTimer = useRef<number | undefined>(undefined);
   const mergedRef = useRef(false);
+  const wheelLockRef = useRef(0);
 
   const now = useClockMinute();
 
@@ -225,6 +226,56 @@ export default function HomeScreen() {
     commands.appLaunch(key).catch((e) => console.error('[home] 启动失败', e));
   };
 
+  /** 平滑跳到第 i 页（滚轮/圆点/方向键共用） */
+  const scrollToPage = useCallback(
+    (i: number) => {
+      const sc = scrollerRef.current;
+      if (!sc) return;
+      const clamped = Math.max(0, Math.min(layout.pages.length - 1, i));
+      sc.scrollTo({ left: clamped * sc.clientWidth, behavior: 'smooth' });
+    },
+    [layout.pages.length],
+  );
+
+  // 鼠标滚轮 → 翻页：分页容器是横向滚动，鼠标滚轮的 deltaY 到不了它
+  //（触控板横扫走原生 deltaX，不干预）。React 的 onWheel 是 passive 的，
+  // 需要原生非被动监听才能 preventDefault 拦截纵向滚动。
+  useEffect(() => {
+    const sc = scrollerRef.current;
+    if (!sc) return;
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+      e.preventDefault();
+      const max = layout.pages.length - 1;
+      if (max < 1) return;
+      const now = Date.now();
+      if (now - wheelLockRef.current < 380) return; // 平滑滚动期间忽略连滚
+      const cur = Math.round(sc.scrollLeft / sc.clientWidth);
+      const next = cur + (e.deltaY > 0 ? 1 : -1);
+      if (next < 0 || next > max) return;
+      wheelLockRef.current = now;
+      sc.scrollTo({ left: next * sc.clientWidth, behavior: 'smooth' });
+    };
+    sc.addEventListener('wheel', onWheel, { passive: false });
+    return () => sc.removeEventListener('wheel', onWheel);
+  }, [layout.pages.length]);
+
+  // 左右方向键翻页（输入框聚焦时不劫持）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      const el = document.activeElement;
+      if (el instanceof HTMLElement && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) {
+        return;
+      }
+      const sc = scrollerRef.current;
+      if (!sc || layout.pages.length < 2) return;
+      scrollToPage(Math.round(sc.scrollLeft / sc.clientWidth) + (e.key === 'ArrowRight' ? 1 : -1));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [layout.pages.length, scrollToPage]);
+
   const removeSlot = (page: number, idx: number) => commit(removeFromPage(layout, page, idx));
   const removeDock = (idx: number) => commit(removeFromDock(layout, idx));
 
@@ -347,7 +398,11 @@ export default function HomeScreen() {
           const el = e.currentTarget;
           setPageIdx(Math.round(el.scrollLeft / el.clientWidth));
         }}
-        className="home-pages absolute inset-x-0 top-16 bottom-40 flex snap-x snap-mandatory overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        // 搜索时整层隐藏（visibility 保布局与拖拽 cell 注册表不失效），
+        // 否则结果图标会与首屏图标按同款网格叠加错位
+        className={`home-pages absolute inset-x-0 top-16 bottom-40 flex snap-x snap-mandatory overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
+          q ? 'invisible' : ''
+        }`}
       >
         {isLoading || !ready ? (
           <div className="grid w-full place-items-center gap-2 text-white/80">
@@ -444,18 +499,20 @@ export default function HomeScreen() {
         )}
       </div>
 
-      {/* 页码圆点 */}
-      {layout.pages.length > 1 && (
+      {/* 页码圆点（可点击跳页；搜索时随网格一起隐藏） */}
+      {layout.pages.length > 1 && !q && (
         <div
           className={`absolute inset-x-0 z-10 flex justify-center gap-2 ${
             takeover ? 'bottom-[178px]' : 'bottom-[118px]'
           }`}
         >
           {layout.pages.map((_, i) => (
-            <span
+            <button
               key={i}
+              onClick={() => scrollToPage(i)}
+              aria-label={`第 ${i + 1} 页`}
               className={`size-[7px] rounded-full transition-colors ${
-                i === pageIdx ? 'bg-white' : 'bg-white/35'
+                i === pageIdx ? 'bg-white' : 'bg-white/35 hover:bg-white/60'
               }`}
             />
           ))}

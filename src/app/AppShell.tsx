@@ -4,6 +4,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { TitleBar } from '@/app/TitleBar';
 import { SideNav } from '@/app/SideNav';
+import { ChevronLeft } from 'lucide-react';
 import { WebDebugBar } from '@/shared/components/WebDebugBar';
 import { DockBar } from '@/features/home/DockBar';
 import { DockPickerModal } from '@/features/home/DockPickerModal';
@@ -26,6 +27,24 @@ export function AppShell() {
   const navigate = useNavigate();
   const isHome = location.pathname === '/home';
   const isDesktopHome = location.pathname === '/desktop';
+  // 桌面接管下的子页（设置/代理/日程…）：真机里侧栏与任务栏都不在主窗口，
+  // 悬浮返回胶囊 + Esc 是这些页面唯一的「回桌面」入口，避免进去出不来
+  const showDesktopBack = desktop && !isDesktopHome && !isHome;
+
+  // Esc 快捷返回桌面（输入框聚焦时不劫持）
+  useEffect(() => {
+    if (!showDesktopBack) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const el = document.activeElement;
+      if (el instanceof HTMLElement && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) {
+        return;
+      }
+      navigate('/desktop');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showDesktopBack, navigate]);
 
   // Rust 核心就绪事件（IPC 事件流演示）
   useEffect(() => {
@@ -36,7 +55,8 @@ export function AppShell() {
     return () => unlisten?.();
   }, []);
 
-  // 桌面模式事件跟随：进入 → /desktop 桌面主页，退出 → 窗口化工作台。
+  // 桌面模式事件跟随：进入 → /desktop 桌面主页（已停在 /home 主屏则不劫持），
+  // 退出 → 窗口化工作台。
   // navigate 随 location 变化（标识不稳定），重挂监听无害；alive 标志避免
   // StrictMode/快速卸载时「注销函数晚于卸载 resolve」导致的重复监听。
   useEffect(() => {
@@ -45,14 +65,16 @@ export function AppShell() {
     events.desktopModeChanged
       .listen((e) => {
         setDesktop(e.payload.active);
-        navigate(e.payload.active ? '/desktop' : '/');
+        navigate(
+          e.payload.active ? (location.pathname === '/home' ? '/home' : '/desktop') : '/',
+        );
       })
       .then((fn) => (alive ? (unlisten = fn) : fn()));
     return () => {
       alive = false;
       unlisten?.();
     };
-  }, [navigate]);
+  }, [navigate, location.pathname]);
 
   // 初始对齐（仅挂载时执行一次）：启动即桌面模式 → 桌面主页。
   // 注意不能依赖 [navigate]——它随路由变化，会把任意导航都 replace 弹回 /desktop。
@@ -118,11 +140,13 @@ export function AppShell() {
   }, [navigate]);
 
 
-  // 主屏（iOS 图标网格）自绘全屏，无壳
+  // 主屏（iOS 图标网格）自绘全屏，无壳。任务栏「+」的选择器弹层仍要可用
+  //（否则主屏页点「+」毫无反应），故在此分支同样渲染
   if (isHome) {
     return (
       <>
         <Outlet />
+        {pickerOpen && <DockPickerModal onClose={() => setPickerOpen(false)} />}
         <WebDebugBar />
       </>
     );
@@ -134,6 +158,17 @@ export function AppShell() {
       style={{ background: 'var(--bg, #17151b)' }}
       data-tauri-drag-region={false}
     >
+      {/* 桌面接管子页的返回胶囊（与桌面主页控制中心钮同一视觉语言） */}
+      {showDesktopBack && (
+        <button
+          onClick={() => navigate('/desktop')}
+          title="返回桌面主页（Esc）"
+          className="fixed left-4 top-4 z-40 flex items-center gap-1 rounded-full bg-black/30 px-4 py-2 text-[12.5px] font-medium text-white/85 ring-1 ring-white/15 backdrop-blur-xl transition-all hover:bg-black/45 hover:text-white"
+        >
+          <ChevronLeft size={15} />
+          返回桌面
+        </button>
+      )}
       {!desktop && (
         <TitleBar
           coreVersion={coreVersion}
@@ -144,13 +179,20 @@ export function AppShell() {
       <div className="flex min-h-0 flex-1">
         {/* 桌面模式无侧栏（沉浸桌面）；窗口化保留侧栏导航 */}
         {!desktop && <SideNav />}
-        {/* /desktop 全屏铺满壁纸；其余页面留内边距 */}
+        {/* /desktop 全屏铺满壁纸；其余页面留内边距。
+            真机桌面接管：主窗口整屏全屏，底部 68 逻辑 px 被独立置顶任务栏窗遮挡
+            （浏览器预览的 Dock 是 flex 流内嵌，不遮挡）——子页须预留底部空间，
+            否则页底内容（快问输入框、设置页最后一行…）被任务栏盖住点不到；
+            顶部同理：悬浮返回胶囊（left-4 top-4）压在内容上层，子页须预留
+            pt-[60px]，否则左上角内容（bench 侧栏「新会话」、各页标题）被胶囊盖住 */}
         <main
           className={`min-w-0 flex-1 ${
             desktop
               ? isDesktopHome
                 ? 'overflow-hidden'
-                : 'overflow-y-auto px-4 py-4'
+                : `overflow-y-auto px-4 py-4 ${isTauri ? 'pb-[80px]' : ''} ${
+                    showDesktopBack ? 'pt-[60px]' : ''
+                  }`
               : 'overflow-y-auto px-6 py-5'
           }`}
         >

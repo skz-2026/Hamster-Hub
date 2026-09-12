@@ -4,7 +4,6 @@
  * 文件检索路在 M2 fileindex 接入。
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import {
   Search,
   Globe,
@@ -20,9 +19,9 @@ import {
 } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { commands, isTauri, type FileHit } from '@/shared/lib/ipc';
-import { useApps } from '@/features/home/hooks';
 import { Monogram } from '@/features/home/AppIcon';
 import { FileKindIcon } from './FileKindIcon';
+import { useUnifiedSearch } from '@/features/search/useUnifiedSearch';
 import { convertFileSrc } from '@tauri-apps/api/core';
 
 const SEARCH_ENGINE = 'https://www.baidu.com/s?wd=';
@@ -38,7 +37,6 @@ interface ResultItem {
 }
 
 export default function SearchOverlay() {
-  const { data: apps = [] } = useApps();
   const [query, setQuery] = useState('');
   const [sel, setSel] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -46,19 +44,8 @@ export default function SearchOverlay() {
 
   const q = query.trim().toLowerCase();
 
-  // 应用（拼音/首字母/名称检索）与文件（FTS5）两路真实查询
-  const { data: searchedApps = [] } = useQuery({
-    queryKey: ['apps', 'search', q],
-    queryFn: () => commands.appSearch(q, 8),
-    enabled: q.length > 0,
-    staleTime: 5_000,
-  });
-  const { data: fileHits = [] } = useQuery({
-    queryKey: ['files', 'search', q],
-    queryFn: () => commands.fileSearch(q, 6),
-    enabled: q.length > 0,
-    staleTime: 5_000,
-  });
+  // 应用（拼音/首字母/名称检索）与文件（FTS5）两路真实查询（与 /search 页共用 hook）
+  const { apps: searchedApps, files: fileHits } = useUnifiedSearch(q, 8, 6);
 
   const close = () => {
     if (isTauri) {

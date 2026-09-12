@@ -9,6 +9,8 @@ export interface SelectOption {
   value: string;
   label: string;
   hint?: string;
+  /** 选项行首图标（如 Agent 品牌头像） */
+  icon?: React.ReactNode;
 }
 
 /** 面板底部固定动作（如「浏览文件夹…」） */
@@ -70,6 +72,7 @@ export default function SelectPill({
                   o.value === value ? 'text-[var(--accent)]' : 'text-white/80'
                 }`}
               >
+                {o.icon}
                 <span className="whitespace-nowrap">{o.label}</span>
                 {o.hint && (
                   <span className="max-w-[280px] truncate text-[10.5px] text-white/35">{o.hint}</span>

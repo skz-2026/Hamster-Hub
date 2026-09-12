@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Search, X } from 'lucide-react';
+import { Loader2, Search, X } from 'lucide-react';
 import { useApps, useHomeLayout } from './hooks';
 import { AppIcon } from './AppIcon';
 import { DOCK_CAPACITY } from './layout';
@@ -7,20 +7,25 @@ import { DOCK_CAPACITY } from './layout';
 /**
  * 「添加到 Dock」选择器（主窗口居中弹层；任务栏窗口太小放不下弹层，
  * 由任务栏「+」经事件唤起主窗口）。受 DOCK_CAPACITY 上限约束。
+ * 候选按常用度排序（常用在前），避免百余个字母序应用里难以找到目标。
  */
 export function DockPickerModal({ onClose }: { onClose: () => void }) {
-  const { data: apps = [] } = useApps();
-  const { layout, commit } = useHomeLayout(apps);
+  const { data: apps = [], isLoading } = useApps();
+  const { layout, usageRank, commit } = useHomeLayout(apps);
   const [q, setQ] = useState('');
 
   const inDock = useMemo(() => new Set(layout.dock), [layout.dock]);
   const full = layout.dock.length >= DOCK_CAPACITY;
   const query = q.trim().toLowerCase();
-  const candidates = apps.filter(
-    (a) =>
-      !inDock.has(a.app_key) &&
-      (!query || a.display_name.toLowerCase().includes(query)),
-  );
+  const rankIdx = useMemo(() => new Map(usageRank.map((k, i) => [k, i])), [usageRank]);
+  const candidates = apps
+    .filter(
+      (a) =>
+        !inDock.has(a.app_key) &&
+        (!query || a.display_name.toLowerCase().includes(query)),
+    )
+    // 常用在前，没用过的保持字母序垫底（稳定排序）
+    .sort((x, y) => (rankIdx.get(x.app_key) ?? Infinity) - (rankIdx.get(y.app_key) ?? Infinity));
 
   const add = (key: string) => {
     if (full) return;
@@ -62,7 +67,11 @@ export function DockPickerModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        {full ? (
+        {isLoading && apps.length === 0 ? (
+          <div className="grid flex-1 place-items-center text-white/60">
+            <Loader2 className="animate-spin" size={20} />
+          </div>
+        ) : full ? (
           <p className="grid flex-1 place-items-center text-[13px] text-white/50">
             任务栏定制区已满（{DOCK_CAPACITY} 个）——右键图标可移除后再添加
           </p>

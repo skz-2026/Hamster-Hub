@@ -132,6 +132,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             plugins::plugin_read_code,
             plugins::plugin_storage_get,
             plugins::plugin_storage_set,
+            plugins::plugin_delete,
+            plugins::plugin_bridge_call,
             // 托盘管理（dock 右侧系统托盘区）
             commands::tray::tray_open_overflow,
         ])

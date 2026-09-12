@@ -7,10 +7,14 @@ import { useClock, useDateTimeInfo, greetingOf } from '@/features/workbench/hook
 import { useApps, useHomeLayout } from '@/features/home/hooks';
 import { WALLPAPERS, type WidgetType } from '@/features/home/layout';
 import { HomeWidget } from '@/features/home/HomeWidget';
+import { pluginWidgetRefOf } from '@/features/plugins/types';
+import { useDisabledPlugins, usePluginList } from '@/features/plugins/registry';
 import { ControlCenter } from '@/features/control/ControlCenter';
 
 /** 桌面小组件行（对齐水豚：问候语下方一排玻璃卡） */
 const WIDGETS: WidgetType[] = ['clock', 'weather', 'todo', 'countdown'];
+/** 桌面主页插件卡位上限（保持一行排布不爆） */
+const DESKTOP_PLUGIN_SLOTS = 2;
 
 /** 快捷入口（桌面模式无侧栏，页面导航收进这里） */
 const QUICK_LINKS: { label: string; to: string; Icon: LucideIcon }[] = [
@@ -28,6 +32,11 @@ const QUICK_LINKS: { label: string; to: string; Icon: LucideIcon }[] = [
  * 小组件卡片行 + 快捷入口。底部为独立置顶任务栏窗口（完全替代系统任务栏）。
  */
 export default function DesktopPage() {
+  const plugins = usePluginList();
+  const disabled = useDisabledPlugins();
+  const pluginWidgets = (plugins.data ?? [])
+    .filter((p) => !disabled.data.includes(p.id))
+    .slice(0, DESKTOP_PLUGIN_SLOTS);
   const navigate = useNavigate();
   const now = useClock();
   const { time, date, lunar } = useDateTimeInfo(now);
@@ -100,6 +109,11 @@ export default function DesktopPage() {
         {WIDGETS.map((t) => (
           <div key={t} className="w-[180px]">
             <HomeWidget type={t} />
+          </div>
+        ))}
+        {pluginWidgets.map((p) => (
+          <div key={p.id} className="w-[180px]" title={`插件：${p.name}`}>
+            <HomeWidget type={pluginWidgetRefOf(p.id)} />
           </div>
         ))}
       </div>

@@ -83,6 +83,8 @@ impl AgentAdapter for GeminiAdapter {
     }
 
     fn detect(&self) -> Option<InstallInfo> {
+        // CLI 可解析才算已装：目录残留（试装/其他工具创建）不再误报
+        crate::acp::find_program("gemini")?;
         self.config_root().exists().then(|| InstallInfo {
             id: ID.into(),
             name: NAME.into(),

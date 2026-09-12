@@ -71,6 +71,7 @@ describe('normalizeLayout', () => {
       pages: [],
       dock: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'],
       folders: {},
+      customized: true,
     };
     const next = normalizeLayout(
       base,
@@ -195,9 +196,34 @@ describe('小组件槽位', () => {
       pages: [['widget:clock', 'widget:hack', 'widget:clock', 'app:x']],
       dock: [],
       folders: {},
+      customized: true,
     };
     const next = normalizeLayout(base, [app('x')]);
     expect(next.pages.flat()).toEqual(['widget:clock', 'app:x']);
+  });
+
+  it('未定制布局跟随常用度重生：Dock 取排名前 4、页面常用在前', () => {
+    const apps = [app('a'), app('b'), app('c'), app('d'), app('e'), app('f')];
+    const rank = ['f', 'e', 'd', 'c', 'b', 'a'];
+    const l = normalizeLayout({ version: 1, wallpaper: 'ink', pages: [], dock: [], folders: {} }, apps, rank);
+    expect(l.dock).toEqual(['f', 'e', 'd', 'c']);
+    expect(l.pages[0]).toEqual(['app:b', 'app:a']);
+  });
+
+  it('已定制布局不自动重排（customized 冻结），仅做清洗', () => {
+    const base: HomeLayout = {
+      version: 1,
+      wallpaper: 'ink',
+      pages: [['app:c', 'app:a']],
+      dock: ['b'],
+      folders: {},
+      customized: true,
+    };
+    const apps = [app('a'), app('b'), app('c'), app('d')];
+    const next = normalizeLayout(base, apps, ['d', 'c', 'b', 'a']);
+    // 顺序保持用户排的 c 在 a 前；新装 d 追加到末尾
+    expect(next.pages[0]).toEqual(['app:c', 'app:a', 'app:d']);
+    expect(next.dock).toEqual(['b']);
   });
 
   it('addWidget 追加到未满页，满页则开新页', () => {

@@ -7,18 +7,22 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Puzzle } from 'lucide-react';
 import { commands } from '@/shared/lib/ipc';
-import { loadPluginRender, makePluginContext } from './registry';
+import { loadPluginRender, useDisabledPlugins, usePluginApi } from './registry';
 
 export default function PluginWidgetHost({ pluginId }: { pluginId: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const list = useQuery({ queryKey: ['plugins', 'list'], queryFn: () => commands.pluginList() });
+  const disabled = useDisabledPlugins();
   const manifest = list.data?.find((p) => p.id === pluginId);
+  const api = usePluginApi(manifest ?? { id: pluginId, name: pluginId, version: '', description: '' });
+  const isDisabled = disabled.data.includes(pluginId);
 
   useEffect(() => {
     let cancelled = false;
     let cleanup: (() => void) | undefined;
     setError(null);
+    if (disabled.data.includes(pluginId)) return; // 停用：不装载，渲染占位
 
     (async () => {
       try {
@@ -32,7 +36,13 @@ export default function PluginWidgetHost({ pluginId }: { pluginId: string }) {
         const el = ref.current;
         if (!el || cancelled) return;
         el.innerHTML = '';
-        const maybeCleanup = render(el, makePluginContext(m));
+        const storage = {
+          get: (key: string) => commands.pluginStorageGet(m.id, key),
+          set: async (key: string, value: string) => {
+            await commands.pluginStorageSet(m.id, key, value);
+          },
+        };
+        const maybeCleanup = render(el, { manifest: m, storage, api });
         if (!cancelled && typeof maybeCleanup === 'function') cleanup = maybeCleanup;
       } catch (e) {
         if (!cancelled) setError(String(e).slice(0, 160));
@@ -48,6 +58,16 @@ export default function PluginWidgetHost({ pluginId }: { pluginId: string }) {
       }
     };
   }, [pluginId, manifest]);
+
+  if (isDisabled) {
+    return (
+      <div className="grid h-full place-items-center text-[11px] text-white/40">
+        <span className="flex items-center gap-1.5">
+          <Puzzle size={11} /> 插件已停用
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div ref={ref} className="h-full w-full">

@@ -32,3 +32,4 @@ playwright-report/
 .dd*.mjs
 .reg*.mjs
 .tray-verify.mjs
+*.tmp.mjs

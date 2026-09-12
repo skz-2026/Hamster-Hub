@@ -20,6 +20,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { isTauri } from '@/shared/lib/ipc';
 import { useAgents, useProjects, useWorkspaces, createStreamSession } from './hooks';
 import SelectPill from './SelectPill';
+import AgentAvatar from './AgentAvatar';
 import type { LiveSessionInfo } from '@/shared/types/bench';
 
 const SUGGESTIONS = [
@@ -188,9 +189,20 @@ export default function BenchWelcome({ onCreated }: { onCreated: (info: LiveSess
             <Plus size={15} />
           </button>
           <SelectPill
-            icon={<Bot size={13} />}
+            icon={
+              agent ? (
+                <AgentAvatar agentId={agent.id} size={14} />
+              ) : (
+                <Bot size={13} className="text-white/50" />
+              )
+            }
             value={agentId}
-            options={streamable.map((a) => ({ value: a.id, label: a.name, hint: a.version ? `v${a.version}` : undefined }))}
+            options={streamable.map((a) => ({
+              value: a.id,
+              label: a.name,
+              hint: a.version ? `v${a.version}` : undefined,
+              icon: <AgentAvatar agentId={a.id} size={16} />,
+            }))}
             onChange={switchAgent}
             placeholder="选择代理"
             accent

@@ -4,7 +4,7 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import { emitTo, emit } from '@tauri-apps/api/event';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { LayoutGrid, LogOut, Bot, Plus, Search, Settings } from 'lucide-react';
+import { LayoutGrid, LogOut, Bot, MonitorSmartphone, Plus, Search, Settings } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { commands, isTauri, type AppEntry } from '@/shared/lib/ipc';
 import { useTopApps } from '@/features/dashboard/hooks';
@@ -22,8 +22,16 @@ interface DockBarProps {
   desktop?: boolean;
 }
 
+/** 系统入口项：to = 应用内路由；onClick = 模式动作（如进入桌面） */
+type SystemEntry = {
+  label: string;
+  Icon: LucideIcon;
+  to?: string;
+  onClick?: () => void;
+};
+
 /** 系统入口（任务栏左端 / 胶囊右段）：应用内路由 */
-const SYSTEM_ICONS: { label: string; to: string; Icon: LucideIcon }[] = [
+const SYSTEM_ICONS: SystemEntry[] = [
   { label: '代理', to: '/bench', Icon: Bot },
   { label: '主屏', to: '/home', Icon: LayoutGrid },
   { label: '搜索', to: '/search', Icon: Search },
@@ -61,8 +69,29 @@ export function DockBar({ desktop }: DockBarProps) {
   const appByKey = new Map(apps.map((a) => [a.app_key, a]));
   const frequent = top.filter((a) => !layout.dock.includes(a.app_key)).slice(0, desktop ? 6 : 4);
   const exitDesktop = () => commands.desktopModeExit().catch(console.error);
+  const enterDesktop = () => commands.desktopModeEnter().catch(console.error);
   /** 开始：注入 Ctrl+Esc 召出系统真实开始菜单（全局键注入，任务栏窗口内调用同样有效） */
   const openStartMenu = () => commands.startMenuOpen().catch(console.error);
+
+  // 窗口化胶囊里「主屏」不可达（主屏仅在接管态开放，点了会被弹回），同一位换「桌面模式」快捷进入
+  const systemEntries: SystemEntry[] = desktop
+    ? SYSTEM_ICONS
+    : SYSTEM_ICONS.map((e) =>
+        e.to === '/home' ? { label: '桌面模式', Icon: MonitorSmartphone, onClick: enterDesktop } : e,
+      );
+  /** 系统入口组（两形态共用渲染；桌面任务栏只吃原生 tooltip） */
+  const renderSystem = (nativeTipOnly: boolean) =>
+    systemEntries.map(({ label, to, Icon, onClick }) => (
+      <DockItem
+        key={label}
+        label={label}
+        active={to !== undefined && pathname === to}
+        nativeTipOnly={nativeTipOnly}
+        onClick={to !== undefined ? () => goRoute(to) : onClick!}
+      >
+        <SystemTile Icon={Icon} size={size} />
+      </DockItem>
+    ));
 
   /** 启动 + 常用组即时刷新（usage 已落库，invalidate 触发 top_apps 重取） */
   const launchApp = (key: string) => {
@@ -109,11 +138,7 @@ export function DockBar({ desktop }: DockBarProps) {
           <DockItem label="开始" nativeTipOnly={desktop} onClick={openStartMenu}>
             <StartLogo size={size} />
           </DockItem>
-          {SYSTEM_ICONS.map(({ label, to, Icon }) => (
-            <DockItem key={to} label={label} active={pathname === to} nativeTipOnly={desktop} onClick={() => goRoute(to)}>
-              <SystemTile Icon={Icon} size={size} />
-            </DockItem>
-          ))}
+          {renderSystem(true)}
           {layout.dock.length > 0 && <Divider />}
           {layout.dock.map((key, idx) => {
             const a = appByKey.get(key);
@@ -203,15 +228,10 @@ export function DockBar({ desktop }: DockBarProps) {
   const frequentGroup = frequent.map(
     (a) => <AppDockItem key={a.app_key} app={a} size={size} onLaunch={launchApp} />,
   );
-  const systemGroup = SYSTEM_ICONS.map(({ label, to, Icon }) => (
-    <DockItem key={to} label={label} active={pathname === to} onClick={() => goRoute(to)}>
-      <SystemTile Icon={Icon} size={size} />
-    </DockItem>
-  ));
   const groups = [
     { key: 'custom', nodes: customGroup },
     { key: 'frequent', nodes: frequentGroup },
-    { key: 'system', nodes: systemGroup },
+    { key: 'system', nodes: renderSystem(false) },
   ].filter((g) => g.nodes.some(Boolean));
 
   return (

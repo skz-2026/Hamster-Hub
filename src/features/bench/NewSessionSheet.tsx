@@ -3,9 +3,10 @@
  * 可选模型/推理强度 + 首条 prompt。浏览器层目录为手填（真机走 dialog 插件）。
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Bot, FolderOpen, Loader2, X } from 'lucide-react';
+import { FolderOpen, Loader2, X } from 'lucide-react';
 import type { AgentInfo, LiveSessionInfo } from '@/shared/types/bench';
 import { useAgents, useProjects, createStreamSession } from './hooks';
+import AgentAvatar from './AgentAvatar';
 
 function AgentCard({ a, selected, onSelect }: { a: AgentInfo; selected: boolean; onSelect: () => void }) {
   const disabled = !a.installed || !a.streaming;
@@ -18,7 +19,7 @@ function AgentCard({ a, selected, onSelect }: { a: AgentInfo; selected: boolean;
       } ${disabled ? 'cursor-not-allowed opacity-40' : ''}`}
     >
       <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-white/8 ring-1 ring-white/10">
-        <Bot size={15} className="text-[var(--accent)]" />
+        <AgentAvatar agentId={a.id} size={20} />
       </span>
       <div className="min-w-0">
         <p className="truncate text-[12.5px] font-medium">{a.name}</p>

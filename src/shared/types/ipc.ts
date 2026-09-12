@@ -303,6 +303,19 @@ async pluginStorageSet(pluginId: string, key: string, value: string) : Promise<n
     return await TAURI_INVOKE("plugin_storage_set", { pluginId, key, value });
 },
 /**
+ * 插件删除：整目录移除（防路径逃逸）
+ */
+async pluginDelete(pluginId: string) : Promise<null> {
+    return await TAURI_INVOKE("plugin_delete", { pluginId });
+},
+/**
+ * 受控桥：插件经 manifest 声明的权限调用有限的桌面能力。
+ * 返回 JSON 字符串（能力各自定义返回形态）。
+ */
+async pluginBridgeCall(pluginId: string, capability: string, payload: string) : Promise<string> {
+    return await TAURI_INVOKE("plugin_bridge_call", { pluginId, capability, payload });
+},
+/**
  * 打开原生托盘溢出弹层（系统自带 UI，含全部后台托盘 app，可直接交互）。
  * 
  * 借壳显示系统任务栏的 ~1s 里先把 dock 切成不透明（见 [`OpaqueDockGuard`]），
@@ -365,7 +378,19 @@ mcp_user_token: string | null;
 /**
  * 已开启桌面 MCP 分发的 agent id（写入其配置文件；移除 = 从配置摘除条目）
  */
-mcp_agents: string[] }
+mcp_agents: string[]; 
+/**
+ * 桌面助手默认代理（空 = 自动：claude → zcode → 首个已装且支持结构化通道）
+ */
+assistant_agent_id: string; 
+/**
+ * 桌面助手默认模型（空 = agent CLI 自身默认）
+ */
+assistant_model: string; 
+/**
+ * 桌面助手默认推理强度（空 = agent 默认；选项来自各 agent launchOptions）
+ */
+assistant_effort: string }
 /**
  * 扫描结果（前端展示形态）。
  */
@@ -425,7 +450,11 @@ export type Appearance = { theme: string; accent: string; glass: string; font_sc
  */
 export type AssistantCreateArgs = { firstPrompt: string | null; model: string | null; 
 /**
- * 指定代理；缺省按 claude → zcode → 首个已安装顺序解析
+ * 推理强度（结构化通道原生支持；None = 用设置默认）
+ */
+effort: string | null; 
+/**
+ * 指定代理；缺省按 设置默认 → claude → zcode → 首个已装 顺序解析
  */
 agentId: string | null }
 /**
@@ -572,6 +601,10 @@ export type Note = { id: number; content: string; pinned: boolean; updated_at: n
  * 插件信息（命令返回；不含代码）
  */
 export type PluginInfo = { id: string; name: string; version: string; description: string; author: string; entry: string; 
+/**
+ * 声明式权限（透传给前端构建 ctx.api）
+ */
+permissions: string[]; 
 /**
  * 入口文件完整路径（前端据此请求代码）
  */

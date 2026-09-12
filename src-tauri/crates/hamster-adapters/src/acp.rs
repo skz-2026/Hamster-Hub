@@ -512,6 +512,24 @@ impl AcpAgentAdapter {
             .map(|p| p.to_string_lossy().into_owned())
             .unwrap_or_else(|| self.spec.programs[0].to_string())
     }
+
+    /// detect 的可注入版本（测试注假 resolve，避免依赖测试机的 PATH）。
+    fn detect_with(&self, resolve: impl Fn(&str) -> Option<PathBuf>) -> Option<InstallInfo> {
+        let program = self.spec.programs.iter().find_map(|p| resolve(p))?;
+        let config_root = self
+            .spec
+            .config_dirs
+            .iter()
+            .map(|d| self.home.join(d))
+            .find(|p| p.is_dir())
+            .unwrap_or(program);
+        Some(InstallInfo {
+            id: self.spec.id.into(),
+            name: self.spec.name.into(),
+            version: None,
+            config_root: config_root.to_string_lossy().into_owned(),
+        })
+    }
 }
 
 impl AgentAdapter for AcpAgentAdapter {
@@ -523,28 +541,11 @@ impl AgentAdapter for AcpAgentAdapter {
         self.spec.name
     }
 
-    /// 已装判定：配置目录存在（强证据）→ 否则可执行可解析（弱证据）。
-    /// 纯文件系统探测，不运行任何外部命令。
+    /// 已装判定：可执行可解析（硬证据——launch 依赖它）→ 配置目录存在
+    /// （软证据，仅决定 configRoot 展示）。纯文件系统探测，不运行任何外部命令。
+    /// 目录存在不再单独算已装：IDE/试装残留（如 `.cursor`）会误报。
     fn detect(&self) -> Option<InstallInfo> {
-        for dir in self.spec.config_dirs {
-            let p = self.home.join(dir);
-            if p.is_dir() {
-                return Some(InstallInfo {
-                    id: self.spec.id.into(),
-                    name: self.spec.name.into(),
-                    version: None,
-                    config_root: p.to_string_lossy().into_owned(),
-                });
-            }
-        }
-        // 无配置目录证据时给出可执行路径本身（UI 展示「检测到的是这个」）
-        let program = self.spec.programs.iter().find_map(|p| find_program(p))?;
-        Some(InstallInfo {
-            id: self.spec.id.into(),
-            name: self.spec.name.into(),
-            version: None,
-            config_root: program.to_string_lossy().into_owned(),
-        })
+        self.detect_with(find_program)
     }
 
     /// 只接通道：MCP / 规则 / Skills / 工具颗粒度一律 false（未实测，不夸大）。
@@ -695,16 +696,40 @@ mod tests {
         }
     }
 
-    /// 配置目录探测：强证据优先，config_root 指向该目录。
+    /// 配置目录探测：有可执行时配置目录优先作为 config_root。
     #[test]
     fn detect_prefers_config_dir() {
         let home = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(home.path().join(".config/opencode")).unwrap();
-        let info = AcpAgentAdapter::new(home.path(), spec("opencode"))
-            .detect()
-            .expect("配置目录存在应判定为已装");
+        let adapter = AcpAgentAdapter::new(home.path(), spec("opencode"));
+        let info = adapter
+            .detect_with(|_| Some(PathBuf::from("/bin/opencode")))
+            .expect("可执行 + 配置目录应判定为已装");
         assert_eq!(info.id, "opencode");
         assert!(info.config_root.ends_with(".config/opencode"));
+    }
+
+    /// 回归：只有配置目录残留（IDE/试装）而无可执行 → 不再误报为已装。
+    #[test]
+    fn config_dir_alone_is_not_installed() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(home.path().join(".cursor")).unwrap();
+        let detected = AcpAgentAdapter::new(home.path(), spec("cursor"))
+            .detect_with(|_| None)
+            .is_some();
+        assert!(!detected, "无可执行文件时不得判定为已装");
+    }
+
+    /// 无配置目录时 config_root 回退为解析到的可执行路径。
+    #[test]
+    fn detect_falls_back_to_program_path() {
+        let home = tempfile::tempdir().unwrap();
+        let info = AcpAgentAdapter::new(home.path(), spec("opencode"))
+            .detect_with(|p| {
+                (p == "opencode").then(|| PathBuf::from("/usr/local/bin/opencode"))
+            })
+            .expect("可执行可解析即已装");
+        assert_eq!(info.config_root, "/usr/local/bin/opencode");
     }
 
     /// 无配置目录时回退到可执行探测（绝对路径入参 → 直接命中）。

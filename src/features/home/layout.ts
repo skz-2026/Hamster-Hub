@@ -25,6 +25,12 @@ export interface HomeLayout {
   /** Dock 只放应用（原始 appKey） */
   dock: string[];
   folders: Record<string, FolderDef>;
+  /**
+   * 用户手动整理过布局（拖拽/增删/进 Dock 等任何 commit 都会置位）。
+   * 未置位 = 机器生成的默认布局：跟随常用度排名自动重生（首屏常用优先），
+   * 置位后冻结，不再自动重排。
+   */
+  customized?: boolean;
 }
 
 export const WALLPAPERS: Record<string, { name: string; css: string }> = {
@@ -123,18 +129,36 @@ const KNOWN_DOCK_APPS = [
   'vs code', 'word', 'excel', 'powerpoint', 'wps', '百度网盘', '网易云', 'qq音乐',
 ];
 
-/** 首次进入：常见应用优先入 Dock（≤4），其余按容量分页 */
-export function buildDefaultLayout(apps: AppEntry[]): HomeLayout {
+/**
+ * 默认布局：常用度排名优先——Dock 取使用频次前 4，页面按「常用在前」排序
+ *（无使用数据的新装应用保持扫描序垫底）。无任何使用数据时 Dock 退回
+ * KNOWN_DOCK_APPS 候选表（真机扫描是字母序，会捞到 Administrative Tools
+ * 这类系统工具，候选表只放用户认识的应用）；一个都没匹配到就留空
+ *（显示「拖入常用应用」引导）。
+ */
+export function buildDefaultLayout(apps: AppEntry[], usageRank: string[] = []): HomeLayout {
+  const byKey = new Map(apps.map((a) => [a.app_key, a]));
   const dock: string[] = [];
-  for (const want of KNOWN_DOCK_APPS) {
-    const hit = apps.find(
-      (a) => a.display_name.toLowerCase().includes(want) && !dock.includes(a.app_key),
-    );
-    if (hit) dock.push(hit.app_key);
+  for (const key of usageRank) {
+    if (byKey.has(key) && !dock.includes(key)) dock.push(key);
     if (dock.length >= 4) break;
   }
+  if (dock.length === 0) {
+    for (const want of KNOWN_DOCK_APPS) {
+      const hit = apps.find(
+        (a) => a.display_name.toLowerCase().includes(want) && !dock.includes(a.app_key),
+      );
+      if (hit) dock.push(hit.app_key);
+      if (dock.length >= 4) break;
+    }
+  }
+  // 页面排序：rank 序在前、无使用数据的按原序（稳定排序）垫底
   const placed = new Set(dock);
-  const rest = apps.filter((a) => !placed.has(a.app_key)).map((a) => appIdOf(a.app_key));
+  const rank = new Map(usageRank.map((k, i) => [k, i]));
+  const rest = apps
+    .filter((a) => !placed.has(a.app_key))
+    .sort((x, y) => (rank.get(x.app_key) ?? Infinity) - (rank.get(y.app_key) ?? Infinity))
+    .map((a) => appIdOf(a.app_key));
   const pages: SlotItem[][] = [];
   for (let i = 0; i < rest.length; i += PAGE_CAPACITY) {
     pages.push(rest.slice(i, i + PAGE_CAPACITY));
@@ -144,11 +168,18 @@ export function buildDefaultLayout(apps: AppEntry[]): HomeLayout {
 }
 
 /**
- * 规整化：剔除已卸载应用/空文件夹、补充新装应用到最后一页、重分页。
- * 保留用户自定义顺序与文件夹结构。
+ * 规整化：customized 未置位的布局视为「默认布局」，直接按当前常用度重生
+ *（首屏常用优先）；已定制布局则保留用户自定义顺序与文件夹结构——剔除已
+ * 卸载应用/空文件夹、补充新装应用到最后一页、重分页。
  */
-export function normalizeLayout(layout: HomeLayout | null, apps: AppEntry[]): HomeLayout {
-  if (!layout || layout.version !== 1) return buildDefaultLayout(apps);
+export function normalizeLayout(
+  layout: HomeLayout | null,
+  apps: AppEntry[],
+  usageRank: string[] = [],
+): HomeLayout {
+  if (!layout || layout.version !== 1 || !layout.customized) {
+    return buildDefaultLayout(apps, usageRank);
+  }
   const valid = new Set(apps.map((a) => a.app_key));
 
   const dock = layout.dock.filter((k) => valid.has(k)).slice(0, DOCK_CAPACITY);

@@ -67,6 +67,9 @@ const MOCK_FILES: FileHit[] = [
   { path: 'C:\\Users\\you\\Downloads\\hamster-hub-setup.exe', name: 'hamster-hub-setup.exe', ext: 'exe', kind: '', size: 2300000, mtime: 1757100000 },
   { path: 'C:\\Users\\you\\Pictures\\旅行vlog.mp4', name: '旅行vlog.mp4', ext: 'mp4', kind: '视频', size: 89000000, mtime: 1756500000 },
   { path: 'C:\\Users\\you\\Documents\\报销单2026.xlsx', name: '报销单2026.xlsx', ext: 'xlsx', kind: '文档', size: 30000, mtime: 1757200000 },
+  { path: 'C:\\Users\\you\\Projects\\hamster-hub\\lib.rs', name: 'lib.rs', ext: 'rs', kind: '代码', size: 42000, mtime: 1756700000 },
+  { path: 'C:\\Users\\you\\Downloads\\素材包.zip', name: '素材包.zip', ext: 'zip', kind: '压缩包', size: 51200000, mtime: 1756400000 },
+  { path: 'C:\\Users\\you\\Music\\夜曲.mp3', name: '夜曲.mp3', ext: 'mp3', kind: '音频', size: 8200000, mtime: 1756000000 },
 ];
 
 let MOCK_PROCS: ProcInfo[] = [
@@ -88,7 +91,7 @@ const DEFAULT_SETTINGS: Settings = {
   weather: { provider: 'open-meteo', city_id: '', qweather_key: null },
   ai: { base_url: 'https://open.bigmodel.cn/api/paas/v4', model: '', api_key: null },
   behavior: { autostart: false, start_minimized: false, language: 'zh-CN', desktop_mode_hotkey: 'Ctrl+Alt+D', desktop_mode_on_launch: true },
-  agent: { computer_use_enabled: false, assistant_persona: '', mcp_port: null, mcp_user_token: null, mcp_agents: [] },
+  agent: { computer_use_enabled: false, assistant_persona: '', mcp_port: null, mcp_user_token: null, mcp_agents: [], assistant_agent_id: '', assistant_model: '', assistant_effort: '' },
 };
 
 /** mock 的按 agent 分发开关状态（内存） */
@@ -103,6 +106,7 @@ const MOCK_PLUGINS: PluginInfo[] = [
     description: '最小示例：点击计数 + 插件私有存储',
     author: '仓鼠Hub',
     entry: 'widget.js',
+    permissions: ['todo.add'],
     entryPath: 'mock://hello-hamster/widget.js',
   },
   {
@@ -112,19 +116,27 @@ const MOCK_PLUGINS: PluginInfo[] = [
     description: '随机刷一句一言（fetch 网络）',
     author: '仓鼠Hub',
     entry: 'widget.js',
+    permissions: [],
     entryPath: 'mock://hitokoto/widget.js',
   },
 ];
 const MOCK_PLUGIN_CODE: Record<string, string> = {
   'hello-hamster': `export default function (el, ctx) {
   let count = 0;
-  el.innerHTML = '<div style="display:flex;flex-direction:column;justify-content:center;height:100%;gap:6px"><div style="font-size:11px;font-weight:500;color:rgba(255,255,255,.9)">你好仓鼠（浏览器预览）</div><div style="display:flex;align-items:center;gap:10px"><button data-act style="border:0;border-radius:999px;padding:4px 12px;font-size:12px;cursor:pointer;background:rgba(255,138,61,.85);color:#fff">囤一口</button><span data-n style="font-size:22px;font-weight:300;color:#fff">0</span></div></div>';
+  el.innerHTML = '<div style="display:flex;flex-direction:column;justify-content:center;height:100%;gap:6px"><div style="font-size:11px;font-weight:500;color:rgba(255,255,255,.9)">你好仓鼠（浏览器预览）</div><div style="display:flex;align-items:center;gap:10px"><button data-act style="border:0;border-radius:999px;padding:4px 12px;font-size:12px;cursor:pointer;background:rgba(255,138,61,.85);color:#fff">囤一口</button><span data-n style="font-size:22px;font-weight:300;color:#fff">0</span></div><button data-todo style="align-self:flex-start;border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:2px 10px;font-size:10px;cursor:pointer;background:transparent;color:rgba(255,255,255,.75)">记一条「喂仓鼠」到待办</button></div>';
   const n = el.querySelector('[data-n]');
   const paint = () => (n.textContent = String(count));
   ctx.storage.get('count').then((v) => { count = Number(v ?? 0); paint(); });
   const onClick = () => { count += 1; paint(); ctx.storage.set('count', String(count)); };
   el.querySelector('[data-act]').addEventListener('click', onClick);
-  return () => el.querySelector('[data-act]')?.removeEventListener('click', onClick);
+  const t = el.querySelector('[data-todo]');
+  const onTodo = async () => {
+    t.textContent = '记录中…';
+    try { await ctx.api.todoAdd({ content: '喂仓鼠（来自插件）' }); t.textContent = '✓ 已记入待办'; }
+    catch { t.textContent = '失败，重试？'; }
+  };
+  t.addEventListener('click', onTodo);
+  return () => { el.querySelector('[data-act]')?.removeEventListener('click', onClick); t?.removeEventListener('click', onTodo); };
 }`,
   hitokoto: `export default function (el) {
   el.innerHTML = '<div style="display:flex;flex-direction:column;justify-content:center;height:100%;gap:6px"><div data-l style="font-size:12px;color:rgba(255,255,255,.9)">一言（浏览器预览）</div></div>';
@@ -231,10 +243,10 @@ export const mockCommands = {
     console.log('[mock] 打开 URL', url);
     return null;
   },
-  async fileSearch(query: string, _limit: number | null): Promise<FileHit[]> {
+  async fileSearch(query: string, limit: number | null): Promise<FileHit[]> {
     const q = query.trim().toLowerCase();
     if (!q) return [];
-    return MOCK_FILES.filter((f) => f.name.toLowerCase().includes(q)).slice(0, 6);
+    return MOCK_FILES.filter((f) => f.name.toLowerCase().includes(q)).slice(0, limit ?? 6);
   },
   async todoList(): Promise<Todo[]> {
     const raw = ls()['todos'];
@@ -291,8 +303,8 @@ export const mockCommands = {
       { title: '新年', days: 112, kind: 'auto', emoji: '🎊' },
     ];
   },
-  async recentFiles(_limit: number | null): Promise<FileHit[]> {
-    return [...MOCK_FILES].sort((a, b) => b.mtime - a.mtime).slice(0, 6);
+  async recentFiles(limit: number | null): Promise<FileHit[]> {
+    return [...MOCK_FILES].sort((a, b) => b.mtime - a.mtime).slice(0, limit ?? 6);
   },
   async topApps(_limit: number | null): Promise<AppEntry[]> {
     return APPS.slice(0, 8);
@@ -556,6 +568,30 @@ export const mockCommands = {
   async pluginStorageSet(pluginId: string, key: string, value: string): Promise<null> {
     localStorage.setItem(`plugin.${pluginId}.${key}`, value);
     return null;
+  },
+  async pluginDelete(pluginId: string): Promise<null> {
+    const i = MOCK_PLUGINS.findIndex((p) => p.id === pluginId);
+    if (i >= 0) MOCK_PLUGINS.splice(i, 1);
+    delete MOCK_PLUGIN_CODE[pluginId];
+    console.log('[mock] pluginDelete', pluginId);
+    return null;
+  },
+  async pluginBridgeCall(pluginId: string, capability: string, payload: string): Promise<string> {
+    console.log('[mock] pluginBridgeCall', pluginId, capability);
+    const args = JSON.parse(payload || '{}') as Record<string, unknown>;
+    if (capability === 'todo.add') {
+      const t = await mockCommands.todoCreate(String(args.content ?? '（插件）'));
+      return JSON.stringify(t);
+    }
+    if (capability === 'todo.list') return JSON.stringify(await mockCommands.todoList());
+    if (capability === 'apps.search')
+      return JSON.stringify(
+        APPS.filter((a) => a.display_name.includes(String(args.query ?? '')))
+          .slice(0, 8)
+          .map((a) => ({ appKey: a.app_key, name: a.display_name })),
+      );
+    if (capability === 'apps.launch') return JSON.stringify({ launched: args.app_key ?? '' });
+    throw new Error('未知能力');
   },
   async benchStreamSend(sessionId: string, text: string): Promise<null> {
     const s = liveStreams.get(sessionId);

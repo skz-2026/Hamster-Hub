@@ -278,7 +278,9 @@ pub const DEFAULT_PERSONA: &str =
 pub struct AssistantCreateArgs {
     pub first_prompt: Option<String>,
     pub model: Option<String>,
-    /// 指定代理；缺省按 claude → zcode → 首个已安装顺序解析
+    /// 推理强度（结构化通道原生支持；None = 用设置默认）
+    pub effort: Option<String>,
+    /// 指定代理；缺省按 设置默认 → claude → zcode → 首个已装 顺序解析
     pub agent_id: Option<String>,
 }
 
@@ -401,7 +403,33 @@ pub fn bench_assistant_create(
         settings.agent.assistant_persona.clone()
     };
 
-    let agent_id = pick_agent_id(&ctx.registry, args.agent_id.as_deref())?;
+    // 默认解析：显式参数 > 设置默认（agent/model/effort，空串 = 不指定）
+    let preferred = args
+        .agent_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            let id = settings.agent.assistant_agent_id.trim();
+            (!id.is_empty()).then_some(id)
+        });
+    let agent_id = pick_agent_id(&ctx.registry, preferred)?;
+    let model = args
+        .model
+        .map(|m| m.trim().to_string())
+        .filter(|m| !m.is_empty())
+        .or_else(|| {
+            let m = settings.agent.assistant_model.trim();
+            (!m.is_empty()).then(|| m.to_string())
+        });
+    let effort = args
+        .effort
+        .map(|e| e.trim().to_string())
+        .filter(|e| !e.is_empty())
+        .or_else(|| {
+            let e = settings.agent.assistant_effort.trim();
+            (!e.is_empty()).then(|| e.to_string())
+        });
     let adapter = ctx.registry.get(&agent_id).map_err(bench_err)?;
     let spec = adapter.runtime().ok_or_else(|| {
         bench_err(hamster_core::HamsterError::Unsupported(format!(
@@ -450,8 +478,8 @@ pub fn bench_assistant_create(
         &spec,
         channel,
         extra_args,
-        args.model,
-        None,
+        model,
+        effort,
         None,
         false,
         first_prompt,

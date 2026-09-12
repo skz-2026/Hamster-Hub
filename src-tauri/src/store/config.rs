@@ -32,6 +32,12 @@ pub struct Agent {
     pub mcp_user_token: Option<String>,
     /// 已开启桌面 MCP 分发的 agent id（写入其配置文件；移除 = 从配置摘除条目）
     pub mcp_agents: Vec<String>,
+    /// 桌面助手默认代理（空 = 自动：claude → zcode → 首个已装且支持结构化通道）
+    pub assistant_agent_id: String,
+    /// 桌面助手默认模型（空 = agent CLI 自身默认）
+    pub assistant_model: String,
+    /// 桌面助手默认推理强度（空 = agent 默认；选项来自各 agent launchOptions）
+    pub assistant_effort: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]

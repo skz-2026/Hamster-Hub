@@ -16,6 +16,11 @@ export default function render(el, ctx) {
         <span data-count style="font-size:22px;font-weight:300;color:#fff;font-variant-numeric:tabular-nums">0</span>
         <span style="font-size:10px;color:rgba(255,255,255,.55)">次（存进私有存储）</span>
       </div>
+      <button data-act="todo"
+        style="align-self:flex-start;border:1px solid rgba(255,255,255,.18);border-radius:999px;
+               padding:2px 10px;font-size:10px;cursor:pointer;background:transparent;color:rgba(255,255,255,.75)">
+        记一条「喂仓鼠」到待办
+      </button>
     </div>`;
 
   const countEl = el.querySelector('[data-count]');
@@ -40,12 +45,30 @@ export default function render(el, ctx) {
     render2(count);
     ctx.storage.set('count', String(count)).catch(() => {});
   };
-  el.querySelector('[data-act]').addEventListener('click', onClick);
+  el.querySelector('[data-act="add"]').addEventListener('click', onClick);
+
+  // 受控 IPC 桥：manifest 声明了 permissions: ["todo.add"]，ctx.api.todoAdd 才存在
+  const todoBtn = el.querySelector('[data-act="todo"]');
+  const onTodo = async () => {
+    todoBtn.textContent = '记录中…';
+    try {
+      if (ctx.api?.todoAdd) {
+        await ctx.api.todoAdd({ content: '喂仓鼠（来自插件）' });
+        todoBtn.textContent = '✓ 已记入待办';
+      } else {
+        todoBtn.textContent = '未声明权限';
+      }
+    } catch {
+      todoBtn.textContent = '失败，重试？';
+    }
+  };
+  todoBtn.addEventListener('click', onTodo);
 
   // 返回清理函数（组件卸载时调用）
   return () => {
     alive = false;
     clearTimeout(timer);
-    el.querySelector('[data-act]')?.removeEventListener('click', onClick);
+    el.querySelector('[data-act="add"]')?.removeEventListener('click', onClick);
+    todoBtn?.removeEventListener('click', onTodo);
   };
 }

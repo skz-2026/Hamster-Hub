@@ -19,6 +19,8 @@ export interface PluginContext {
     get(key: string): Promise<string | null>;
     set(key: string, value: string): Promise<void>;
   };
+  /** 受控 IPC 桥：仅 manifest.permissions 里声明的能力会出现在这里 */
+  api: Record<string, (payload?: unknown) => Promise<unknown>>;
 }
 
 export type PluginRenderFn = (el: HTMLElement, ctx: PluginContext) => (() => void) | void;

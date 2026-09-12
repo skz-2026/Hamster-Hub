@@ -18,11 +18,16 @@ export default function ChatSessionView({
   agentName,
   onPtyReady,
   onKill,
+  composerHost,
+  composerPlaceholder,
 }: {
   session: LiveSessionInfo;
   agentName: string;
   onPtyReady?: (info: LiveSessionInfo) => void;
   onKill: () => void;
+  /** composer 外置挂载点（/agent 页统一底栏）；缺省内嵌渲染（bench 页行为不变） */
+  composerHost?: HTMLElement | null;
+  composerPlaceholder?: string;
 }) {
   const isPty = session.channel === 'pty';
   const sid = session.sessionId;
@@ -83,7 +88,15 @@ export default function ChatSessionView({
         {isPty ? (
           <TerminalView session={session} onPtyReady={onPtyReady} />
         ) : (
-          <StreamThread session={session} running={running} messages={messages} onNew={onNew} onCancel={onCancel} />
+          <StreamThread
+            session={session}
+            running={running}
+            messages={messages}
+            onNew={onNew}
+            onCancel={onCancel}
+            composerHost={composerHost}
+            composerPlaceholder={composerPlaceholder}
+          />
         )}
       </div>
     </div>
@@ -97,12 +110,16 @@ function StreamThread({
   messages,
   onNew,
   onCancel,
+  composerHost,
+  composerPlaceholder,
 }: {
   session: LiveSessionInfo;
   running: boolean;
   messages: ReturnType<typeof rowsToThreadMessages>;
   onNew: (m: AppendMessage) => Promise<void>;
   onCancel: () => Promise<void>;
+  composerHost?: HTMLElement | null;
+  composerPlaceholder?: string;
 }) {
   const sid = session.sessionId;
   const runtime = useExternalStoreRuntime({
@@ -117,7 +134,7 @@ function StreamThread({
     <AssistantRuntimeProvider runtime={runtime}>
       <div className="flex h-full flex-col">
         <div className="min-h-0 flex-1">
-          <ChatThread />
+          <ChatThread composerHost={composerHost} placeholder={composerPlaceholder} />
         </div>
       </div>
     </AssistantRuntimeProvider>

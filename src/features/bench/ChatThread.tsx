@@ -2,9 +2,13 @@
  * ChatThread：assistant-ui Thread 的仓鼠Hub 风格组合。
  * 视口自动滚动 + 用户/助手气泡 + 底部 composer（运行中显示停止按钮）。
  * 消息 part 渲染由 ChatParts 提供；数据源由外层 AssistantRuntimeProvider 注入。
+ *
+ * composerHost：可选外置挂载点——composer 经 portal 渲染进去（React context 穿透
+ * portal，ComposerPrimitive 照常工作），供 /agent 页把输入框统一停靠在页面底部。
  */
 import { ArrowDown, ArrowUp, Square } from 'lucide-react';
 import { ComposerPrimitive, ThreadPrimitive } from '@assistant-ui/react';
+import { createPortal } from 'react-dom';
 import { AssistantMessage, UserMessage } from './ChatParts.message';
 
 /** 线程空态（无消息时的欢迎面） */
@@ -20,7 +24,30 @@ function ThreadEmpty() {
   );
 }
 
-export default function ChatThread() {
+export default function ChatThread({
+  composerHost,
+  placeholder = '给代理发消息…（Enter 发送，Shift+Enter 换行）',
+}: {
+  composerHost?: HTMLElement | null;
+  placeholder?: string;
+}) {
+  const composer = (
+    <ComposerPrimitive.Root className="flex items-end gap-2.5 rounded-[22px] bg-black/30 p-2 pl-5 ring-1 ring-white/12 backdrop-blur-xl focus-within:ring-white/25">
+      <ComposerPrimitive.Input
+        rows={1}
+        autoFocus
+        placeholder={placeholder}
+        className="max-h-28 min-h-[28px] flex-1 resize-none bg-transparent py-1.5 text-[13.5px] text-white outline-none placeholder:text-white/40"
+      />
+      <ComposerPrimitive.Cancel className="grid size-9 shrink-0 place-items-center rounded-full bg-white/12 text-white transition-colors hover:bg-white/20">
+        <Square size={13} strokeWidth={2.4} />
+      </ComposerPrimitive.Cancel>
+      <ComposerPrimitive.Send className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--accent)] text-white transition-all hover:brightness-110 disabled:opacity-35 disabled:hover:brightness-100">
+        <ArrowUp size={17} strokeWidth={2.4} />
+      </ComposerPrimitive.Send>
+    </ComposerPrimitive.Root>
+  );
+
   return (
     <ThreadPrimitive.Root className="h-full">
       <div className="relative flex h-full flex-col">
@@ -31,8 +58,12 @@ export default function ChatThread() {
           <ThreadPrimitive.Messages components={{ UserMessage, AssistantMessage }} />
         </ThreadPrimitive.Viewport>
 
-        {/* 回到底部悬浮按钮 */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-[96px] flex justify-center">
+        {/* 回到底部悬浮按钮（composer 内嵌时让开其高度） */}
+        <div
+          className={`pointer-events-none absolute inset-x-0 flex justify-center ${
+            composerHost ? 'bottom-4' : 'bottom-[96px]'
+          }`}
+        >
           <ThreadPrimitive.ScrollToBottom asChild>
             <button className="pointer-events-auto grid size-8 place-items-center rounded-full bg-white/10 text-white/70 ring-1 ring-white/15 backdrop-blur transition-colors hover:bg-white/20 hover:text-white">
               <ArrowDown size={15} />
@@ -40,23 +71,8 @@ export default function ChatThread() {
           </ThreadPrimitive.ScrollToBottom>
         </div>
 
-        {/* 输入栏（含运行中停止） */}
-        <div className="shrink-0 px-5 pb-4">
-          <ComposerPrimitive.Root className="flex items-end gap-2.5 rounded-[22px] bg-black/30 p-2 pl-5 ring-1 ring-white/12 backdrop-blur-xl focus-within:ring-white/25">
-            <ComposerPrimitive.Input
-              rows={1}
-              autoFocus
-              placeholder="给代理发消息…（Enter 发送，Shift+Enter 换行）"
-              className="max-h-28 min-h-[28px] flex-1 resize-none bg-transparent py-1.5 text-[13.5px] text-white outline-none placeholder:text-white/40"
-            />
-            <ComposerPrimitive.Cancel className="grid size-9 shrink-0 place-items-center rounded-full bg-white/12 text-white transition-colors hover:bg-white/20">
-              <Square size={13} strokeWidth={2.4} />
-            </ComposerPrimitive.Cancel>
-            <ComposerPrimitive.Send className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--accent)] text-white transition-all hover:brightness-110 disabled:opacity-35 disabled:hover:brightness-100">
-              <ArrowUp size={17} strokeWidth={2.4} />
-            </ComposerPrimitive.Send>
-          </ComposerPrimitive.Root>
-        </div>
+        {/* 输入栏（含运行中停止）；外置挂载点存在时 portal 过去，视觉上并入宿主布局 */}
+        {composerHost ? createPortal(composer, composerHost) : <div className="shrink-0 px-5 pb-4">{composer}</div>}
       </div>
     </ThreadPrimitive.Root>
   );

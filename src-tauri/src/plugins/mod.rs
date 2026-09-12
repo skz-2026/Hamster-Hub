@@ -31,6 +31,9 @@ pub struct PluginManifest {
     pub author: String,
     /// 入口 JS 文件名（相对插件目录，仅 .js）
     pub entry: String,
+    /// 声明式权限（受控 IPC 白名单：todo.list / todo.add / apps.launch / apps.search）
+    #[serde(default)]
+    pub permissions: Vec<String>,
 }
 
 impl Default for PluginManifest {
@@ -42,6 +45,7 @@ impl Default for PluginManifest {
             description: String::new(),
             author: String::new(),
             entry: "widget.js".into(),
+            permissions: Vec::new(),
         }
     }
 }
@@ -56,6 +60,8 @@ pub struct PluginInfo {
     pub description: String,
     pub author: String,
     pub entry: String,
+    /// 声明式权限（透传给前端构建 ctx.api）
+    pub permissions: Vec<String>,
     /// 入口文件完整路径（前端据此请求代码）
     pub entry_path: String,
 }
@@ -162,6 +168,7 @@ pub fn scan(data_dir: &Path) -> Vec<PluginInfo> {
         }
         out.push(PluginInfo {
             entry_path: entry_path.display().to_string(),
+            permissions: m.permissions.clone(),
             entry: m.entry,
             id: m.id,
             name: m.name,
@@ -276,4 +283,123 @@ mod tests {
         assert_eq!(storage_key("hello", "count").unwrap(), "plugin.hello.count");
         assert!(storage_key("hello", "../x").is_err());
     }
+}
+
+// ===== 受控 IPC 桥（manifest permissions → 白名单能力）=====
+
+/// 能力白名单：manifest.permissions 声明 ∧ 此处允许 才放行
+const BRIDGE_CAPABILITIES: &[&str] = &["todo.list", "todo.add", "apps.launch", "apps.search"];
+
+/// 插件删除：整目录移除（防路径逃逸）
+#[tauri::command]
+#[specta::specta]
+pub fn plugin_delete(app: tauri::AppHandle, plugin_id: String) -> Result<(), AppError> {
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| AppError::io(e.to_string()))?;
+    let dir = plugin_dir_of(&data_dir, &plugin_id)?;
+    let canon = dir
+        .canonicalize()
+        .map_err(|e| AppError::io(e.to_string()))?;
+    let base = plugins_dir(&data_dir)
+        .canonicalize()
+        .map_err(|e| AppError::io(e.to_string()))?;
+    if !canon.starts_with(&base) {
+        return Err(AppError::validate("路径逃逸"));
+    }
+    std::fs::remove_dir_all(canon).map_err(|e| AppError::io(e.to_string()))
+}
+
+/// 受控桥：插件经 manifest 声明的权限调用有限的桌面能力。
+/// 返回 JSON 字符串（能力各自定义返回形态）。
+#[tauri::command]
+#[specta::specta]
+pub fn plugin_bridge_call(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, crate::AppState>,
+    plugin_id: String,
+    capability: String,
+    payload: String,
+) -> Result<String, AppError> {
+    use serde_json::Value;
+
+    // 双重门：能力在系统白名单 ∧ 该插件 manifest 已声明
+    if !BRIDGE_CAPABILITIES.contains(&capability.as_str()) {
+        return Err(AppError::validate(format!("未知能力：{capability}")));
+    }
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| AppError::io(e.to_string()))?;
+    let m = read_manifest(&plugin_dir_of(&data_dir, &plugin_id)?)?;
+    if !m.permissions.iter().any(|p| p == &capability) {
+        return Err(AppError::validate(format!(
+            "插件未声明权限：{capability}（plugin.json permissions）"
+        )));
+    }
+
+    let payload: Value = serde_json::from_str(&payload)
+        .map_err(|e| AppError::validate(format!("payload 非法 JSON：{e}")))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|e| AppError::poison(e.to_string()))?;
+
+    let result = match capability.as_str() {
+        "todo.list" => {
+            let todos = store::todo::list(&conn)?;
+            serde_json::to_value(todos)
+                .map_err(|e| AppError::new("PLUGIN_BRIDGE", e.to_string()))?
+        }
+        "todo.add" => {
+            let content = payload
+                .get("content")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            let todo = store::todo::create(&conn, &content)?;
+            serde_json::to_value(todo).map_err(|e| AppError::new("PLUGIN_BRIDGE", e.to_string()))?
+        }
+        "apps.launch" | "apps.search" => {
+            drop(conn); // 这两个能力走 hamster-mcp desktop 实现（自管连接）
+            let db_path = state.db_path.clone();
+            let c = hamster_mcp::desktop::open_db(&db_path).map_err(crate::bench::bench_err)?;
+            match capability.as_str() {
+                "apps.launch" => {
+                    let key = payload
+                        .get("app_key")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default();
+                    let target = hamster_mcp::desktop::app_launch(&c, key)
+                        .map_err(crate::bench::bench_err)?;
+                    serde_json::json!({ "launched": target })
+                }
+                _ => {
+                    let q = payload
+                        .get("query")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default();
+                    let hits = hamster_mcp::desktop::app_search(&c, q, 8)
+                        .map_err(crate::bench::bench_err)?;
+                    serde_json::to_value(
+                        hits.iter()
+                            .map(|h| {
+                                serde_json::json!({
+                                    "appKey": h.app_key,
+                                    "name": h.display_name,
+                                })
+                            })
+                            .collect::<Vec<_>>(),
+                    )
+                    .map_err(|e| AppError::new("PLUGIN_BRIDGE", e.to_string()))?
+                }
+            }
+        }
+        other => serde_json::json!({ "error": format!("未知能力 {other}") }),
+    };
+
+    eprintln!("[plugin-bridge] {plugin_id} → {capability}");
+    serde_json::to_string(&result).map_err(|e| AppError::new("PLUGIN_BRIDGE", e.to_string()))
 }

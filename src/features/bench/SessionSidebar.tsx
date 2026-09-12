@@ -10,6 +10,7 @@ import { benchCommands } from '@/shared/lib/ipc';
 import type { LiveSessionInfo } from '@/shared/types/bench';
 import type { MySession } from './registry';
 import { removeMySession } from './registry';
+import AgentAvatar from './AgentAvatar';
 import { useAgents, useLiveSessions, useMySessions, createStreamSession } from './hooks';
 import { seedStreamRows } from './stream-registry';
 
@@ -39,16 +40,16 @@ function LiveItem({ s, name, active, onClick }: { s: LiveSessionInfo; name: stri
       className={`w-full rounded-xl px-3 py-2 text-left transition-colors ${active ? 'bg-[var(--accent-weak)]' : 'hover:bg-[var(--hover)]'}`}
     >
       <div className="flex items-center gap-1.5">
-        <span className={`size-1.5 shrink-0 rounded-full ${s.running ? 'animate-pulse bg-emerald-400' : 'bg-white/30'}`} />
-        <span className="truncate text-[12.5px] font-medium">{name}</span>
+        <AgentAvatar agentId={s.agentId} size={16} title={name} />
+        <span className={`truncate text-[12.5px] font-medium ${s.running ? '' : 'opacity-70'}`}>{name}</span>
         <span className="ml-auto shrink-0 text-[10.5px] text-white/40">{relTime(s.lastActiveAt)}</span>
       </div>
-      <p className="mt-0.5 truncate pl-3 text-[11px] text-white/45">{s.projectDir}</p>
+      <p className="mt-0.5 truncate pl-[22px] text-[11px] text-white/45">{s.projectDir}</p>
     </button>
   );
 }
 
-function MyItem({ s, resuming, onOpen, onRemove }: { s: MySession; resuming: boolean; onOpen: () => void; onRemove: () => void }) {
+function MyItem({ s, name, resuming, onOpen, onRemove }: { s: MySession; name: string; resuming: boolean; onOpen: () => void; onRemove: () => void }) {
   return (
     <div className="group relative">
       <button
@@ -57,9 +58,9 @@ function MyItem({ s, resuming, onOpen, onRemove }: { s: MySession; resuming: boo
       >
         <div className="flex items-center gap-1.5">
           {resuming ? (
-            <Loader2 size={10} className="shrink-0 animate-spin text-[var(--accent)]" />
+            <Loader2 size={14} className="shrink-0 animate-spin text-[var(--accent)]" />
           ) : (
-            <span className="shrink-0 rounded bg-white/8 px-1 py-px text-[9.5px] uppercase text-white/55">{s.agent}</span>
+            <AgentAvatar agentId={s.agent} size={14} title={name} />
           )}
           <span className="truncate text-[12px]">{s.title}</span>
         </div>
@@ -298,6 +299,7 @@ export default function SessionSidebar({
                         <MyItem
                           key={s.id}
                           s={s}
+                          name={agentName(s.agent)}
                           resuming={resumingKey === s.id}
                           onOpen={() => void continueEntry(s)}
                           onRemove={() => {

@@ -31,6 +31,42 @@ test.describe('仓鼠Hub 冒烟（浏览器预览 + IPC mock）', () => {
     await expect(page.locator('main').getByText('Steam', { exact: true })).toHaveCount(0);
   });
 
+  test('搜索页：应用/文件/网页/AI 四路结果聚合', async ({ page }) => {
+    await page.goto('/#/search');
+    await page.waitForTimeout(800);
+
+    await page.getByPlaceholder('搜索应用、文件、网页…').fill('微信');
+    // 应用路（拼音映射命中微信）+ 文件路（微信截图）+ 网页路 + 问 AI（限定 main——Dock tooltip 重名）
+    await expect(page.locator('main').getByText('微信', { exact: true })).toBeVisible();
+    await expect(page.locator('main').getByText('微信截图_0901.png', { exact: true })).toBeVisible();
+    await expect(page.locator('main').getByText('搜索「微信」')).toBeVisible();
+    await expect(page.locator('main').getByText(/问 AI：「微信」/)).toBeVisible();
+    // 分组标题按序出现（应用 → 文件 → 网页 → AI）
+    for (const g of ['应用', '文件', '网页', 'AI']) {
+      await expect(page.locator('main').getByText(g, { exact: true }).first()).toBeVisible();
+    }
+  });
+
+  test('文件页：最近文件 + 类型筛选 + 检索', async ({ page }) => {
+    await page.goto('/#/files');
+    await page.waitForTimeout(800);
+
+    // 默认最近文件（mtime 降序，报销单最新）；限定 main——路径列与 Dock tooltip 重名
+    await expect(page.locator('main').getByText('报销单2026.xlsx', { exact: true })).toBeVisible();
+    await expect(page.locator('main').getByText('夜曲.mp3', { exact: true })).toBeVisible();
+
+    // 类型药丸筛选（数据派生）
+    await page.getByRole('button', { name: '图片', exact: true }).click();
+    await expect(page.locator('main').getByText('微信截图_0901.png', { exact: true })).toBeVisible();
+    await expect(page.locator('main').getByText('旅行vlog.mp4', { exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: '全部', exact: true }).click();
+
+    // 检索（子串）
+    await page.getByPlaceholder('搜索文件（拼音 / 首字母 / 文件名）…').fill('报销');
+    await expect(page.locator('main').getByText('报销单2026.xlsx', { exact: true })).toBeVisible();
+    await expect(page.locator('main').getByText('年度总结.docx', { exact: true })).toHaveCount(0);
+  });
+
   test('日程：便签添加 + 倒数日联动月历', async ({ page }) => {
     await page.goto('/#/schedule');
     await page.waitForTimeout(1000);
@@ -75,10 +111,10 @@ test.describe('仓鼠Hub 冒烟（浏览器预览 + IPC mock）', () => {
     // 限定任务栏：WebDebugBar 的按钮文字也是「退出桌面模式」，会重名
     await expect(page.locator('.ios-dock [aria-label="退出桌面模式"]')).toBeVisible();
 
-    // 任务栏「主屏」→ iOS 图标网格（自带交互 Dock）
+    // 任务栏「主屏」→ iOS 图标网格（自带交互 Dock）；冷 dev server 首访 /home
+    // 有按需编译延迟，用带超时的断言替代固定等待
     await page.getByRole('button', { name: '主屏' }).click();
-    await page.waitForTimeout(500);
-    await expect(page.getByPlaceholder('搜索应用')).toBeVisible();
+    await expect(page.getByPlaceholder('搜索应用')).toBeVisible({ timeout: 10_000 });
 
     // 主屏「返回桌面」→ 回桌面主页
     await page.getByTitle('返回桌面').click();
@@ -90,6 +126,42 @@ test.describe('仓鼠Hub 冒烟（浏览器预览 + IPC mock）', () => {
     await page.waitForTimeout(600);
     await expect(page).toHaveURL(/#\/$/);
     await expect(page.locator('.ios-dock')).toBeVisible();
+  });
+
+  test('导航丝滑：侧栏直达桌面模式 + 桌面子页返回胶囊/Esc + 设置页状态感知', async ({ page }) => {
+    await page.goto('/#/');
+    await page.waitForTimeout(800);
+
+    // 侧栏「桌面」一键进入桌面模式（不再绕设置页）
+    await page.getByRole('button', { name: '桌面', exact: true }).click();
+    await page.waitForTimeout(600);
+    await expect(page).toHaveURL(/#\/desktop$/);
+
+    // 桌面快捷链接进设置：返回胶囊可见；设置页按钮已切成「返回桌面主页」
+    await page.locator('main').getByRole('button', { name: '设置' }).click();
+    await page.waitForTimeout(500);
+    await expect(page.getByTitle('返回桌面主页（Esc）')).toBeVisible();
+    await expect(page.getByRole('button', { name: '返回桌面主页' })).toBeVisible();
+    await page.getByTitle('返回桌面主页（Esc）').click();
+    await page.waitForTimeout(500);
+    await expect(page).toHaveURL(/#\/desktop$/);
+
+    // 桌面 → 日程，Esc 直接回桌面主页
+    await page.getByRole('button', { name: '日程' }).click();
+    await page.waitForTimeout(500);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+    await expect(page).toHaveURL(/#\/desktop$/);
+  });
+
+  test('窗口化侧栏「主屏」：自动进入接管并直接落到主屏（不再被弹回工作台）', async ({ page }) => {
+    await page.goto('/#/');
+    await page.waitForTimeout(800);
+
+    await page.getByRole('button', { name: '主屏', exact: true }).click();
+    await page.waitForTimeout(800);
+    await expect(page).toHaveURL(/#\/home$/);
+    await expect(page.getByPlaceholder('搜索应用')).toBeVisible();
   });
 });
 
@@ -125,24 +197,31 @@ test.describe('代理工作台（bench，上游域层整合 MVP）', () => {
 });
 
 test.describe('AI 助手（/agent，M4 Agent 原生桌面）', () => {
-  test('桌面助手：默认模式 + 创建假会话流式回一轮 + 工具徽标；快问模式可切换', async ({ page }) => {
+  test('统一底栏输入框：首问启动桌面助手 → 会话 composer 落同一槽位；快问同框直连', async ({ page }) => {
     await page.goto('/#/agent');
     await page.waitForTimeout(1000);
 
-    // 默认进入桌面助手欢迎态（能力说明 + 首问输入）
+    // 默认进入桌面助手欢迎态；模式切换贴在输入框上方
     await expect(page.getByText(/桌面助手 · 听得懂话/)).toBeVisible();
-    await page.locator('input[placeholder*="记成待办"]').fill('E2E：打开计算器');
+    await expect(page.getByRole('button', { name: '桌面助手', exact: true })).toBeVisible();
+
+    // 统一底栏输入框发首问 → 启动 bench 助手会话
+    await page.getByPlaceholder('给桌面助手下达任务…').fill('E2E：打开计算器');
     await page.getByTitle('启动桌面助手').click();
 
-    // 首条消息上屏 + 假代理流式回一轮（与 bench 同一事件通道）
+    // 会话建立后输入框仍常驻同一位置（ChatThread composer portal 进底栏槽位）
+    await expect(page.getByPlaceholder('给桌面助手发消息…')).toBeVisible();
     await expect(page.getByText('E2E：打开计算器')).toBeVisible();
     await expect(page.getByText('桌面工具已接入')).toBeVisible();
     await expect(page.getByText('思考中…').or(page.getByText('已思考'))).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('运行中')).toBeHidden({ timeout: 15_000 });
 
-    // 切到快问模式（ai_chat 兜底）不残留助手会话
+    // 切到快问模式（ai_chat 兜底）不残留助手会话；同一只输入框直接发问
     await page.getByRole('button', { name: '快问', exact: true }).click();
     await expect(page.getByText('问答、写作、翻译、点子')).toBeVisible();
+    await page.getByPlaceholder('问点什么…').fill('E2E：你好');
+    await page.keyboard.press('Enter');
+    await expect(page.getByText(/浏览器 mock 回复/)).toBeVisible({ timeout: 10_000 });
   });
 });
 
@@ -169,5 +248,16 @@ test.describe('UI 插件（M4 阶段四：用户可扩展小组件）', () => {
     await page.getByText('囤一口').click();
     await page.getByText('囤一口').click();
     await expect(page.locator('[data-n]')).toHaveText('2');
+
+    // 受控 IPC 桥（manifest permissions: ["todo.add"]）→ 记入待办
+    await page.getByText('记一条「喂仓鼠」到待办').click();
+    await expect(page.getByText('✓ 已记入待办')).toBeVisible({ timeout: 10_000 });
+
+    // 回工作台核验待办卡计数（种子 1 未完成 + 桥接新增 1 = 2）
+    await page.getByTitle('返回桌面').click();
+    await page.waitForTimeout(500);
+    await page.locator('.ios-dock [aria-label="退出桌面模式"]').click();
+    await page.waitForTimeout(600);
+    await expect(page.getByText(/未完成 2/)).toBeVisible({ timeout: 10_000 });
   });
 });

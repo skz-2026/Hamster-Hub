@@ -30,7 +30,7 @@ pub fn save(conn: &Connection, settings: &Settings) -> Result<Settings, AppError
 
 // ===== 通用 KV（主屏布局等前端拥有的 JSON 文档）=====
 
-pub const KV_ALLOWED_KEYS: &[&str] = &["home.layout", "bench.mySessions"];
+pub const KV_ALLOWED_KEYS: &[&str] = &["home.layout", "bench.mySessions", "plugins.disabled"];
 
 pub fn kv_load(conn: &Connection, key: &str) -> Result<Option<String>, AppError> {
     let json: Option<String> = conn

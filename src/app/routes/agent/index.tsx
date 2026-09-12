@@ -1,8 +1,20 @@
+/**
+ * AI 助手页（M4「Agent 原生桌面」入口）：
+ * - 桌面助手（默认）：bench 会话驱动（本机 Agent + hamster-desktop MCP 工具），
+ *   能实际操作这台电脑 —— AssistantPanel；
+ * - 快问（兜底）：OpenAI 兼容直连（ai_chat），未装 Agent / 微任务的轻路径。
+ *
+ * 底部为**统一输入栏**：模式切换贴在输入框上方，两种模式共用同一只输入框、
+ * 同一位置——桌面助手会话建立后，bench ChatThread 的 composer 经 portal 渲染进
+ * 底部槽位（能力不变：流式/停止/续问），视觉与位置不跳变。
+ * 空会话（欢迎态）时整组（欢迎语 + toggle + 输入框）垂直居中；开聊后落回底部。
+ * Spotlight「问 AI」经 agent.pendingQ 进入本页，优先路由桌面助手。
+ */
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowUp, Eraser, Loader2, Settings2, Sparkles, TriangleAlert } from 'lucide-react';
 import { commands } from '@/shared/lib/ipc';
-import AssistantPanel from '@/features/agent/AssistantPanel';
+import AssistantPanel, { type AssistantPanelHandle } from '@/features/agent/AssistantPanel';
 
 interface Msg {
   role: 'user' | 'assistant';
@@ -14,17 +26,14 @@ const SYSTEM_PROMPT =
 
 type Mode = 'assistant' | 'quick';
 
-/**
- * AI 助手页（M4「Agent 原生桌面」入口）：
- * - 桌面助手（默认）：bench 会话驱动（本机 Agent + hamster-desktop MCP 工具），
- *   能实际操作这台电脑 —— AssistantPanel；
- * - 快问（兜底）：OpenAI 兼容直连（ai_chat），未装 Agent / 微任务的轻路径。
- * Spotlight「问 AI」经 agent.pendingQ 进入本页，优先路由桌面助手。
- */
 export default function AgentPage() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>('assistant');
   const [pendingQ, setPendingQ] = useState<string | null>(null);
+  // 桌面助手状态镜像（AssistantPanel 上报）：决定底部槽位渲染 portal 还是统一输入框
+  const [assistantSt, setAssistantSt] = useState({ hasSession: false, starting: false });
+  const [composerHost, setComposerHost] = useState<HTMLDivElement | null>(null);
+  const assistantRef = useRef<AssistantPanelHandle>(null);
 
   // 快问模式状态
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -32,14 +41,15 @@ export default function AgentPage() {
   const [busy, setBusy] = useState(false);
   const [unconfigured, setUnconfigured] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
 
   // 新消息自动滚到底（快问模式）
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, busy, mode]);
 
-  const sendQuick = async (override?: string) => {
-    const text = (override ?? input).trim();
+  const sendQuick = async () => {
+    const text = input.trim();
     if (!text || busy) return;
     setInput('');
     setUnconfigured(false);
@@ -66,6 +76,19 @@ export default function AgentPage() {
     }
   };
 
+  // 统一输入框发送：快问走 ai_chat；桌面助手未开会话时用首问启动会话
+  // （已开会话时输入框是 ChatThread portal 过来的，不经过这里）
+  const composerSend = () => {
+    if (mode === 'quick') {
+      void sendQuick();
+      return;
+    }
+    const text = input.trim();
+    if (!text || assistantSt.starting) return;
+    assistantRef.current?.startSession(text);
+    setInput('');
+  };
+
   // Spotlight「问 AI」入口：读取暂存问题（一次性），优先路由桌面助手
   useEffect(() => {
     commands
@@ -79,6 +102,103 @@ export default function AgentPage() {
       })
       .catch(() => {});
   }, []);
+
+  // 空会话（欢迎态）：整组居中；开聊后输入栏落回底部
+  const isEmpty =
+    mode === 'assistant' ? !assistantSt.hasSession : messages.length === 0 && !unconfigured;
+
+  const showUnified = mode === 'quick' || !assistantSt.hasSession;
+  const sendDisabled = !input.trim() || (mode === 'quick' ? busy : assistantSt.starting);
+
+  // 模式切换药丸（桌面助手 / 快问）
+  const modeToggle = (
+    <div className="flex rounded-full bg-black/30 p-0.5 ring-1 ring-white/10">
+      {(
+        [
+          ['assistant', '桌面助手'],
+          ['quick', '快问'],
+        ] as const
+      ).map(([m, label]) => (
+        <button
+          key={m}
+          onClick={() => setMode(m)}
+          className={`rounded-full px-3 py-1 text-[11.5px] transition-colors ${
+            mode === m
+              ? 'bg-[var(--accent)] font-medium text-white'
+              : 'text-white/55 hover:text-white/85'
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  // 统一输入框（两种模式同一只；助手会话中由 portal 接管此槽位）
+  const unifiedComposer = showUnified && (
+    <div className="flex items-end gap-2.5 rounded-[22px] bg-black/30 p-2 pl-5 ring-1 ring-white/12 backdrop-blur-xl focus-within:ring-white/25">
+      <textarea
+        ref={taRef}
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            composerSend();
+          }
+        }}
+        rows={1}
+        placeholder={
+          mode === 'quick'
+            ? '问点什么…（Enter 发送，Shift+Enter 换行）'
+            : '给桌面助手下达任务…（如「把「周五交周报」记成待办，然后打开计算器」）'
+        }
+        className="max-h-28 min-h-[28px] flex-1 resize-none bg-transparent py-1.5 text-[13.5px] text-white outline-none placeholder:text-white/40"
+      />
+      <button
+        onClick={composerSend}
+        disabled={sendDisabled}
+        title={mode === 'quick' ? '发送' : '启动桌面助手'}
+        className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--accent)] text-white transition-all hover:brightness-110 disabled:opacity-35 disabled:hover:brightness-100"
+      >
+        {(mode === 'quick' ? busy : assistantSt.starting) ? (
+          <Loader2 size={16} className="animate-spin" />
+        ) : (
+          <ArrowUp size={17} strokeWidth={2.4} />
+        )}
+      </button>
+    </div>
+  );
+
+  /** 输入组：toggle 在上 + composer 槽位；hero 居中时收窄并水平居中 */
+  const composerArea = (centered: boolean) => (
+    <div className={centered ? 'w-full max-w-2xl' : ''}>
+      <div className={`mb-2 flex gap-2 ${centered ? 'justify-center' : 'items-center'}`}>
+        {modeToggle}
+        {mode === 'quick' && messages.length > 0 && (
+          <button
+            onClick={() => {
+              setMessages([]);
+              setUnconfigured(false);
+            }}
+            className="flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1.5 text-[11.5px] text-white/70 ring-1 ring-white/10 transition-colors hover:bg-white/15 hover:text-white"
+          >
+            <Eraser size={12} />
+            清空会话
+          </button>
+        )}
+        {mode === 'assistant' && assistantSt.hasSession && (
+          <span className="ml-auto flex items-center gap-1.5 text-[11px] text-white/40">
+            <span className="size-1.5 rounded-full bg-emerald-400/80" />
+            助手会话进行中（结束按钮在会话头部）
+          </span>
+        )}
+      </div>
+      {/* composer 槽位：助手会话中 ChatThread 经 portal 渲染进来 */}
+      <div ref={setComposerHost} />
+      {unifiedComposer}
+    </div>
+  );
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden rounded-2xl bg-[radial-gradient(120%_120%_at_20%_0%,#232032_0%,#16141d_55%,#1a1520_100%)] text-white">
@@ -97,77 +217,65 @@ export default function AgentPage() {
             {mode === 'assistant' ? 'Agent 驱动 · 可操作桌面' : '快问 · AI 直连补全'}
           </p>
         </div>
-        {/* 模式切换：桌面助手 / 快问 */}
-        <div className="ml-3 flex rounded-full bg-black/30 p-0.5 ring-1 ring-white/10">
-          {(
-            [
-              ['assistant', '桌面助手'],
-              ['quick', '快问'],
-            ] as const
-          ).map(([m, label]) => (
-            <button
-              key={m}
-              onClick={() => setMode(m)}
-              className={`rounded-full px-3 py-1 text-[11.5px] transition-colors ${
-                mode === m
-                  ? 'bg-[var(--accent)] font-medium text-white'
-                  : 'text-white/55 hover:text-white/85'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        {mode === 'quick' && messages.length > 0 && (
-          <button
-            onClick={() => {
-              setMessages([]);
-              setUnconfigured(false);
-            }}
-            className="ml-auto flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1.5 text-[11.5px] text-white/70 ring-1 ring-white/10 transition-colors hover:bg-white/15 hover:text-white"
-          >
-            <Eraser size={12} />
-            清空会话
-          </button>
-        )}
       </header>
 
-      {/* 主体 */}
-      <div className="relative z-10 min-h-0 flex-1 px-6 pb-4">
-        {mode === 'assistant' ? (
-          <AssistantPanel
-            autoQuestion={pendingQ}
-            onConsumed={() => setPendingQ(null)}
-            onFallback={() => setMode('quick')}
-          />
-        ) : (
-          <div className="flex h-full flex-col">
-            <div ref={listRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-4">
-              {messages.length === 0 && !unconfigured && (
-                <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-                  <span className="grid size-14 place-items-center rounded-2xl bg-white/6 ring-1 ring-white/10">
-                    <Sparkles size={24} className="text-[var(--accent)]" />
-                  </span>
-                  <div>
-                    <p className="text-[14px] font-medium text-white/85">有什么可以帮你？</p>
-                    <p className="mt-1 text-[12px] text-white/45">
-                      问答、写作、翻译、点子……配置模型后即可开始
-                    </p>
-                  </div>
-                  <div className="mt-1 flex flex-wrap justify-center gap-2">
-                    {['帮我写一条周报开头', '推荐几个效率工具', '解释一下什么是 MCP'].map((s) => (
-                      <button
-                        key={s}
-                        onClick={() => setInput(s)}
-                        className="rounded-full bg-white/8 px-3.5 py-1.5 text-[11.5px] text-white/70 ring-1 ring-white/10 transition-colors hover:bg-white/15 hover:text-white"
-                      >
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
+      {/* 主体：AssistantPanel 单实例（跨布局切换保持会话状态），容器随空/非空换布局 */}
+      {mode === 'assistant' ? (
+        <>
+          <div
+            className={`relative z-10 min-h-0 flex-1 px-6 ${
+              isEmpty ? 'flex flex-col items-center justify-center gap-6 pb-10' : 'pt-1'
+            }`}
+          >
+            <AssistantPanel
+              ref={assistantRef}
+              autoQuestion={pendingQ}
+              onConsumed={() => setPendingQ(null)}
+              onFallback={() => setMode('quick')}
+              composerHost={composerHost}
+              onStateChange={setAssistantSt}
+            />
+            {isEmpty && composerArea(true)}
+          </div>
+          {!isEmpty && (
+            <div className="relative z-10 shrink-0 px-6 pb-4 pt-2">{composerArea(false)}</div>
+          )}
+        </>
+      ) : isEmpty ? (
+        /* 空会话：欢迎内容 + toggle + 输入框成组垂直居中 */
+        <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-8 pb-10">
+          <div className="flex flex-col items-center gap-3 text-center">
+            <span className="grid size-14 place-items-center rounded-2xl bg-white/6 ring-1 ring-white/10">
+              <Sparkles size={24} className="text-[var(--accent)]" />
+            </span>
+            <div>
+              <p className="text-[14px] font-medium text-white/85">有什么可以帮你？</p>
+              <p className="mt-1 text-[12px] text-white/45">
+                问答、写作、翻译、点子……配置模型后即可开始
+              </p>
+            </div>
+            <div className="mt-1 flex flex-wrap justify-center gap-2">
+              {['帮我写一条周报开头', '推荐几个效率工具', '解释一下什么是 MCP'].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => {
+                    setInput(s);
+                    taRef.current?.focus();
+                  }}
+                  className="rounded-full bg-white/8 px-3.5 py-1.5 text-[11.5px] text-white/70 ring-1 ring-white/10 transition-colors hover:bg-white/15 hover:text-white"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+          {composerArea(true)}
+        </div>
+      ) : (
+        <>
+          {/* 消息区 */}
+          <div className="relative z-10 min-h-0 flex-1 px-6 pt-1">
+            <div ref={listRef} className="h-full space-y-4 overflow-y-auto pb-3">
               {messages.map((m, i) => (
                 <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div
@@ -214,35 +322,12 @@ export default function AgentPage() {
                 </div>
               )}
             </div>
-
-            {/* 快问输入栏 */}
-            <div className="shrink-0 pt-2">
-              <div className="flex items-end gap-2.5 rounded-[22px] bg-black/30 p-2 pl-5 ring-1 ring-white/12 backdrop-blur-xl focus-within:ring-white/25">
-                <textarea
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                      e.preventDefault();
-                      sendQuick();
-                    }
-                  }}
-                  rows={1}
-                  placeholder="给 AI 助手发消息…（Enter 发送，Shift+Enter 换行）"
-                  className="max-h-28 min-h-[28px] flex-1 resize-none bg-transparent py-1.5 text-[13.5px] text-white outline-none placeholder:text-white/40"
-                />
-                <button
-                  onClick={() => sendQuick()}
-                  disabled={!input.trim() || busy}
-                  className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--accent)] text-white transition-all hover:brightness-110 disabled:opacity-35 disabled:hover:brightness-100"
-                >
-                  {busy ? <Loader2 size={16} className="animate-spin" /> : <ArrowUp size={17} strokeWidth={2.4} />}
-                </button>
-              </div>
-            </div>
           </div>
-        )}
-      </div>
+
+          {/* 底部输入栏：toggle 贴输入框上方 */}
+          <div className="relative z-10 shrink-0 px-6 pb-4 pt-2">{composerArea(false)}</div>
+        </>
+      )}
     </div>
   );
 }
