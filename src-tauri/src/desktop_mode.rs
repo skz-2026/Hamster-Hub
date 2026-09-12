@@ -14,8 +14,9 @@ use tauri_specta::Event;
 use crate::events;
 
 const PATROL_INTERVAL: Duration = Duration::from_secs(5);
-/// 任务栏条高度（逻辑像素）：DockBar 桌面形态 ~63px + 悬停放大上浮余量
-const TASKBAR_H_LOGICAL: f64 = 72.0;
+/// 任务栏条高度（逻辑像素）：DockBar 桌面形态图标 ~51px + 底部留白，
+/// 压紧后减少条上方的空区观感（hover 放大仍留有余量）
+const TASKBAR_H_LOGICAL: f64 = 68.0;
 
 static ACTIVE: AtomicBool = AtomicBool::new(false);
 
@@ -26,8 +27,9 @@ pub fn is_active() -> bool {
     ACTIVE.load(Ordering::SeqCst)
 }
 
-/// 工作区扩为主窗口所在显示器的整屏（隐藏任务栏后其 AppBar 预留仍在，
-/// 最大化应用只会铺到原工作区底——显式扩为整屏才有真全屏效果）
+/// 工作区 = 整屏 − dock 条高（隐藏系统任务栏后其旧预留仍在且数值不对——
+/// 必须显式设为我们 dock 的精确矩形：最大化/新开的 app 底边与 dock 顶
+/// 严丝合缝，既不被 dock 遮挡、也无主窗口露边的缝隙）
 fn expand_workarea(app: &tauri::AppHandle) {
     let Some(main) = app.get_webview_window("main") else {
         return;
@@ -35,12 +37,17 @@ fn expand_workarea(app: &tauri::AppHandle) {
     let Ok(Some(mon)) = main.current_monitor() else {
         return;
     };
+    let scale = main.scale_factor().unwrap_or(1.0);
+    let tb_h = (TASKBAR_H_LOGICAL * scale).round() as i32;
     let mp = mon.position();
     let ms = mon.size();
-    if let Err(e) =
-        hamster_platform::workarea::set(mp.x, mp.y, mp.x + ms.width as i32, mp.y + ms.height as i32)
-    {
-        eprintln!("[desktop_mode] 工作区扩为整屏失败（最大化应用将留边）：{e}");
+    if let Err(e) = hamster_platform::workarea::set(
+        mp.x,
+        mp.y,
+        mp.x + ms.width as i32,
+        mp.y + ms.height as i32 - tb_h,
+    ) {
+        eprintln!("[desktop_mode] 工作区设为 dock 上沿失败：{e}");
     }
 }
 
@@ -61,8 +68,8 @@ pub fn enter(app: &tauri::AppHandle) -> Result<(), crate::error::AppError> {
         }
     }
 
-    // ② 隐藏任务栏 + 桌面图标（真正接管）；记住原工作区并扩为整屏
-    //（隐藏后的 AppBar 预留会让最大化应用留一条边，水豚式全屏需要显式扩区）
+    // ② 隐藏任务栏 + 桌面图标（真正接管）；记住原工作区并设为「整屏 − dock」
+    //（旧预留数值不对：不是被 dock 遮挡就是留缝隙，见 expand_workarea）
     if let Ok(mut slot) = WORKAREA_SAVED.lock() {
         *slot = hamster_platform::workarea::get();
     }

@@ -11,10 +11,11 @@ export default function TaskbarPage() {
     <div
       className="flex h-screen w-full flex-col justify-end overflow-hidden"
       style={{
-        // 轻着色半透明（macOS dock 风）：壁纸透过 dock 延续，无分界线；
-        // 图标可读性由图标自身的底座承担
+        // 近实心深色条（对齐水豚hub）：桌面上读作任务栏，app 最大化后内容
+        // 不透过 dock 搅局；顶部 1px 高光标出条的边界
         background:
-          'linear-gradient(to bottom, rgba(24,22,30,.42) 0%, rgba(18,16,22,.55) 55%, rgba(14,12,17,.62) 100%)',
+          'linear-gradient(to bottom, rgba(24,22,30,.88) 0%, rgba(17,15,21,.93) 55%, rgba(13,11,16,.96) 100%)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,.10)',
       }}
       onContextMenu={(e) => e.preventDefault()}
     >

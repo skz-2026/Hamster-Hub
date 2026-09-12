@@ -96,9 +96,11 @@ export function DockBar({ desktop }: DockBarProps) {
     // 贴边通栏任务栏（完全替代系统任务栏）：左端入口 + 定制（可增删）…… 右端退出 + 时钟
     return (
       <div className="relative z-30 flex shrink-0">
-        <div className="ios-dock flex w-full items-end gap-2.5 rounded-none px-4 py-[7px]">
+        {/* 桌面任务栏：条底色由 TaskbarPage 统一绘制，去掉 ios-dock 皮肤
+            （bar 里套 bar 会在窗口顶部夹出一条露壁纸的缝 + 双重高光线） */}
+        <div className="flex w-full items-end gap-2.5 rounded-none px-4 pb-[7px] pt-0">
           {SYSTEM_ICONS.map(({ label, to, Icon }) => (
-            <DockItem key={to} label={label} active={pathname === to} onClick={() => goRoute(to)}>
+            <DockItem key={to} label={label} active={pathname === to} nativeTipOnly={desktop} onClick={() => goRoute(to)}>
               <SystemTile Icon={Icon} size={size} />
             </DockItem>
           ))}
@@ -111,6 +113,7 @@ export function DockBar({ desktop }: DockBarProps) {
                 key={key}
                 app={a}
                 size={size}
+                nativeTipOnly={desktop}
                 onLaunch={launchApp}
                 onContextMenu={
                   desktop
@@ -133,10 +136,10 @@ export function DockBar({ desktop }: DockBarProps) {
           )}
           {frequent.length > 0 && <Divider />}
           {frequent.map((a) => (
-            <AppDockItem key={a.app_key} app={a} size={size} onLaunch={launchApp} />
+            <AppDockItem key={a.app_key} app={a} size={size} nativeTipOnly={desktop} onLaunch={launchApp} />
           ))}
           <div className="ml-auto flex items-end gap-2 pl-3">
-            <DockItem label="退出桌面模式" onClick={exitDesktop}>
+            <DockItem label="退出桌面模式" nativeTipOnly={desktop} onClick={exitDesktop}>
               <span
                 className="squircle grid place-items-center bg-red-500/45 text-white ring-1 ring-white/25"
                 style={{ width: size, height: size }}
@@ -219,16 +222,19 @@ function AppDockItem({
   size,
   onLaunch,
   onContextMenu,
+  nativeTipOnly = false,
 }: {
   app: AppEntry;
   size: number;
   onLaunch: (key: string) => void;
   /** 桌面任务栏定制组：右键呼出移除菜单（传窗口内 clientX） */
   onContextMenu?: (x: number) => void;
+  nativeTipOnly?: boolean;
 }) {
   return (
     <DockItem
       label={app.display_name}
+      nativeTipOnly={nativeTipOnly}
       onClick={() => onLaunch(app.app_key)}
       onContextMenu={
         onContextMenu
@@ -266,25 +272,31 @@ function SystemTile({ Icon, size }: { Icon: LucideIcon; size: number }) {
   );
 }
 
-/** Dock 通用项：tooltip + 悬停放大上浮 + 底部活动指示点（macOS 运行指示） */
+/** Dock 通用项：tooltip + 悬停放大上浮 + 底部活动指示点（macOS 运行指示）。
+ * nativeTipOnly：桌面任务栏条内不渲染自绘 tooltip（超出窗口上边界会被裁剪，
+ * 交给按钮原生 title 弹系统提示）；窗口化胶囊内空间充足，仍用自绘样式。 */
 function DockItem({
   label,
   onClick,
   active,
   onContextMenu,
+  nativeTipOnly = false,
   children,
 }: {
   label: string;
   onClick: () => void;
   active?: boolean;
   onContextMenu?: (e: React.MouseEvent) => void;
+  nativeTipOnly?: boolean;
   children: ReactNode;
 }) {
   return (
     <div className="group relative flex flex-col items-center" onContextMenu={onContextMenu}>
-      <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-neutral-900/85 px-2.5 py-1 text-[11px] text-white opacity-0 ring-1 ring-white/15 transition-opacity group-hover:opacity-100">
-        {label}
-      </span>
+      {!nativeTipOnly && (
+        <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-neutral-900/85 px-2.5 py-1 text-[11px] text-white opacity-0 ring-1 ring-white/15 transition-opacity group-hover:opacity-100">
+          {label}
+        </span>
+      )}
       <button
         aria-label={label}
         title={label}
