@@ -2,22 +2,31 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import { useClock, useDateTimeInfo } from '@/features/workbench/hooks';
 import { useCountdown, useKillProcess, useProcessList, useSystemStats, useWeather } from '@/features/dashboard/hooks';
 import { useTodos } from '@/features/todo/hooks';
-import type { WidgetType } from './layout';
+import { pluginIdOf } from './layout';
+import PluginWidgetHost from '@/features/plugins/PluginWidgetHost';
 
 const glass =
   'h-full w-full overflow-hidden rounded-[20px] bg-white/[0.13] p-3.5 ring-1 ring-white/15 backdrop-blur-2xl transition-colors hover:bg-white/[0.17]';
 
-/** 主屏小组件（2 列宽玻璃卡）：按类型渲染，数据全部来自真实 hooks */
-export function HomeWidget({ type }: { type: WidgetType }) {
+/** 主屏小组件（2 列宽玻璃卡）：按类型渲染，数据全部来自真实 hooks。
+ *  type 为 `widget:plugin:<id>` 时渲染插件小组件（M4 插件域）。 */
+export function HomeWidget({ type }: { type: string }) {
+  const pluginId = pluginIdOf(type);
   return (
     <div className="col-span-2 h-[104px]">
       <div className={glass}>
-        {type === 'clock' && <ClockWidget />}
-        {type === 'weather' && <WeatherWidget />}
-        {type === 'todo' && <TodoWidget />}
-        {type === 'countdown' && <CountdownWidget />}
-        {type === 'sysinfo' && <SysinfoWidget />}
-        {type === 'taskmgr' && <TaskmgrWidget />}
+        {pluginId ? (
+          <PluginWidgetHost pluginId={pluginId} />
+        ) : (
+          <>
+            {type === 'clock' && <ClockWidget />}
+            {type === 'weather' && <WeatherWidget />}
+            {type === 'todo' && <TodoWidget />}
+            {type === 'countdown' && <CountdownWidget />}
+            {type === 'sysinfo' && <SysinfoWidget />}
+            {type === 'taskmgr' && <TaskmgrWidget />}
+          </>
+        )}
       </div>
     </div>
   );

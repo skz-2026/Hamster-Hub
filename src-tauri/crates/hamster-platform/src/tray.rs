@@ -5,8 +5,11 @@
 //! 弹层不可达。这里短暂显示任务栏 → UIA Invoke「显示隐藏的图标」→ 系统原生
 //! 的 TopLevelWindowForOverflowXamlIsland 弹层出现（独立窗口，含全部后台
 //! 托盘 app）→ 再把任务栏藏回去，弹层留在屏幕上供用户直接交互。
+//! 注意：不可对任务栏用 DWM cloak 之类手段「可见但不上屏」——实测会把
+//! explorer/DWM 挂死（整机假死）。
 
 use base64::Engine as _;
+use std::sync::atomic::{AtomicBool, Ordering};
 use windows::core::{w, Interface, Result, BOOL, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, WPARAM};
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
@@ -248,37 +251,66 @@ fn find_window(cls: &str) -> Option<HWND> {
     unsafe { FindWindowW(windows::core::PCWSTR::from_raw(wide.as_ptr()), None).ok() }
 }
 
+/// 调试日志（追加到临时目录，排查托盘闪现问题用）
+fn tray_log(msg: &str) {
+    let path = std::env::temp_dir().join("hamster-tray-debug.log");
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        use std::io::Write;
+        let _ = writeln!(f, "{}", msg);
+    }
+}
+
+/// open_overflow 借壳显示任务栏期间为 true。desktop_mode 的 explorer 巡检
+/// 据此跳过「任务栏复活 → 重新隐藏」，否则巡检会把借壳中的任务栏提前藏掉，
+/// chevron Invoke 失败、托盘弹层打不开（~1s 借壳撞上 5s 巡检并不罕见）。
+static SHELL_FLASH: AtomicBool = AtomicBool::new(false);
+
+/// 是否正处于借壳显示任务栏的闪现流程中
+pub fn is_shell_flash_in_progress() -> bool {
+    SHELL_FLASH.load(Ordering::SeqCst)
+}
+
 /// 打开原生托盘溢出弹层。返回前任务栏已重新隐藏，弹层独立保留。
 ///
-/// `dock_hwnd`：我们的 dock 窗口句柄。系统任务栏闪现的 ~850ms 里会盖在
-/// dock 图标行上（观感 =「dock 往上浮动」）——先显示任务栏，再把 dock
-/// 重新置顶压在它上面，闪现部分被不透明的 dock 完全遮住。
+/// `dock_hwnd`：我们的 dock 窗口句柄（借壳显示期间做置顶压制，尽量缩短
+/// 系统任务栏盖在 dock 上的时间）。
 pub fn open_overflow(dock_hwnd: isize) -> Result<()> {
     let Some(shell) = find_window("Shell_TrayWnd") else {
-        eprintln!("[tray] Shell_TrayWnd 未找到");
+        tray_log("[tray] Shell_TrayWnd 未找到");
         return Err(windows::core::Error::from_win32());
     };
-    eprintln!("[tray] 任务栏已显示");
+    tray_log("[tray] 任务栏已显示");
+    // 巡检豁免窗口开始（此行之后到流程结束之间不再有提前返回路径）
+    SHELL_FLASH.store(true, Ordering::SeqCst);
     unsafe {
         use windows::Win32::UI::WindowsAndMessaging::{
             SetWindowPos, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
         };
         let _ = ShowWindow(shell, SW_SHOWNA);
-        // 任务栏显示后再把 dock 压回最上（z 序：dock > 系统任务栏 > 弹层出现后 > 弹层）
-        std::thread::sleep(std::time::Duration::from_millis(60));
-        let _ = SetWindowPos(
-            HWND(dock_hwnd as *mut _),
-            Some(HWND_TOPMOST),
-            0,
-            0,
-            0,
-            0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-        );
+        // 跨线程 ShowWindow 由 explorer 线程异步生效，任务栏插入 z 序的时机
+        // 不定——在 ~200ms 内连续把 dock 压回最上，尽量缩短任务栏盖在 dock
+        // 图标行上的时间（Win11 任务栏 z-band 特权，无法完全压住）
+        for _ in 0..10 {
+            let _ = SetWindowPos(
+                HWND(dock_hwnd as *mut _),
+                Some(HWND_TOPMOST),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+            );
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
     }
     std::thread::sleep(std::time::Duration::from_millis(SHELL_WAIT_MS));
 
     // ② UIA：找到「显示隐藏的图标」并 Invoke
+    tray_log("开始 UIA 枚举");
     let result = (|| -> Result<()> {
         unsafe {
             let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
@@ -302,7 +334,7 @@ pub fn open_overflow(dock_hwnd: isize) -> Result<()> {
                         e.GetCurrentPattern(UIA_InvokePatternId)?.cast().unwrap();
                     invoke.Invoke()?;
                     std::thread::sleep(std::time::Duration::from_millis(FLYOUT_WAIT_MS));
-                    eprintln!("[tray] chevron 已 Invoke，弹层应已出现");
+                    tray_log("[tray] chevron 已 Invoke，弹层应已出现");
                     return Ok(());
                 }
             }
@@ -310,10 +342,11 @@ pub fn open_overflow(dock_hwnd: isize) -> Result<()> {
         Err(windows::core::Error::from_win32())
     })();
 
-    // ③ 把任务栏藏回去（溢出弹层是独立窗口，不受影响）
+    // ③ 把任务栏藏回去（溢出弹层是独立窗口，不受影响），巡检豁免结束
     unsafe {
         let _ = ShowWindow(shell, SW_HIDE);
     }
+    SHELL_FLASH.store(false, Ordering::SeqCst);
     result
 }
 

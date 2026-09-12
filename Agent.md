@@ -450,4 +450,53 @@ src-tauri/
   - 遗留：per-agent 开关的真机端到端（在运行中的应用里开关并核对各 agent 配置文件）；
     codex/oc/pi 等未入 registry 的 agent 走「手动复制接入信息」兜底（McpAccessInfo
     已给全 url+token）；审计 UI 与「agent 正在操作」宣告 → M4 阶段三
-
+- ✅ **M4 阶段三：首个 agent 真实功能——主屏图标自动整理（2026-09-12，门禁全绿）**：
+  - hamster-mcp 新增 `home.rs` 工具组（21→24 工具）：`home_apps_list`（app_meta +
+    usage_log 聚合，高频在前）/ `home_layout_get`（settings KV `home.layout` 原始 JSON）/
+    `home_layout_set`（守门校验：version=1、wallpaper 字符串、pages 数组的数组、槽位前缀
+    app:/folder:/widget:、单页≤35（7×5 对齐 layout.ts）、dock≤6、folders 形态；错误信息
+    带页号/槽位号可指导 agent 自修正）。容量常量与前端 layout.ts 对齐，注释互指
+  - **刷新链路**：mcp_server.rs `Inner.app`（内嵌模式持 AppHandle）——home_layout_set
+    成功后 emit `hamster:layout-updated`（前端 useHomeLayout 既有 listen 零改动）；
+    stdio/测试模式 app=None 不广播。前端 normalizeLayout 兜底清错（剔除未装应用/空
+    文件夹/重分页），agent 写出略歪的布局也不会破坏主屏
+  - persona（DEFAULT_PERSONA）补充整理能力与三步用法；审计自动覆盖（tools/call 统一落）
+  - 真机只读冒烟：home_apps_list 返回 116 真实应用（ZCode 67 次居首）、home_layout_get
+    读到真实布局（mint 壁纸）；写路径经单测 + 门禁（对真实布局的写入留给用户在会话里触发）
+  - 测试要点备忘：本 server 的**工具错误走 JSON-RPC error 帧**（-32000），不是
+    isError 文本帧——roundtrip 用例初版把断言写错，已修正（教训：错误通道语义要查
+    handle_message 的 Err 包装，别想当然）
+  - 门禁：cargo fmt/clippy -D/test（hamster-mcp 27 用例含 home 6 个）/ pnpm build +
+    vitest 31 / e2e 7/7 全绿；另顺手修复托盘 WIP 两处编译错（SetWindowPos 需要
+    Some(HWND_TOPMOST)；tray_open_overflow 从 taskbar 窗口补 dock_hwnd 接线——
+    若与托盘侧设计冲突，改动集中在 hamster-platform/tray.rs:271 与 commands/tray.rs）
+- ✅ **M4 阶段四：L3 UI 插件系统——用户可扩展的主屏小组件（2026-09-12，用户定调「skill/mcp
+  不是必须，重点是 L3 UI 插件」；门禁全绿）**：
+  - **形态（drop-in，删目录即卸载）**：`%APPDATA%/com.hamsterhub.app/plugins/<id>/` 放
+    `plugin.json`（id/name/version/description/author/entry）+ `widget.js`；入口约定
+    `export default (el, ctx) => cleanup?`。**沙箱边界 v1**：WebView 内运行，可用
+    DOM + fetch 网络 + `ctx.storage` 私有 KV（settings 表 `plugin.<id>.<key>` 命名空间），
+    不开放原生 IPC；信任模型同油猴脚本（用户自己放置 = 自己授权）
+  - **Rust `src/plugins/` 域**：scan（manifest 校验：id 白名单 slug≤40、entry 仅 .js 相对
+    路径、id 与目录名一致）/ plugin_list / plugin_read_code（canonicalize 防路径逃逸）/
+    plugin_storage_get+set；`ensure_examples` 首启自举两个内置示例（hello-hamster 计数+
+    私有存储、hitokoto fetch 网络一言）——示例以源文件 include_str! 嵌入，写入插件目录后
+    **用户改文件即时改效果**
+  - **前端 `features/plugins/` 域**：registry（usePluginList + 模块缓存 Map）+ 加载通路 =
+    后端读代码文本 → Blob URL → 原生动态 import（`/* @vite-ignore */`，浏览器与 Tauri
+    同一通路，dev/产物行为一致）；PluginWidgetHost（玻璃卡内 render + 卸载调插件清理函数
+    + 插件出错只降级卡片内提示）
+  - **主屏接入（最小侵入）**：layout.ts 增 `pluginIdOf`/`pluginWidgetRefOf`，
+    normalizeLayout 对 `widget:plugin:<id>` 结构性放行（不做存在性判断，未安装由渲染层
+    降级「插件未安装」占位）；HomeWidget type 放宽 string + plugin 分支；编辑菜单
+    「添加小组件」追加插件分组（🧩 前缀）；桌面页复用 HomeWidget 自动覆盖
+  - **踩坑记录**：①addWidget 内部已拼 `widget:` 前缀，插件项要传 `plugin:<id>` 类型段，
+    传完整引用会变 `widget:widget:plugin:*` 被 normalize 静默丢弃（e2e 抓出）；
+    ②HomeScreen 非接管态会弹回工作台（既有行为），插件 e2e 须先「进入桌面模式 →
+    任务栏主屏」；③编辑模式有拖拽捕获层，插件交互在「完成」后进行（iOS 惯例，
+    e2e 同步此语义）；④本 server 工具错误走 JSON-RPC error 帧非 isError 文本帧
+  - 门禁全绿：cargo fmt/clippy -D/test（plugins 2 用例 + 全量）/ pnpm build + vitest 31 /
+    e2e **8/8**（新增：桌面模式→主屏→编辑菜单加插件→Blob import 渲染→退出编辑→
+    交互计数→私有存储持久）
+  - 后续挂点：插件管理页（启用/停用/删除）、manifest permissions 声明式放开受控 IPC、
+    桌面主页插件卡位、插件市场目录格式

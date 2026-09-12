@@ -13,11 +13,14 @@ import {
   Monogram,
 } from './AppIcon';
 import { HomeWidget } from './HomeWidget';
+import { usePluginList } from '@/features/plugins/registry';
 import {
   addWidget,
   mergeIntoFolder,
   moveAcrossPages,
   moveToDock,
+  pluginIdOf,
+  pluginWidgetRefOf,
   rawAppKey,
   rawFolderId,
   rawWidgetType,
@@ -44,6 +47,7 @@ interface DragState {
 
 export default function HomeScreen() {
   const navigate = useNavigate();
+  const plugins = usePluginList();
   const { data: apps = [], isLoading } = useApps();
   const { layout, commit, ready } = useHomeLayout(apps);
   const appByKey = useMemo(() => new Map(apps.map((a) => [a.app_key, a])), [apps]);
@@ -296,6 +300,23 @@ export default function HomeScreen() {
                       {WIDGET_LABEL[t]}
                     </button>
                   ))}
+                  {(plugins.data ?? []).length > 0 && (
+                    <div className="my-1 border-t border-white/10" />
+                  )}
+                  {(plugins.data ?? []).map((p) => (
+                    <button
+                      key={p.id}
+                      title={p.description}
+                      onClick={() => {
+                        // addWidget 内部会拼 widget: 前缀，这里只传类型段（plugin:<id>）
+                        commit(addWidget(layout, ('plugin:' + p.id) as unknown as WidgetType));
+                        setWidgetMenu(false);
+                      }}
+                      className="block w-full rounded-lg px-3 py-1.5 text-left text-xs text-white/90 transition-colors hover:bg-white/10"
+                    >
+                      🧩 {p.name}
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
@@ -352,7 +373,8 @@ export default function HomeScreen() {
                 const mergeHint = hoverKey === key && !isDragSource;
                 if (item.startsWith('widget:')) {
                   const wt = rawWidgetType(item);
-                  if (!wt) return null;
+                  const pid = pluginIdOf(item);
+                  if (!wt && !pid) return null;
                   return (
                     <div
                       key={key}
@@ -365,7 +387,7 @@ export default function HomeScreen() {
                             isDragSource ? 'opacity-30' : ''
                           } ${edit ? 'jiggling' : ''}`}
                         >
-                          <HomeWidget type={wt} />
+                          <HomeWidget type={wt ?? pluginWidgetRefOf(pid!)} />
                         </div>
                         {edit && (
                           <button

@@ -145,3 +145,29 @@ test.describe('AI 助手（/agent，M4 Agent 原生桌面）', () => {
     await expect(page.getByText('问答、写作、翻译、点子')).toBeVisible();
   });
 });
+
+test.describe('UI 插件（M4 阶段四：用户可扩展小组件）', () => {
+  test('主屏编辑模式添加插件小组件 → blob import 渲染 + 私有存储计数', async ({ page }) => {
+    await page.goto('/#/');
+    await page.waitForTimeout(800);
+    // 主屏仅在桌面接管态可达（非接管态 HomeScreen 会弹回工作台）
+    await page.getByRole('button', { name: '进入桌面模式' }).click();
+    await page.waitForTimeout(600);
+    await page.getByRole('button', { name: '主屏' }).click();
+    await page.waitForTimeout(500);
+
+    // 编辑模式 → 添加小组件菜单 → 插件分组「你好仓鼠」
+    await page.getByTitle('长按图标整理主屏').click();
+    await page.getByTitle('添加小组件').click();
+    await page.getByText('🧩 你好仓鼠').click();
+
+    // 插件渲染（mock 代码经 Blob 动态 import，与真机同一通路）
+    await expect(page.getByText('你好仓鼠（浏览器预览）')).toBeVisible({ timeout: 10_000 });
+
+    // 退出编辑模式（编辑态有拖拽捕获层，插件不响应交互——iOS 惯例）再交互
+    await page.getByTitle('完成').click();
+    await page.getByText('囤一口').click();
+    await page.getByText('囤一口').click();
+    await expect(page.locator('[data-n]')).toHaveText('2');
+  });
+});

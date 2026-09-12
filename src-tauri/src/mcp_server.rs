@@ -25,6 +25,8 @@ pub const MCP_PATH: &str = "/mcp";
 /// 线程间共享：工具状态 + 会话令牌表（accept 线程与命令层各持一份 Arc）
 struct Inner {
     state: Arc<AsyncMutex<ServerState>>,
+    /// 主进程句柄（home_layout_set 写入后广播 hamster:layout-updated；stdio/测试为 None）
+    app: Option<tauri::AppHandle>,
     /// 活跃助手会话：sessionId → Bearer 令牌（会话被 kill 时吊销 = 急停）
     sessions: Mutex<HashMap<String, String>>,
     tokens: Mutex<HashSet<String>>,
@@ -52,6 +54,7 @@ impl McpHub {
         cu_allowed: bool,
         audit_path: Option<std::path::PathBuf>,
         preferred_port: Option<u16>,
+        app: Option<tauri::AppHandle>,
     ) -> Result<Self, AppError> {
         let want = preferred_port.unwrap_or(DEFAULT_MCP_PORT);
         let (listener, port, fell_back) = match TcpListener::bind(("127.0.0.1", want)) {
@@ -77,6 +80,7 @@ impl McpHub {
             }
         };
         let inner = Arc::new(Inner {
+            app,
             state: Arc::new(AsyncMutex::new(ServerState::new_embedded(
                 db, cu_allowed, audit_path,
             ))),
@@ -318,7 +322,22 @@ fn route(inner: &Inner, req: &Req) -> (u16, String) {
     match resp {
         // 通知帧（无 id）：202 Accepted 空体（Streamable HTTP 规范）
         None => (202, String::new()),
-        Some(resp) => (200, resp.to_string()),
+        Some(resp) => {
+            // 主屏布局写入成功 → 广播刷新（前端 useHomeLayout 监听同款事件即时重取；
+            // stdio/测试模式 app=None 不广播）
+            if msg
+                .pointer("/params/name")
+                .and_then(serde_json::Value::as_str)
+                == Some("home_layout_set")
+                && resp.get("error").is_none()
+            {
+                if let Some(app) = &inner.app {
+                    use tauri::Emitter;
+                    let _ = app.emit("hamster:layout-updated", ());
+                }
+            }
+            (200, resp.to_string())
+        }
     }
 }
 
@@ -344,7 +363,7 @@ mod tests {
             .expect("0002");
         conn.execute_batch(include_str!("../migrations/0003_apps_pinyin.sql"))
             .expect("0003");
-        McpHub::start(conn, false, None, None).expect("启动内嵌 server")
+        McpHub::start(conn, false, None, None, None).expect("启动内嵌 server")
     }
 
     fn post(hub: &McpHub, token: Option<&str>, body: &str) -> (u16, String) {

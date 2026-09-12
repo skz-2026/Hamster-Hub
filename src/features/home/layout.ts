@@ -97,7 +97,20 @@ export const widgetRefOf = (type: WidgetType) => `widget:${type}`;
 export function rawWidgetType(item: string): WidgetType | null {
   if (!item.startsWith('widget:')) return null;
   const t = item.slice('widget:'.length) as WidgetType;
-  return (WIDGET_TYPES as string[]).includes(t) ? t : null;
+  if ((WIDGET_TYPES as string[]).includes(t)) return t;
+  return null;
+}
+
+// ===== 插件小组件槽位（widget:plugin:<id>，M4 插件域）=====
+
+/** 插件小组件的槽位引用 */
+export const pluginWidgetRefOf = (id: string) => `widget:plugin:${id}`;
+
+/** 槽位 → 插件 id（结构性校验，不做存在性判断——未安装插件由渲染层降级） */
+export function pluginIdOf(item: string): string | null {
+  if (!item.startsWith('widget:plugin:')) return null;
+  const id = item.slice('widget:plugin:'.length);
+  return /^[a-z0-9_-]+$/.test(id) ? id : null;
 }
 
 /**
@@ -159,7 +172,8 @@ export function normalizeLayout(layout: HomeLayout | null, apps: AppEntry[]): Ho
       return true;
     }
     if (it.startsWith('widget:')) {
-      if (!rawWidgetType(it) || seen.has(it)) return false; // 非法类型/重复丢弃
+      // 内置类型或插件槽位（结构性放行；未安装插件由渲染层降级为占位）
+      if (!(rawWidgetType(it) || pluginIdOf(it)) || seen.has(it)) return false;
       seen.add(it);
       return true;
     }

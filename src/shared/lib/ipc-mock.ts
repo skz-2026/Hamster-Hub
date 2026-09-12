@@ -5,6 +5,7 @@
 import type {
   AppEntry,
   AppHealth,
+  PluginInfo,
   CountdownCustom,
   CountdownItem,
   FileHit,
@@ -92,6 +93,48 @@ const DEFAULT_SETTINGS: Settings = {
 
 /** mock 的按 agent 分发开关状态（内存） */
 let mockMcpAgents: string[] = [];
+
+// ===== UI 插件 mock（浏览器预览：内置示例的假清单 + 假代码，localStorage 存储）=====
+const MOCK_PLUGINS: PluginInfo[] = [
+  {
+    id: 'hello-hamster',
+    name: '你好仓鼠',
+    version: '1.0.0',
+    description: '最小示例：点击计数 + 插件私有存储',
+    author: '仓鼠Hub',
+    entry: 'widget.js',
+    entryPath: 'mock://hello-hamster/widget.js',
+  },
+  {
+    id: 'hitokoto',
+    name: '一言',
+    version: '1.0.0',
+    description: '随机刷一句一言（fetch 网络）',
+    author: '仓鼠Hub',
+    entry: 'widget.js',
+    entryPath: 'mock://hitokoto/widget.js',
+  },
+];
+const MOCK_PLUGIN_CODE: Record<string, string> = {
+  'hello-hamster': `export default function (el, ctx) {
+  let count = 0;
+  el.innerHTML = '<div style="display:flex;flex-direction:column;justify-content:center;height:100%;gap:6px"><div style="font-size:11px;font-weight:500;color:rgba(255,255,255,.9)">你好仓鼠（浏览器预览）</div><div style="display:flex;align-items:center;gap:10px"><button data-act style="border:0;border-radius:999px;padding:4px 12px;font-size:12px;cursor:pointer;background:rgba(255,138,61,.85);color:#fff">囤一口</button><span data-n style="font-size:22px;font-weight:300;color:#fff">0</span></div></div>';
+  const n = el.querySelector('[data-n]');
+  const paint = () => (n.textContent = String(count));
+  ctx.storage.get('count').then((v) => { count = Number(v ?? 0); paint(); });
+  const onClick = () => { count += 1; paint(); ctx.storage.set('count', String(count)); };
+  el.querySelector('[data-act]').addEventListener('click', onClick);
+  return () => el.querySelector('[data-act]')?.removeEventListener('click', onClick);
+}`,
+  hitokoto: `export default function (el) {
+  el.innerHTML = '<div style="display:flex;flex-direction:column;justify-content:center;height:100%;gap:6px"><div data-l style="font-size:12px;color:rgba(255,255,255,.9)">一言（浏览器预览）</div></div>';
+  const l = el.querySelector('[data-l]');
+  const load = () => fetch('https://v1.hitokoto.cn/?max_length=24').then((r) => r.json()).then((d) => (l.textContent = d.hitokoto)).catch(() => (l.textContent = '网络不可用'));
+  load();
+  const t = setInterval(load, 30000);
+  return () => clearInterval(t);
+}`,
+};
 
 // ===== mock 事件总线（模拟 tauri-specta 生成的事件对象） =====
 
@@ -497,6 +540,22 @@ export const mockCommands = {
       portFellBack: false,
       defaultPort: 47613,
     };
+  },
+  // ===== UI 插件（浏览器：mock 清单 + 代码 + localStorage 私有存储）=====
+  async pluginList(): Promise<PluginInfo[]> {
+    return MOCK_PLUGINS;
+  },
+  async pluginReadCode(pluginId: string, _entry: string): Promise<string> {
+    const code = MOCK_PLUGIN_CODE[pluginId];
+    if (!code) throw new Error('PLUGIN_NOT_FOUND');
+    return code;
+  },
+  async pluginStorageGet(pluginId: string, key: string): Promise<string | null> {
+    return localStorage.getItem(`plugin.${pluginId}.${key}`);
+  },
+  async pluginStorageSet(pluginId: string, key: string, value: string): Promise<null> {
+    localStorage.setItem(`plugin.${pluginId}.${key}`, value);
+    return null;
   },
   async benchStreamSend(sessionId: string, text: string): Promise<null> {
     const s = liveStreams.get(sessionId);

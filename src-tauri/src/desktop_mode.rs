@@ -93,7 +93,11 @@ pub fn enter(app: &tauri::AppHandle) -> Result<(), crate::error::AppError> {
             if !ACTIVE.load(Ordering::SeqCst) {
                 break;
             }
-            if hamster_platform::taskbar::any_visible() {
+            // 托盘 open_overflow 正借壳显示任务栏时不可动它，否则 chevron
+            // Invoke 被打断、弹层打不开（见 hamster_platform::tray::SHELL_FLASH）
+            if hamster_platform::taskbar::any_visible()
+                && !hamster_platform::tray::is_shell_flash_in_progress()
+            {
                 eprintln!("[desktop_mode] 检测到任务栏复活（explorer 重启？），重新隐藏");
                 hamster_platform::taskbar::hide_all();
                 // 任务栏复活→重隐的过程 shell 会重算工作区（回到留边状态），需再扩一次

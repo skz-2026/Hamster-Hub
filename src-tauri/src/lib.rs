@@ -12,6 +12,7 @@ mod desktop_mode;
 mod error;
 mod events;
 mod mcp_server;
+mod plugins;
 mod store;
 
 use std::sync::Mutex;
@@ -126,6 +127,11 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             bench::assistant::agent_mcp_status,
             bench::assistant::agent_mcp_set_enabled,
             bench::assistant::agent_mcp_access_info,
+            // UI 插件（主屏小组件扩展）
+            plugins::plugin_list,
+            plugins::plugin_read_code,
+            plugins::plugin_storage_get,
+            plugins::plugin_storage_set,
             // 托盘管理（dock 右侧系统托盘区）
             commands::tray::tray_open_overflow,
         ])
@@ -227,6 +233,15 @@ pub fn run() {
             app.manage(hamster_runtime::StreamManager::new());
             app.manage(hamster_runtime::SessionManager::new());
 
+            // UI 插件：首启自举内置示例（用户可直接改插件目录里的文件即时改效果）
+            if let Err(e) = plugins::ensure_examples(
+                &app.path()
+                    .app_data_dir()
+                    .map_err(|e| error::AppError::io(e.to_string()))?,
+            ) {
+                eprintln!("[plugins] 示例插件写入失败: {e}");
+            }
+
             // 桌面 MCP server 内嵌 HTTP 承载（M4）：127.0.0.1 端口 + 双层令牌
             //（用户级长效令牌 = 外部宿主接入；会话令牌 = bench 助手，急停可吊销）
             {
@@ -263,6 +278,7 @@ pub fn run() {
                     cu_allowed,
                     Some(assistant_dir.join("audit.jsonl")),
                     pref_port,
+                    Some(app.handle().clone()),
                 )?;
                 hub.register_user_token(&user_token);
                 app.manage(hub);

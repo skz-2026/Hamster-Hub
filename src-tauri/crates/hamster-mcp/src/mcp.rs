@@ -20,6 +20,7 @@ use tokio::sync::Mutex;
 use crate::browser::VerifyBrowser;
 use crate::computer::Computer;
 use crate::desktop;
+use crate::home;
 
 pub const PROTOCOL_VERSION: &str = "2024-11-05";
 pub const SERVER_NAME: &str = "hamster-desktop";
@@ -189,6 +190,14 @@ pub fn tool_definitions() -> Value {
         obj("volume_set", "设置系统主音量（level 0.0-1.0；mute 可选，缺省保持当前静音状态）",
             json!({ "level": { "type": "number" }, "mute": { "type": "boolean" } }),
             json!(["level"])),
+        // —— home 工具组（iOS 主屏布局：agent 自动整理图标）——
+        obj("home_layout_get", "读取仓鼠Hub 主屏布局（version/wallpaper/pages 槽位/dock/folders；未配置返回空）。配合 home_apps_list 使用：先看现状再给整理方案",
+            json!({}), json!([])),
+        obj("home_apps_list", "列出本机已索引的全部应用（app_key/名称/类型/启动次数，高频在前）。整理主屏前必读：app_key 用于布局槽位，启动次数可决定哪些放首页/dock",
+            json!({}), json!([])),
+        obj("home_layout_set", "写入整理后的主屏布局并即时刷新（整体替换）。结构：{version:1, wallpaper, pages:[[槽位]]（单页≤35，槽位=\"app:应用key\"/\"folder:文件夹id\"/\"widget:组件类型\"）, dock:[原始appKey]（≤6）, folders:{文件夹id:{name,apps:[原始appKey]}}}。注意：槽位用 app: 前缀，dock 和文件夹 apps 用原始 key；不存在的应用会被自动剔除",
+            json!({ "layout": { "type": "object", "description": "完整布局对象" } }),
+            json!(["layout"])),
     ])
 }
 
@@ -491,6 +500,45 @@ async fn call_tool_inner(
                 .unwrap_or("")
             ))])
         }
+        // —— home 工具组（主屏布局；写入口在承载层广播刷新事件）——
+        "home_layout_get" => {
+            let mut st = state.lock().await;
+            match home::layout_get(st.db_mut()?).map_err(tool_error)? {
+                Some(raw) => Ok(vec![text_content(raw)]),
+                None => Ok(vec![text_content(
+                    "主屏尚未配置布局（当前使用默认布局）。可用 home_layout_set 写入整理结果。",
+                )]),
+            }
+        }
+        "home_apps_list" => {
+            let mut st = state.lock().await;
+            let apps = home::apps_list(st.db_mut()?).map_err(tool_error)?;
+            if apps.is_empty() {
+                return Ok(vec![text_content("应用索引为空（尚未完成索引扫描）")]);
+            }
+            let body = apps
+                .iter()
+                .map(|a| {
+                    format!(
+                        "{}（{}，启动 {} 次）\n  app_key: {}",
+                        a.display_name, a.kind, a.use_count, a.app_key
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            Ok(vec![text_content(format!(
+                "共 {} 个应用（高频在前）：\n{body}",
+                apps.len()
+            ))])
+        }
+        "home_layout_set" => {
+            let layout = arg("layout").unwrap_or(Value::Null);
+            let mut st = state.lock().await;
+            home::layout_set(st.db_mut()?, &layout.to_string()).map_err(tool_error)?;
+            Ok(vec![text_content(
+                "布局已写入，主屏已刷新。建议 home_layout_get 复核一遍。",
+            )])
+        }
         other => Err((-32602, format!("未知工具：{other}"))),
     };
     outcome
@@ -658,7 +706,7 @@ mod tests {
             .iter()
             .filter_map(|t| t.get("name").and_then(Value::as_str))
             .collect();
-        assert_eq!(names.len(), 21, "工具总数应为 21：{names:?}");
+        assert_eq!(names.len(), 24, "工具总数应为 24：{names:?}");
         for expected in [
             "browser_open",
             "browser_navigate",
@@ -681,6 +729,9 @@ mod tests {
             "todo_set_done",
             "volume_get",
             "volume_set",
+            "home_layout_get",
+            "home_apps_list",
+            "home_layout_set",
         ] {
             assert!(names.contains(&expected), "缺少工具 {expected}");
         }
@@ -787,5 +838,53 @@ mod tests {
         let resp = call(&state, "tools/call", json!({ "name": "browser_close" })).await;
         assert!(resp.get("result").is_some());
         assert!(resp.pointer("/error").is_none());
+    }
+
+    #[tokio::test]
+    async fn home_layout_roundtrip_via_mcp() {
+        let state = Arc::new(Mutex::new(ServerState::default()));
+        state.lock().await.db = Some(crate::desktop_test_db());
+        let layout = json!({
+            "version": 1, "wallpaper": "midnight",
+            "pages": [["app:C:\\lnk\\wechat.lnk", "widget:clock"]],
+            "dock": [], "folders": {}
+        });
+        let resp = call(
+            &state,
+            "tools/call",
+            json!({ "name": "home_layout_set", "arguments": { "layout": layout } }),
+        )
+        .await;
+        assert!(resp.get("error").is_none(), "{resp}");
+        let resp = call(
+            &state,
+            "tools/call",
+            json!({ "name": "home_layout_get", "arguments": {} }),
+        )
+        .await;
+        let text = resp
+            .pointer("/result/content/0/text")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        assert!(text.contains("midnight"), "{text}");
+        assert!(text.contains("wechat"), "{text}");
+        // 非法布局：本 server 的工具错误走 JSON-RPC error 帧（-32000），消息可自修正
+        let resp = call(
+            &state,
+            "tools/call",
+            json!({ "name": "home_layout_set", "arguments": { "layout": { "version": 2 } } }),
+        )
+        .await;
+        assert_eq!(
+            resp.pointer("/error/code").and_then(Value::as_i64),
+            Some(-32000)
+        );
+        assert!(
+            resp.pointer("/error/message")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .contains("version"),
+            "{resp}"
+        );
     }
 }

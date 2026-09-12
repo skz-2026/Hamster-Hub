@@ -7,6 +7,7 @@
 pub mod browser;
 pub mod computer;
 pub mod desktop;
+pub mod home;
 pub mod mcp;
 pub mod server;
 

@@ -279,8 +279,34 @@ async agentMcpAccessInfo() : Promise<McpAccessInfo> {
     return await TAURI_INVOKE("agent_mcp_access_info");
 },
 /**
+ * 扫描插件列表
+ */
+async pluginList() : Promise<PluginInfo[]> {
+    return await TAURI_INVOKE("plugin_list");
+},
+/**
+ * 读取插件入口代码（前端 blob 动态 import 用）
+ */
+async pluginReadCode(pluginId: string, entry: string) : Promise<string> {
+    return await TAURI_INVOKE("plugin_read_code", { pluginId, entry });
+},
+/**
+ * 插件私有存储读（settings 表 `plugin.<id>.<key>` 命名空间）
+ */
+async pluginStorageGet(pluginId: string, key: string) : Promise<string | null> {
+    return await TAURI_INVOKE("plugin_storage_get", { pluginId, key });
+},
+/**
+ * 插件私有存储写
+ */
+async pluginStorageSet(pluginId: string, key: string, value: string) : Promise<null> {
+    return await TAURI_INVOKE("plugin_storage_set", { pluginId, key, value });
+},
+/**
  * 打开原生托盘溢出弹层（系统自带 UI，含全部后台托盘 app，可直接交互）。
- * 期间系统任务栏会短暂闪烁一次；弹层出现后把自家 dock 压回最上（z 序恢复）。
+ * 
+ * 借壳显示系统任务栏的 ~1s 里先把 dock 切成不透明（见 [`OpaqueDockGuard`]），
+ * 配合 open_overflow 内的置顶压制，全程看不到任务栏闪现，dock 不再「上浮」。
  */
 async trayOpenOverflow() : Promise<null> {
     return await TAURI_INVOKE("tray_open_overflow");
@@ -542,6 +568,14 @@ export type McpAccessInfo = { url: string; token: string; port: number;
 portFellBack: boolean; defaultPort: number }
 export type MemStat = { total_gb: number; used_gb: number; percent: number }
 export type Note = { id: number; content: string; pinned: boolean; updated_at: number }
+/**
+ * 插件信息（命令返回；不含代码）
+ */
+export type PluginInfo = { id: string; name: string; version: string; description: string; author: string; entry: string; 
+/**
+ * 入口文件完整路径（前端据此请求代码）
+ */
+entryPath: string }
 export type ProcInfo = { pid: number; name: string; mem_mb: number; cpu: number }
 /**
  * 首条 prompt 送达方式（runtime-design.md §3.4）。
