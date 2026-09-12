@@ -149,11 +149,11 @@ trait SearchProvider {
 - **缓存**：内存 + DB 双层，TTL 5 分钟；全部失败显示上次缓存并标注时间。
 - **合规**：仅展示标题与跳转原文链接，不存储正文。
 
-### 3.9 AI 网关（ai）
+### 3.9 AI（2026-09-12 方向决议：集成 agent 为大脑，不自研）
 
-- OpenAI 兼容协议（baseURL + apiKey + model 用户自配，默认引导配置智谱 GLM）。
-- 流式：Rust `reqwest` SSE 解析 → `ai://chunk/{id}` event 推送前端逐 token 渲染；会话上下文仅存内存，不做云端历史。
-- 上下文入口：搜索框「问 AI」、独立聊天面板（M2）。
+- **主线（M4）**：大脑 = 集成 agent CLI（Claude Code/ZCode/Codex/Gemini），走 bench 会话通道（hamster-runtime + `BenchStreamEvent`，详见 bench 域）；桌面与整电脑能力经**桌面 MCP server**暴露给 agent——desktop 工具组（应用/文件/待办/音量等）+ browser 工具组（CDP）+ computer use 工具组（xcap 截图 + enigo 鼠标键盘）。承载为 **HTTP 内嵌**（主进程 127.0.0.1 随机端口 + 每会话 Bearer 令牌，Streamable HTTP 单帧回），注入用 `--mcp-config` 的 `{"type":"http"}` 内联 JSON（claude）与 ACP `session/new` 的 mcpServers（统一规范形态）；stdio 子命令（`hamster-hub.exe mcp serve`）留作调试/兜底。computer use 默认关闭（设置页开关即时生效），会话结束自动吊销令牌（急停），全部调用审计留证。
+- **兜底（现状）**：`ai_chat` OpenAI 兼容协议单次调用（baseURL + apiKey + model 用户自配，默认引导配置智谱 GLM），非流式；服务未装 agent 的用户与微任务分层路由。会话上下文仅存内存，不做云端历史。
+- 上下文入口：搜索框「问 AI」（M4 起路由 bench 会话）、独立聊天面板。
 
 ### 3.10 调度器（scheduler）
 
@@ -304,7 +304,7 @@ CREATE TABLE hotlist_cache (
 | `index://done` | `{apps, files, costMs}` | 索引完成 |
 | `weather://updated` | `WeatherNow` | 后台刷新成功 |
 | `hotlist://updated` | `Vec<HotItem>` | 热榜刷新 |
-| `ai://chunk/{id}` | `{delta}` / `{done, error?}` | AI 流式 |
+| `ai://chunk/{id}` | `{delta}` / `{done, error?}` | （规划项，已废弃——AI 流式改走 bench 会话事件，见 §3.9） |
 | `remind://due` | `ScheduleEvent` | 日程到期 |
 
 ### 5.3 示例

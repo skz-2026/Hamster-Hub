@@ -45,3 +45,18 @@ pub fn reveal_in_explorer(path: &Path) -> bool {
         r.0 as usize > 32
     }
 }
+
+/// 唤出系统真实「开始」菜单：注入 Ctrl+Esc 系统热键。
+/// 接管模式隐藏了真任务栏，但开始菜单（StartMenuExperienceHost）是独立
+/// 系统界面，仍可召出；Win 键注入会被 UIPI 过滤，Ctrl+Esc 不受限。
+pub fn open_start_menu() {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        keybd_event, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, VK_CONTROL, VK_ESCAPE,
+    };
+    unsafe {
+        keybd_event(VK_CONTROL.0 as u8, 0, KEYBD_EVENT_FLAGS(0), 0);
+        keybd_event(VK_ESCAPE.0 as u8, 0, KEYBD_EVENT_FLAGS(0), 0);
+        keybd_event(VK_ESCAPE.0 as u8, 0, KEYEVENTF_KEYUP, 0);
+        keybd_event(VK_CONTROL.0 as u8, 0, KEYEVENTF_KEYUP, 0);
+    }
+}

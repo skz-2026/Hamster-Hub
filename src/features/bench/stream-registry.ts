@@ -1,5 +1,5 @@
 /**
- * 流式会话注册表（自 Molto stream-registry.ts 移植为 React 版）：
+ * 流式会话注册表（自 上游 stream-registry.ts 移植为 React 版）：
  * StreamEvent → 渲染行的唯一归属地。行数据常驻内存，视图重建/切换时取回，零丢失。
  * 事件累积为「行」，增量按 itemId 拼接；与 Vue 版的差异仅在响应式实现——
  * 这里用订阅通知 + 写时复制（每次变更产生新数组/新行引用）适配 useSyncExternalStore。

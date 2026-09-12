@@ -117,6 +117,7 @@ export function AppShell() {
     };
   }, [navigate]);
 
+
   // 主屏（iOS 图标网格）自绘全屏，无壳
   if (isHome) {
     return (

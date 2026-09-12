@@ -1,5 +1,5 @@
-//! bench 命令层：vendor 自 Molto molto-app 的薄胶水（streaming/sessions/agents/runtime 选集）。
-//! 与 Molto 的差异：错误统一 AppError；流式事件走 specta 强类型事件（rc.21 的
+//! bench 命令层：薄胶水（streaming/sessions/agents/runtime 选集；域层源自上游开源项目，整合时更名）。
+//! 与上游项目的差异：错误统一 AppError；流式事件走 specta 强类型事件（rc.21 的
 //! ipc Channel 尚无 JS 侧生成支持，docs "Channel — Coming soon"）。
 #![allow(clippy::too_many_arguments)]
 
@@ -16,8 +16,8 @@ use crate::events::{BenchPtyExit, BenchStreamEvent, BenchStreamExit};
 #[specta::specta]
 pub fn bench_scan_agents(
     ctx: State<'_, BenchContext>,
-) -> Result<Vec<molto_core::AgentInfo>, AppError> {
-    Ok(molto_core::scanner::scan(&ctx.registry))
+) -> Result<Vec<hamster_core::AgentInfo>, AppError> {
+    Ok(hamster_core::scanner::scan(&ctx.registry))
 }
 
 #[tauri::command]
@@ -32,8 +32,8 @@ pub fn bench_list_projects(ctx: State<'_, BenchContext>) -> Result<Vec<String>, 
 #[specta::specta]
 pub fn bench_agent_workspaces(
     ctx: State<'_, BenchContext>,
-) -> Result<Vec<molto_core::WorkspaceRecord>, AppError> {
-    let mut out: Vec<molto_core::WorkspaceRecord> = Vec::new();
+) -> Result<Vec<hamster_core::WorkspaceRecord>, AppError> {
+    let mut out: Vec<hamster_core::WorkspaceRecord> = Vec::new();
     for adapter in ctx.registry.list() {
         if adapter.detect().is_none() {
             continue;
@@ -60,12 +60,12 @@ pub fn bench_agent_workspaces(
 // ===== 流式通道（GUI 对话）=====
 
 /// LiveStreamInfo → LiveSessionInfo（侧栏/工具栏复用同一形态；channel=stream）
-fn as_live_info(info: &molto_core::LiveStreamInfo) -> molto_core::LiveSessionInfo {
-    molto_core::LiveSessionInfo {
+fn as_live_info(info: &hamster_core::LiveStreamInfo) -> hamster_core::LiveSessionInfo {
+    hamster_core::LiveSessionInfo {
         session_id: info.session_id.clone(),
         agent_id: info.agent_id.clone(),
-        kind: molto_core::SessionKind::Agent,
-        channel: molto_core::SessionChannel::Stream,
+        kind: hamster_core::SessionKind::Agent,
+        channel: hamster_core::SessionChannel::Stream,
         project_dir: info.project_dir.clone(),
         running: info.running,
         exit_code: None,
@@ -78,11 +78,12 @@ fn as_live_info(info: &molto_core::LiveStreamInfo) -> molto_core::LiveSessionInf
 /// 通道命令 = spec.program + channel.args；Windows npm shim 需经 cmd /c
 /// （claude 流式方言例外：直接 spawn 原生 exe，cmd /c 包 shim 会静默挂起）
 fn build_channel_command(
-    spec: &molto_core::RuntimeSpec,
-    dialect: molto_core::ProtocolDialect,
+    spec: &hamster_core::RuntimeSpec,
+    dialect: hamster_core::ProtocolDialect,
     channel_args: Vec<String>,
 ) -> (String, Vec<String>) {
-    if cfg!(windows) && spec.windows_shim && dialect != molto_core::ProtocolDialect::ClaudeStream {
+    if cfg!(windows) && spec.windows_shim && dialect != hamster_core::ProtocolDialect::ClaudeStream
+    {
         let mut a = vec!["/c".to_string(), spec.program.clone()];
         a.extend(channel_args);
         ("cmd.exe".into(), a)
@@ -97,7 +98,7 @@ fn build_channel_command(
 #[specta::specta]
 pub fn bench_stream_create(
     ctx: State<'_, BenchContext>,
-    streams: State<'_, molto_runtime::StreamManager>,
+    streams: State<'_, hamster_runtime::StreamManager>,
     app: AppHandle,
     agent_id: String,
     project_dir: String,
@@ -106,33 +107,74 @@ pub fn bench_stream_create(
     effort: Option<String>,
     resume_key: Option<String>,
     fork: bool,
-) -> Result<molto_core::LiveSessionInfo, AppError> {
+) -> Result<hamster_core::LiveSessionInfo, AppError> {
     let dir = project_dir.trim().to_string();
     if dir.is_empty() {
-        return Err(bench_err(molto_core::MoltoError::config_invalid(
+        return Err(bench_err(hamster_core::HamsterError::config_invalid(
             "请先选择项目目录",
         )));
     }
     let adapter = ctx.registry.get(&agent_id).map_err(bench_err)?;
     let spec = adapter.runtime().ok_or_else(|| {
-        bench_err(molto_core::MoltoError::Unsupported(format!(
+        bench_err(hamster_core::HamsterError::Unsupported(format!(
             "{agent_id} 暂不支持内嵌对话"
         )))
     })?;
     let channel = spec.structured.clone().ok_or_else(|| {
-        bench_err(molto_core::MoltoError::Unsupported(format!(
+        bench_err(hamster_core::HamsterError::Unsupported(format!(
             "{agent_id} 暂不支持结构化流式通道"
         )))
     })?;
+    spawn_stream_session(
+        &ctx,
+        &streams,
+        &app,
+        agent_id,
+        &dir,
+        &spec,
+        channel,
+        Vec::new(),
+        model,
+        effort,
+        resume_key,
+        fork,
+        first_prompt,
+        Vec::new(),
+        true,
+    )
+}
 
+/// 流式会话 spawn 公共路径（bench_stream_create 与桌面助手 bench_assistant_create
+/// 共用）：模型/effort flag 合并、cmd /c 包装、幂等裁决、事件回调装配、
+/// 首条 prompt、项目目录登记。`extra_channel_args` = 会话级注入参数（如
+/// claude 的 --mcp-config）；`mcp_servers` = ACP 会话级 MCP 注入。
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn spawn_stream_session(
+    ctx: &BenchContext,
+    streams: &hamster_runtime::StreamManager,
+    app: &AppHandle,
+    agent_id: String,
+    dir: &str,
+    spec: &hamster_core::RuntimeSpec,
+    channel: hamster_core::StructuredChannel,
+    extra_channel_args: Vec<String>,
+    model: Option<String>,
+    effort: Option<String>,
+    resume_key: Option<String>,
+    fork: bool,
+    first_prompt: Option<String>,
+    mcp_servers: Vec<serde_json::Value>,
+    register_project: bool,
+) -> Result<hamster_core::LiveSessionInfo, AppError> {
     let mut channel_args = channel.args.clone();
+    channel_args.extend(extra_channel_args);
     if let (Some(flag), Some(m)) = (
         channel.model_flag.as_deref(),
         model.as_deref().map(str::trim).filter(|m| !m.is_empty()),
     ) {
         channel_args.extend([flag.to_string(), m.to_string()]);
     }
-    let (program, args) = build_channel_command(&spec, channel.dialect, channel_args);
+    let (program, args) = build_channel_command(spec, channel.dialect, channel_args);
 
     // spawn 幂等裁决：同一 rollout 已有活会话时直接返回它（单写者保证）
     let trimmed_key = resume_key
@@ -150,12 +192,13 @@ pub fn bench_stream_create(
     }
 
     let event_app = app.clone();
-    let on_event: molto_runtime::EventCallback = Box::new(move |ev: &molto_core::StreamEvent| {
-        // 转发失败（前端已关闭）只丢事件，不影响会话
-        let _ = BenchStreamEvent { event: ev.clone() }.emit(&event_app);
-    });
+    let on_event: hamster_runtime::EventCallback =
+        Box::new(move |ev: &hamster_core::StreamEvent| {
+            // 转发失败（前端已关闭）只丢事件，不影响会话
+            let _ = BenchStreamEvent { event: ev.clone() }.emit(&event_app);
+        });
     let exit_app = app.clone();
-    let on_exit: molto_runtime::appserver::StreamExitCallback =
+    let on_exit: hamster_runtime::appserver::StreamExitCallback =
         Box::new(move |session_id: &str| {
             let _ = BenchStreamExit {
                 session_id: session_id.to_string(),
@@ -165,15 +208,16 @@ pub fn bench_stream_create(
 
     // 迟绑定远程 hub 的部分不移植（远程访问属后续阶段）
     let info = streams
-        .spawn(molto_runtime::StreamOptions {
+        .spawn(hamster_runtime::StreamOptions {
             agent_id,
-            project_dir: std::path::Path::new(&dir).to_path_buf(),
+            project_dir: std::path::Path::new(dir).to_path_buf(),
             channel,
             resume_key: resume_key.filter(|k| !k.trim().is_empty()),
             fork,
             model: model.clone().filter(|m| !m.trim().is_empty()),
             program,
             args,
+            mcp_servers,
             on_event,
             on_exit,
         })
@@ -192,7 +236,9 @@ pub fn bench_stream_create(
             .map_err(bench_err)?;
     }
     // 记住最近使用的项目目录（欢迎屏 datalist）
-    ctx.store.add_project(&dir).map_err(bench_err)?;
+    if register_project {
+        ctx.store.add_project(dir).map_err(bench_err)?;
+    }
     Ok(as_live_info(&info))
 }
 
@@ -218,11 +264,11 @@ pub struct PtyCreateArgs {
 #[specta::specta]
 pub fn bench_pty_create(
     ctx: State<'_, BenchContext>,
-    sessions: State<'_, molto_runtime::SessionManager>,
+    sessions: State<'_, hamster_runtime::SessionManager>,
     app: AppHandle,
     args: PtyCreateArgs,
     on_data: tauri::ipc::Channel<Vec<u8>>,
-) -> Result<molto_core::LiveSessionInfo, AppError> {
+) -> Result<hamster_core::LiveSessionInfo, AppError> {
     let PtyCreateArgs {
         agent_id,
         project_dir,
@@ -235,7 +281,7 @@ pub fn bench_pty_create(
     } = args;
     let dir = project_dir.trim().to_string();
     if dir.is_empty() {
-        return Err(bench_err(molto_core::MoltoError::config_invalid(
+        return Err(bench_err(hamster_core::HamsterError::config_invalid(
             "请先选择项目目录",
         )));
     }
@@ -265,23 +311,24 @@ pub fn bench_pty_create(
     }
     let adapter = ctx.registry.get(&agent_id).map_err(bench_err)?;
     let spec = adapter.runtime().ok_or_else(|| {
-        bench_err(molto_core::MoltoError::Unsupported(format!(
+        bench_err(hamster_core::HamsterError::Unsupported(format!(
             "{agent_id} 暂不支持内嵌对话"
         )))
     })?;
-    let overrides = molto_core::LaunchOverrides {
+    let overrides = hamster_core::LaunchOverrides {
         model,
         effort,
         resume_key: resume_key.clone(),
     };
-    let plan = molto_runtime::plan_spawn(&spec, first_prompt.as_deref(), &overrides, cfg!(windows));
+    let plan =
+        hamster_runtime::plan_spawn(&spec, first_prompt.as_deref(), &overrides, cfg!(windows));
 
-    let on_data: molto_runtime::DataCallback = Box::new(move |bytes: &[u8]| {
+    let on_data: hamster_runtime::DataCallback = Box::new(move |bytes: &[u8]| {
         // 转发失败（前端已关闭）只丢帧，不影响会话
         let _ = on_data.send(bytes.to_vec());
     });
     let exit_app = app.clone();
-    let on_exit: molto_runtime::session::ExitCallback =
+    let on_exit: hamster_runtime::session::ExitCallback =
         Box::new(move |session_id: &str, exit_code: i32| {
             let _ = BenchPtyExit {
                 session_id: session_id.to_string(),
@@ -291,10 +338,10 @@ pub fn bench_pty_create(
         });
 
     let info = sessions
-        .spawn(molto_runtime::SpawnOptions {
+        .spawn(hamster_runtime::SpawnOptions {
             agent_id,
             resume_key: resume_key.filter(|k| !k.trim().is_empty()),
-            kind: molto_core::SessionKind::Agent,
+            kind: hamster_core::SessionKind::Agent,
             project_dir: std::path::Path::new(&dir).to_path_buf(),
             plan,
             cols,
@@ -311,7 +358,7 @@ pub fn bench_pty_create(
 #[tauri::command]
 #[specta::specta]
 pub fn bench_pty_write(
-    sessions: State<'_, molto_runtime::SessionManager>,
+    sessions: State<'_, hamster_runtime::SessionManager>,
     session_id: String,
     data: String,
 ) -> Result<(), AppError> {
@@ -320,11 +367,11 @@ pub fn bench_pty_write(
         .map_err(bench_err)
 }
 
-/// GUI 输入通道：文本以 bracketed-paste 注入运行中会话（混用模式，Molto runtime-design §3.6）
+/// GUI 输入通道：文本以 bracketed-paste 注入运行中会话（混用模式，上游设计文档 runtime-design §3.6）
 #[tauri::command]
 #[specta::specta]
 pub fn bench_pty_send_prompt(
-    sessions: State<'_, molto_runtime::SessionManager>,
+    sessions: State<'_, hamster_runtime::SessionManager>,
     session_id: String,
     text: String,
 ) -> Result<(), AppError> {
@@ -334,7 +381,7 @@ pub fn bench_pty_send_prompt(
 #[tauri::command]
 #[specta::specta]
 pub fn bench_pty_resize(
-    sessions: State<'_, molto_runtime::SessionManager>,
+    sessions: State<'_, hamster_runtime::SessionManager>,
     session_id: String,
     cols: u16,
     rows: u16,
@@ -345,7 +392,7 @@ pub fn bench_pty_resize(
 #[tauri::command]
 #[specta::specta]
 pub fn bench_pty_kill(
-    sessions: State<'_, molto_runtime::SessionManager>,
+    sessions: State<'_, hamster_runtime::SessionManager>,
     session_id: String,
 ) -> Result<(), AppError> {
     sessions.kill(&session_id).map_err(bench_err)
@@ -355,15 +402,15 @@ pub fn bench_pty_kill(
 #[tauri::command]
 #[specta::specta]
 pub fn bench_list_live_sessions(
-    sessions: State<'_, molto_runtime::SessionManager>,
-) -> Result<Vec<molto_core::LiveSessionInfo>, AppError> {
+    sessions: State<'_, hamster_runtime::SessionManager>,
+) -> Result<Vec<hamster_core::LiveSessionInfo>, AppError> {
     Ok(sessions.list())
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn bench_stream_send(
-    streams: State<'_, molto_runtime::StreamManager>,
+    streams: State<'_, hamster_runtime::StreamManager>,
     session_id: String,
     text: String,
     model: Option<String>,
@@ -386,7 +433,7 @@ pub fn bench_stream_send(
 #[tauri::command]
 #[specta::specta]
 pub fn bench_stream_interrupt(
-    streams: State<'_, molto_runtime::StreamManager>,
+    streams: State<'_, hamster_runtime::StreamManager>,
     session_id: String,
 ) -> Result<(), AppError> {
     streams.interrupt(&session_id).map_err(bench_err)
@@ -395,17 +442,20 @@ pub fn bench_stream_interrupt(
 #[tauri::command]
 #[specta::specta]
 pub fn bench_stream_kill(
-    streams: State<'_, molto_runtime::StreamManager>,
+    streams: State<'_, hamster_runtime::StreamManager>,
+    hub: State<'_, crate::mcp_server::McpHub>,
     session_id: String,
 ) -> Result<(), AppError> {
+    // 急停联动：桌面助手会话结束的同时吊销其 MCP 令牌（在途调用立即 401）
+    hub.revoke_session(&session_id);
     streams.kill(&session_id).map_err(bench_err)
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn bench_list_stream_sessions(
-    streams: State<'_, molto_runtime::StreamManager>,
-) -> Result<Vec<molto_core::LiveSessionInfo>, AppError> {
+    streams: State<'_, hamster_runtime::StreamManager>,
+) -> Result<Vec<hamster_core::LiveSessionInfo>, AppError> {
     Ok(streams.list().iter().map(as_live_info).collect())
 }
 
@@ -415,8 +465,8 @@ pub fn bench_list_stream_sessions(
 #[specta::specta]
 pub fn bench_list_history_sessions(
     ctx: State<'_, BenchContext>,
-) -> Result<Vec<molto_core::SessionSummary>, AppError> {
-    let mut all: Vec<molto_core::SessionSummary> = Vec::new();
+) -> Result<Vec<hamster_core::SessionSummary>, AppError> {
+    let mut all: Vec<hamster_core::SessionSummary> = Vec::new();
     for adapter in ctx.registry.list() {
         all.extend(adapter.recent_sessions());
     }
@@ -425,23 +475,23 @@ pub fn bench_list_history_sessions(
 }
 
 /// 检索前触发一轮快速增量摄取（未变更文件仅 stat + 游标比对，短暂阻塞可接受——
-/// 与 Molto 同款：async 命令体内直调 rusqlite，State 借用不跨 spawn）
+/// 与上游同款：async 命令体内直调 rusqlite，State 借用不跨 spawn）
 #[tauri::command]
 #[specta::specta]
 pub async fn bench_search_sessions(
     ctx: State<'_, BenchContext>,
-    index: State<'_, molto_index::IndexStore>,
-    query: molto_core::SearchQuery,
-) -> Result<Vec<molto_core::SearchHit>, AppError> {
-    let _ = molto_index::ingest_all(&ctx.registry, &index);
+    index: State<'_, hamster_index::IndexStore>,
+    query: hamster_core::SearchQuery,
+) -> Result<Vec<hamster_core::SearchHit>, AppError> {
+    let _ = hamster_index::ingest_all(&ctx.registry, &index);
     index.search(&query).map_err(bench_err)
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn bench_index_status(
-    index: State<'_, molto_index::IndexStore>,
-) -> Result<molto_core::IndexStatus, AppError> {
+    index: State<'_, hamster_index::IndexStore>,
+) -> Result<hamster_core::IndexStatus, AppError> {
     index.stats().map_err(bench_err)
 }
 
@@ -449,9 +499,9 @@ pub async fn bench_index_status(
 #[specta::specta]
 pub async fn bench_index_refresh(
     ctx: State<'_, BenchContext>,
-    index: State<'_, molto_index::IndexStore>,
-) -> Result<molto_core::IndexStatus, AppError> {
-    molto_index::ingest_all(&ctx.registry, &index).map_err(bench_err)?;
+    index: State<'_, hamster_index::IndexStore>,
+) -> Result<hamster_core::IndexStatus, AppError> {
+    hamster_index::ingest_all(&ctx.registry, &index).map_err(bench_err)?;
     index.stats().map_err(bench_err)
 }
 
@@ -459,10 +509,10 @@ pub async fn bench_index_refresh(
 #[specta::specta]
 pub async fn bench_reindex(
     ctx: State<'_, BenchContext>,
-    index: State<'_, molto_index::IndexStore>,
-) -> Result<molto_core::IndexStatus, AppError> {
+    index: State<'_, hamster_index::IndexStore>,
+) -> Result<hamster_core::IndexStatus, AppError> {
     index.rebuild().map_err(bench_err)?;
-    molto_index::ingest_all(&ctx.registry, &index).map_err(bench_err)?;
+    hamster_index::ingest_all(&ctx.registry, &index).map_err(bench_err)?;
     index.stats().map_err(bench_err)
 }
 
@@ -470,14 +520,14 @@ pub async fn bench_reindex(
 #[specta::specta]
 pub fn bench_session_messages(
     ctx: State<'_, BenchContext>,
-    index: State<'_, molto_index::IndexStore>,
+    index: State<'_, hamster_index::IndexStore>,
     agent: String,
     session_key: String,
     around_seq: usize,
     window: usize,
-) -> Result<Vec<molto_core::SnapshotMessage>, AppError> {
+) -> Result<Vec<hamster_core::SnapshotMessage>, AppError> {
     // 读取前先快速增量摄取（GUI resume 播种历史的前提；游标使未变更文件近零成本）
-    let _ = molto_index::ingest_all(&ctx.registry, &index);
+    let _ = hamster_index::ingest_all(&ctx.registry, &index);
     index
         .messages_around(&agent, &session_key, around_seq as i64, window as i64)
         .map_err(bench_err)
@@ -487,13 +537,13 @@ pub fn bench_session_messages(
 #[specta::specta]
 pub fn bench_list_session_messages(
     ctx: State<'_, BenchContext>,
-    index: State<'_, molto_index::IndexStore>,
+    index: State<'_, hamster_index::IndexStore>,
     agent: String,
     session_key: String,
     from_seq: i64,
     limit: usize,
-) -> Result<molto_core::SessionMessagesPage, AppError> {
-    let _ = molto_index::ingest_all(&ctx.registry, &index);
+) -> Result<hamster_core::SessionMessagesPage, AppError> {
+    let _ = hamster_index::ingest_all(&ctx.registry, &index);
     index
         .messages_page(&agent, &session_key, from_seq, limit as i64)
         .map_err(bench_err)
@@ -504,15 +554,15 @@ pub fn bench_list_session_messages(
 #[specta::specta]
 pub fn bench_latest_indexed_session(
     ctx: State<'_, BenchContext>,
-    index: State<'_, molto_index::IndexStore>,
+    index: State<'_, hamster_index::IndexStore>,
     agent: String,
     project_dir: String,
-) -> Result<Option<molto_core::SessionSummary>, AppError> {
-    let _ = molto_index::ingest_all(&ctx.registry, &index);
+) -> Result<Option<hamster_core::SessionSummary>, AppError> {
+    let _ = hamster_index::ingest_all(&ctx.registry, &index);
     Ok(index
         .latest_for_project(&agent, &project_dir)
         .map_err(bench_err)?
-        .map(|(key, title)| molto_core::SessionSummary {
+        .map(|(key, title)| hamster_core::SessionSummary {
             agent,
             session_key: key,
             project_path: project_dir,
@@ -524,12 +574,12 @@ pub fn bench_latest_indexed_session(
         }))
 }
 
-/// 删除一条历史会话：备份源文件（Molto 红线②）→ 删除 → 清索引派生数据
+/// 删除一条历史会话：备份源文件（上游红线②，备份后删）→ 删除 → 清索引派生数据
 #[tauri::command]
 #[specta::specta]
 pub fn bench_session_delete(
     ctx: State<'_, BenchContext>,
-    index: State<'_, molto_index::IndexStore>,
+    index: State<'_, hamster_index::IndexStore>,
     agent: String,
     session_key: String,
 ) -> Result<(), AppError> {
@@ -537,17 +587,18 @@ pub fn bench_session_delete(
         .source_path_for(&agent, &session_key)
         .map_err(bench_err)?
     else {
-        return Err(bench_err(molto_core::MoltoError::not_found(format!(
+        return Err(bench_err(hamster_core::HamsterError::not_found(format!(
             "会话 {agent}/{session_key}"
         ))));
     };
     let path = std::path::Path::new(&src);
     if path.exists() {
-        let scope = molto_core::Scope::User;
+        let scope = hamster_core::Scope::User;
         ctx.backup
             .snapshot(&agent, &scope, path)
             .map_err(|e| AppError::new("BENCH_BACKUP", format!("删除前备份失败：{e}")))?;
-        std::fs::remove_file(path).map_err(|e| bench_err(molto_core::MoltoError::io(path, e)))?;
+        std::fs::remove_file(path)
+            .map_err(|e| bench_err(hamster_core::HamsterError::io(path, e)))?;
     }
     index.reset_file(&agent, &src).map_err(bench_err)
 }

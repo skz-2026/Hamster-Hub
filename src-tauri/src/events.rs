@@ -20,13 +20,13 @@ pub struct FileIndexUpdated {
     pub count: u32,
 }
 
-// ===== bench（代理工作台，vendor 自 Molto 的域层）=====
+// ===== bench（代理工作台，源自上游（Apache-2.0，整合时更名）的域层）=====
 
-/// 流式会话事件（GUI 对话数据源；payload 为 Molto 归一化 StreamEvent）
+/// 流式会话事件（GUI 对话数据源；payload 为 上游 归一化 StreamEvent）
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type, tauri_specta::Event)]
 #[serde(transparent)]
 pub struct BenchStreamEvent {
-    pub event: molto_core::StreamEvent,
+    pub event: hamster_core::StreamEvent,
 }
 
 /// 流式会话进程退出（前端刷新活会话列表）

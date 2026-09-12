@@ -6,6 +6,7 @@ import { commands } from '@/shared/lib/ipc';
 import { useWeather } from '@/features/dashboard/hooks';
 import { useSettings, usePatchSettings } from '@/features/settings/hooks';
 import { useTheme } from '@/app/providers/ThemeProvider';
+import McpSyncCard from '@/features/agent/McpSyncCard';
 
 const ACCENTS = ['#ff8a3d', '#f0563b', '#4ea1ff', '#40b881', '#a06bff', '#e8b23c'];
 
@@ -114,6 +115,21 @@ export default function SettingsPage() {
           onSave={(v) => patch({ behavior: { desktop_mode_hotkey: v } })}
         />
 
+        <Row
+          title="允许操作电脑（Computer Use）"
+          desc="桌面助手可经桌面工具截图并操作真实鼠标键盘（默认关；开启后每次调用留审计，急停 = 结束会话）"
+        >
+          <Switch
+            checked={settings?.agent.computer_use_enabled ?? false}
+            onChange={(v) => patch({ agent: { computer_use_enabled: v } })}
+          />
+        </Row>
+        <PersonaRow
+          value={settings?.agent.assistant_persona ?? ''}
+          onSave={(v) => patch({ agent: { assistant_persona: v } })}
+        />
+        <McpSyncCard />
+
         <Row title="开机自启" desc="随 Windows 启动并最小化到托盘">
           <Switch checked={autostart ?? false} onChange={() => toggleAutostart()} />
         </Row>
@@ -142,6 +158,33 @@ function Row({ title, desc, children }: { title: string; desc: string; children:
       </div>
       {children}
     </section>
+  );
+}
+
+/** 桌面助手人设（本地草稿 + 保存；空 = Rust 侧内置仓鼠默认 persona） */
+function PersonaRow({ value, onSave }: { value: string; onSave: (v: string) => void }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const dirty = draft !== null && draft !== value;
+  return (
+    <Row title="桌面助手人设" desc="追加为 Agent 的系统设定（空 = 内置仓鼠默认）">
+      <div className="flex items-start gap-2">
+        <textarea
+          value={draft ?? value}
+          onChange={(e) => setDraft(e.target.value)}
+          rows={3}
+          placeholder="例如：回答尽量精简，先给结论。"
+          className="w-56 resize-none rounded-lg border border-[var(--border)] bg-transparent px-2.5 py-1.5 text-xs outline-none focus:border-[var(--accent)]"
+        />
+        {dirty && (
+          <button
+            onClick={() => onSave(draft!)}
+            className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-white"
+          >
+            保存
+          </button>
+        )}
+      </div>
+    </Row>
   );
 }
 

@@ -1,5 +1,5 @@
 /**
- * Markdown 渲染（markdown-it + highlight.js，与 Molto 同栈）：
+ * Markdown 渲染（markdown-it + highlight.js，与 上游 同栈）：
  * 统一实例 + 单次构建，html 关闭防注入；代码块走 hljs 高亮。
  */
 import { useMemo } from 'react';

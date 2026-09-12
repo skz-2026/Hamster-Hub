@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, X, Check, Palette, Loader2, SquarePlus } from 'lucide-react';
-import { commands, type AppEntry } from '@/shared/lib/ipc';
+import { commands, events, type AppEntry } from '@/shared/lib/ipc';
 import { useApps, useHomeLayout } from './hooks';
 import {
   AppIcon,
@@ -59,6 +59,8 @@ export default function HomeScreen() {
   const [hoverKey, setHoverKey] = useState<string | null>(null);
   const [mergeFlash, setMergeFlash] = useState<string | null>(null);
 
+  const [takeover, setTakeover] = useState(false);
+
   const scrollerRef = useRef<HTMLDivElement>(null);
   const cellEls = useRef(new Map<string, HTMLElement>());
   const longPressTimer = useRef<number | undefined>(undefined);
@@ -71,9 +73,27 @@ export default function HomeScreen() {
     commands
       .desktopModeIsActive()
       .then((active) => {
+        setTakeover(active);
         if (!active) window.location.hash = '#/';
       })
       .catch(() => {});
+  }, []);
+
+  // 接管模式开关跟手（进入/退出瞬间任务栏条出现/消失，底距需即时切换）
+  useEffect(() => {
+    let alive = true;
+    let unlisten: (() => void) | undefined;
+    events.desktopModeChanged
+      .listen((e) => {
+        if (!alive) return;
+        setTakeover(e.payload.active);
+        if (!e.payload.active) window.location.hash = '#/';
+      })
+      .then((fn) => (alive ? (unlisten = fn) : fn()));
+    return () => {
+      alive = false;
+      unlisten?.();
+    };
   }, []);
 
   // ===== 拖拽 =====
@@ -404,7 +424,11 @@ export default function HomeScreen() {
 
       {/* 页码圆点 */}
       {layout.pages.length > 1 && (
-        <div className="absolute inset-x-0 bottom-[118px] z-10 flex justify-center gap-2">
+        <div
+          className={`absolute inset-x-0 z-10 flex justify-center gap-2 ${
+            takeover ? 'bottom-[178px]' : 'bottom-[118px]'
+          }`}
+        >
           {layout.pages.map((_, i) => (
             <span
               key={i}
@@ -417,7 +441,12 @@ export default function HomeScreen() {
       )}
 
       {/* Dock */}
-      <div className="absolute inset-x-0 bottom-6 z-20 flex justify-center">
+      {/* Dock：接管模式下整体抬到任务栏条上沿之上（条高 68 + 16 间距 = 84） */}
+      <div
+        className={`absolute inset-x-0 z-20 flex justify-center ${
+          takeover ? 'bottom-[84px]' : 'bottom-6'
+        }`}
+      >
         <div
           className="ios-dock flex items-center gap-4 rounded-[28px] px-5 py-3"
           onDragOver={(e) => e.preventDefault()}

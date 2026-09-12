@@ -1,5 +1,5 @@
 /**
- * stream-registry 归并语义回归（自 Molto 移植）：ACP 消息增量的聚合（气泡不碎）、
+ * stream-registry 归并语义回归（自 上游 移植）：ACP 消息增量的聚合（气泡不碎）、
  * 乐观回显采纳、占位行迁移。
  */
 import { describe, expect, it } from 'vitest';

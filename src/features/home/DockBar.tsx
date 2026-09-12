@@ -8,6 +8,7 @@ import { LayoutGrid, LogOut, Bot, Plus, Search, Settings } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { commands, isTauri, type AppEntry } from '@/shared/lib/ipc';
 import { useTopApps } from '@/features/dashboard/hooks';
+import TrayButton from './TrayArea';
 import { useApps, useHomeLayout } from './hooks';
 import { Monogram } from './AppIcon';
 import { DOCK_CAPACITY, removeFromDock } from './layout';
@@ -60,6 +61,8 @@ export function DockBar({ desktop }: DockBarProps) {
   const appByKey = new Map(apps.map((a) => [a.app_key, a]));
   const frequent = top.filter((a) => !layout.dock.includes(a.app_key)).slice(0, desktop ? 6 : 4);
   const exitDesktop = () => commands.desktopModeExit().catch(console.error);
+  /** 开始：注入 Ctrl+Esc 召出系统真实开始菜单（全局键注入，任务栏窗口内调用同样有效） */
+  const openStartMenu = () => commands.startMenuOpen().catch(console.error);
 
   /** 启动 + 常用组即时刷新（usage 已落库，invalidate 触发 top_apps 重取） */
   const launchApp = (key: string) => {
@@ -94,11 +97,18 @@ export function DockBar({ desktop }: DockBarProps) {
 
   if (desktop) {
     // 贴边通栏任务栏（完全替代系统任务栏）：左端入口 + 定制（可增删）…… 右端退出 + 时钟
+    // 真任务栏窗口（TaskbarPage 已画条底色）：不带 ios-dock 皮肤——bar 里套 bar
+    // 会在窗口顶部夹出露壁纸缝 + 双重高光线；浏览器预览/主窗口内嵌仍需要皮肤
+    const barCls = inTaskbarWindow
+      ? 'flex w-full items-end gap-2.5 rounded-none px-4 pb-[7px] pt-0'
+      : 'ios-dock flex w-full items-end gap-2.5 rounded-none px-4 py-[7px]';
     return (
       <div className="relative z-30 flex shrink-0">
-        {/* 桌面任务栏：条底色由 TaskbarPage 统一绘制，去掉 ios-dock 皮肤
-            （bar 里套 bar 会在窗口顶部夹出一条露壁纸的缝 + 双重高光线） */}
-        <div className="flex w-full items-end gap-2.5 rounded-none px-4 pb-[7px] pt-0">
+        <div className={barCls}>
+          {/* 开始：Windows 徽标位（唤出系统真实开始菜单，非仿制面板） */}
+          <DockItem label="开始" nativeTipOnly={desktop} onClick={openStartMenu}>
+            <StartLogo size={size} />
+          </DockItem>
           {SYSTEM_ICONS.map(({ label, to, Icon }) => (
             <DockItem key={to} label={label} active={pathname === to} nativeTipOnly={desktop} onClick={() => goRoute(to)}>
               <SystemTile Icon={Icon} size={size} />
@@ -148,6 +158,8 @@ export function DockBar({ desktop }: DockBarProps) {
               </span>
             </DockItem>
             <Divider />
+            {/* 托盘按钮：主窗口弹后台应用面板（跨窗口走 emitTo） */}
+            <TrayButton />
             <div className="flex flex-col items-end justify-center self-stretch px-1.5 leading-tight">
               <span className="text-[13px] font-medium tabular-nums text-white [text-shadow:0_1px_3px_rgba(0,0,0,.45)]">
                 {now.time}
@@ -268,6 +280,23 @@ function SystemTile({ Icon, size }: { Icon: LucideIcon; size: number }) {
       style={{ width: size, height: size }}
     >
       <Icon size={Math.round(size * 0.52)} strokeWidth={1.8} />
+    </span>
+  );
+}
+
+/** Windows 风格四格开始徽标（入口是系统真实开始菜单，非应用内仿制面板） */
+function StartLogo({ size }: { size: number }) {
+  return (
+    <span
+      className="squircle grid place-items-center bg-white/[0.16] ring-1 ring-white/22 backdrop-blur-xl drop-shadow-[0_4px_10px_rgba(0,0,0,.35)]"
+      style={{ width: size, height: size }}
+    >
+      <svg width={Math.round(size * 0.5)} height={Math.round(size * 0.5)} viewBox="0 0 22 22" fill="none" aria-hidden>
+        <rect x="2" y="2" width="8" height="8" rx="1.4" fill="#4CA8EF" />
+        <rect x="12" y="2" width="8" height="8" rx="1.4" fill="#4CA8EF" />
+        <rect x="2" y="12" width="8" height="8" rx="1.4" fill="#4CA8EF" />
+        <rect x="12" y="12" width="8" height="8" rx="1.4" fill="#4CA8EF" />
+      </svg>
     </span>
   );
 }

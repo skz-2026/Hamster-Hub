@@ -11,6 +11,7 @@ mod core;
 mod desktop_mode;
 mod error;
 mod events;
+mod mcp_server;
 mod store;
 
 use std::sync::Mutex;
@@ -94,7 +95,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::desktop::desktop_mode_enter,
             commands::desktop::desktop_mode_exit,
             commands::desktop::desktop_mode_is_active,
-            // bench（代理工作台，Molto 整合 MVP）
+            commands::desktop::start_menu_open,
+            // bench（代理工作台，上游域层整合 MVP）
             bench::commands::bench_scan_agents,
             bench::commands::bench_list_projects,
             bench::commands::bench_agent_workspaces,
@@ -118,6 +120,14 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             bench::commands::bench_index_refresh,
             bench::commands::bench_reindex,
             bench::commands::bench_session_delete,
+            // 桌面助手（Agent 原生桌面：persona + hamster-desktop MCP 注入）
+            bench::assistant::bench_assistant_create,
+            // 桌面 MCP 分发（按 agent 开关写入配置文件）+ 接入信息
+            bench::assistant::agent_mcp_status,
+            bench::assistant::agent_mcp_set_enabled,
+            bench::assistant::agent_mcp_access_info,
+            // 托盘管理（dock 右侧系统托盘区）
+            commands::tray::tray_open_overflow,
         ])
         .events(collect_events![
             events::CoreReady,
@@ -146,6 +156,20 @@ fn export_bindings(builder: &tauri_specta::Builder<tauri::Wry>) {
             out,
         )
         .expect("导出 IPC TypeScript 类型失败");
+}
+
+pub use mcp_server::McpHub;
+
+/// `hamster-hub.exe mcp serve`：桌面 MCP server 的 stdio 承载（ACP/codex 兜底，
+/// claude 主线走内嵌 HTTP——见 mcp_server.rs）。argv 分发在 Tauri/单实例
+/// 初始化之前，因此不会与 GUI 实例冲突。
+pub fn mcp_serve() {
+    hamster_mcp::serve_stdio();
+}
+
+/// `hamster-hub.exe mcp selftest <url>`：browser-use 冒烟（真实浏览器链路自检）
+pub fn mcp_selftest(url: &str) -> bool {
+    hamster_mcp::selftest(url)
 }
 
 pub fn run() {
@@ -188,20 +212,61 @@ pub fn run() {
                 commands::sysinfo::SystemMonitor::new(),
             ));
 
-            // bench（代理工作台）：Molto 域层装配（sessions.db 独立自管，不入主库迁移链）
+            // bench（代理工作台）：上游 域层装配（sessions.db 独立自管，不入主库迁移链）
             let bench_data = app
                 .path()
                 .app_data_dir()
                 .map_err(|e| error::AppError::io(e.to_string()))?;
             let bench_ctx = bench::BenchContext::init(&bench_data)?;
-            let bench_index = molto_index::IndexStore::open(
+            let bench_index = hamster_index::IndexStore::open(
                 &bench_ctx.store_root.join("index").join("sessions.db"),
             )
             .map_err(bench::bench_err)?;
             app.manage(bench_ctx);
             app.manage(bench_index);
-            app.manage(molto_runtime::StreamManager::new());
-            app.manage(molto_runtime::SessionManager::new());
+            app.manage(hamster_runtime::StreamManager::new());
+            app.manage(hamster_runtime::SessionManager::new());
+
+            // 桌面 MCP server 内嵌 HTTP 承载（M4）：127.0.0.1 端口 + 双层令牌
+            //（用户级长效令牌 = 外部宿主接入；会话令牌 = bench 助手，急停可吊销）
+            {
+                let state: tauri::State<AppState> = app.state();
+                let assistant_dir = bench_data
+                    .join("agent")
+                    .join(bench::assistant::ASSISTANT_DIR);
+                let _ = std::fs::create_dir_all(&assistant_dir);
+                let (cu_allowed, pref_port, user_token) = {
+                    let conn = state
+                        .db
+                        .lock()
+                        .map_err(|e| error::AppError::poison(e.to_string()))?;
+                    let mut s = store::settings::load(&conn)?;
+                    let cu = s.agent.computer_use_enabled;
+                    // 首启无用户令牌：生成并持久化（外部 agent 配置跨重启有效）
+                    if s.agent
+                        .mcp_user_token
+                        .as_deref()
+                        .unwrap_or_default()
+                        .trim()
+                        .is_empty()
+                    {
+                        s.agent.mcp_user_token = Some(uuid::Uuid::new_v4().to_string());
+                        store::settings::save(&conn, &s)?;
+                    }
+                    let token = s.agent.mcp_user_token.unwrap_or_default();
+                    (cu, s.agent.mcp_port, token)
+                };
+                // 内嵌 server 独享一条主库连接（与 AppState 的 Mutex 连接并存，WAL 并发）
+                let conn = hamster_mcp::desktop::open_db(&state.db_path)?;
+                let hub = McpHub::start(
+                    conn,
+                    cu_allowed,
+                    Some(assistant_dir.join("audit.jsonl")),
+                    pref_port,
+                )?;
+                hub.register_user_token(&user_token);
+                app.manage(hub);
+            }
 
             // 全局热键（从设置读取；注册失败只降级告警，不阻塞启动）
             let (spot_hotkey, desk_hotkey) = {

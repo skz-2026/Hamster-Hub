@@ -1,0 +1,21 @@
+[package]
+name = "hamster-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "仓鼠Hub 内核：领域模型、同步引擎、备份、存储、Doctor（不依赖任何内部 crate）"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+sha2.workspace = true
+similar.workspace = true
+tempfile.workspace = true
+toml_edit.workspace = true
+chrono.workspace = true
+ts-rs.workspace = true
+specta.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

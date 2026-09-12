@@ -147,6 +147,12 @@ async desktopModeExit() : Promise<null> {
 async desktopModeIsActive() : Promise<boolean> {
     return await TAURI_INVOKE("desktop_mode_is_active");
 },
+/**
+ * 唤出系统真实「开始」菜单（注入 Ctrl+Esc，见 hamster_platform::shell）
+ */
+async startMenuOpen() : Promise<null> {
+    return await TAURI_INVOKE("start_menu_open");
+},
 async benchScanAgents() : Promise<AgentInfo[]> {
     return await TAURI_INVOKE("bench_scan_agents");
 },
@@ -196,7 +202,7 @@ async benchPtyWrite(sessionId: string, data: string) : Promise<null> {
     return await TAURI_INVOKE("bench_pty_write", { sessionId, data });
 },
 /**
- * GUI 输入通道：文本以 bracketed-paste 注入运行中会话（混用模式，Molto runtime-design §3.6）
+ * GUI 输入通道：文本以 bracketed-paste 注入运行中会话（混用模式，上游设计文档 runtime-design §3.6）
  */
 async benchPtySendPrompt(sessionId: string, text: string) : Promise<null> {
     return await TAURI_INVOKE("bench_pty_send_prompt", { sessionId, text });
@@ -212,7 +218,7 @@ async benchListHistorySessions() : Promise<SessionSummary[]> {
 },
 /**
  * 检索前触发一轮快速增量摄取（未变更文件仅 stat + 游标比对，短暂阻塞可接受——
- * 与 Molto 同款：async 命令体内直调 rusqlite，State 借用不跨 spawn）
+ * 与上游同款：async 命令体内直调 rusqlite，State 借用不跨 spawn）
  */
 async benchSearchSessions(query: SearchQuery) : Promise<SearchHit[]> {
     return await TAURI_INVOKE("bench_search_sessions", { query });
@@ -239,10 +245,45 @@ async benchReindex() : Promise<IndexStatus> {
     return await TAURI_INVOKE("bench_reindex");
 },
 /**
- * 删除一条历史会话：备份源文件（Molto 红线②）→ 删除 → 清索引派生数据
+ * 删除一条历史会话：备份源文件（上游红线②，备份后删）→ 删除 → 清索引派生数据
  */
 async benchSessionDelete(agent: string, sessionKey: string) : Promise<null> {
     return await TAURI_INVOKE("bench_session_delete", { agent, sessionKey });
+},
+/**
+ * 创建桌面助手会话：解析默认代理 → 铸造令牌 → 注入 HTTP MCP 配置 → spawn。
+ */
+async benchAssistantCreate(args: AssistantCreateArgs) : Promise<AssistantSessionInfo> {
+    return await TAURI_INVOKE("bench_assistant_create", { args });
+},
+/**
+ * 各 agent 的桌面 MCP 分发状态
+ */
+async agentMcpStatus() : Promise<AgentMcpStatus[]> {
+    return await TAURI_INVOKE("agent_mcp_status");
+},
+/**
+ * 开/关某 agent 的桌面 MCP 分发：
+ * 开 = 源 upsert（HTTP IR）+ target 启用 → plan/apply 写入其配置文件；
+ * 关 = 源临时置 disabled → 仅对该 target apply（渲染省略 = 摘除条目）→ 恢复源。
+ * Drift（基线外的既有配置）统一 Overwrite：render 本身「读现有→合并」，
+ * 用户已有条目保留，apply 自动落备份可回滚。
+ */
+async agentMcpSetEnabled(agentId: string, enabled: boolean) : Promise<null> {
+    return await TAURI_INVOKE("agent_mcp_set_enabled", { agentId, enabled });
+},
+/**
+ * 接入信息（URL 含实际端口；端口回退时前端提示更新已分发配置）
+ */
+async agentMcpAccessInfo() : Promise<McpAccessInfo> {
+    return await TAURI_INVOKE("agent_mcp_access_info");
+},
+/**
+ * 打开原生托盘溢出弹层（系统自带 UI，含全部后台托盘 app，可直接交互）。
+ * 期间系统任务栏会短暂闪烁一次；弹层出现后把自家 dock 压回最上（z 序恢复）。
+ */
+async trayOpenOverflow() : Promise<null> {
+    return await TAURI_INVOKE("tray_open_overflow");
 }
 }
 
@@ -274,6 +315,32 @@ fileIndexUpdated: "file-index-updated"
 /** user-defined types **/
 
 /**
+ * Agent 域设置：桌面助手 persona、computer use 安全开关与桌面 MCP 分发
+ */
+export type Agent = { 
+/**
+ * computer use 总开关：允许 agent 经桌面 MCP server 操作真实鼠标键盘
+ * （HAMSTER_CU_MODE 注入；默认关，安全红线见 docs/03 §3.4）
+ */
+computer_use_enabled: boolean; 
+/**
+ * 桌面助手 persona（追加为 agent system prompt；空 = 内置仓鼠默认）
+ */
+assistant_persona: string; 
+/**
+ * 桌面 MCP 端口（None = 默认 47613；被占用时回退随机端口，实际值见设置页）
+ */
+mcp_port: number | null; 
+/**
+ * 用户级长效令牌：写入各 agent 配置文件供外部 MCP 宿主接入
+ * （None = 首启自动生成；区别于 bench 助手会话的一次性令牌）
+ */
+mcp_user_token: string | null; 
+/**
+ * 已开启桌面 MCP 分发的 agent id（写入其配置文件；移除 = 从配置摘除条目）
+ */
+mcp_agents: string[] }
+/**
  * 扫描结果（前端展示形态）。
  */
 export type AgentInfo = { id: string; name: string; installed: boolean; version: string | null; 
@@ -297,6 +364,22 @@ launchOptions: LaunchOptions | null;
  * 支持官方结构化流式通道（v2.0 R3：GUI 会话实时渲染）
  */
 streaming: boolean }
+/**
+ * 分发状态（agent_mcp_status 返回项）
+ */
+export type AgentMcpStatus = { agentId: string; agentName: string; installed: boolean; 
+/**
+ * 该 agent 是否支持 MCP 配置分发
+ */
+mcpCapable: boolean; 
+/**
+ * 用户开关（settings.agent.mcp_agents）
+ */
+enabled: boolean; 
+/**
+ * 配置文件路径（mcp 不可用为空串）
+ */
+configPath: string }
 export type Ai = { base_url: string; model: string; api_key: string | null }
 export type AppEntry = { app_key: string; display_name: string; 
 /**
@@ -311,6 +394,26 @@ export type AppError = { code: string; message: string }
 export type AppHealth = { name: string; version: string }
 export type AppIndexUpdated = { count: number }
 export type Appearance = { theme: string; accent: string; glass: string; font_scale: number }
+/**
+ * bench_assistant_create 参数包
+ */
+export type AssistantCreateArgs = { firstPrompt: string | null; model: string | null; 
+/**
+ * 指定代理；缺省按 claude → zcode → 首个已安装顺序解析
+ */
+agentId: string | null }
+/**
+ * 桌面助手会话信息（返回给前端；附注入摘要便于调试与展示）
+ */
+export type AssistantSessionInfo = { session: LiveSessionInfo; agentId: string; 
+/**
+ * 本会话是否注入了桌面 MCP server
+ */
+mcpInjected: boolean; 
+/**
+ * 本会话 computer use 是否放行（未放行时 computer_* 工具被 server 拒绝）
+ */
+computerUseEnabled: boolean }
 export type Behavior = { autostart: boolean; start_minimized: boolean; language: string; 
 /**
  * 桌面模式切换热键（tauri global-shortcut 格式，重启生效）
@@ -325,7 +428,7 @@ desktop_mode_on_launch: boolean }
  */
 export type BenchPtyExit = { session_id: string; exit_code: number }
 /**
- * 流式会话事件（GUI 对话数据源；payload 为 Molto 归一化 StreamEvent）
+ * 流式会话事件（GUI 对话数据源；payload 为 上游 归一化 StreamEvent）
  */
 export type BenchStreamEvent = StreamEvent
 /**
@@ -402,7 +505,7 @@ export type LaunchOptions = { model: LaunchOption | null; effort: LaunchOption |
  */
 export type LiveSessionInfo = { 
 /**
- * Molto 侧会话 id（uuid）
+ * 上游 侧会话 id（uuid）
  */
 sessionId: string; agentId: string; 
 /**
@@ -429,6 +532,14 @@ lastActiveAt: number;
  * rollout 会话键（resume 启动时记录）：侧栏按会话聚合 + spawn 幂等裁决
  */
 resumeKey?: string | null }
+/**
+ * 接入信息（设置页展示 + 供手动复制到任意 MCP 宿主）
+ */
+export type McpAccessInfo = { url: string; token: string; port: number; 
+/**
+ * 端口回退过（首选端口被占用，分发出去的固定 URL 当前不可用）
+ */
+portFellBack: boolean; defaultPort: number }
 export type MemStat = { total_gb: number; used_gb: number; percent: number }
 export type Note = { id: number; content: string; pinned: boolean; updated_at: number }
 export type ProcInfo = { pid: number; name: string; mem_mb: number; cpu: number }
@@ -441,7 +552,7 @@ export type PromptInject =
  */
 "argv" | 
 /**
- * 先开终端，用户自己在 TUI 内输入（Molto 不注入）
+ * 先开终端，用户自己在 TUI 内输入（上游 不注入）
  */
 "none"
 /**
@@ -511,7 +622,11 @@ resumable: boolean;
  * （如 codex rollout 引用当前配置无法解析的 model provider，实测 0.152.0）
  */
 resumeViaTui?: boolean }
-export type Settings = { appearance: Appearance; search: Search; file_index: FileIndex; weather: Weather; ai: Ai; behavior: Behavior }
+export type Settings = { appearance: Appearance; search: Search; file_index: FileIndex; weather: Weather; ai: Ai; behavior: Behavior; 
+/**
+ * Agent 域（桌面助手 / computer use，M4）
+ */
+agent: Agent }
 /**
  * 一条可检索的消息投影（原文仍在 Agent 源文件，索引只存文本投影）。
  */

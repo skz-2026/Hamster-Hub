@@ -1,5 +1,5 @@
 /**
- * timeline-logic 纯函数回归（自 Molto 移植）：工具分组 / 轮次折叠 / 滚动锚定判定。
+ * timeline-logic 纯函数回归（自 上游 移植）：工具分组 / 轮次折叠 / 滚动锚定判定。
  */
 import { describe, expect, it } from 'vitest';
 import {

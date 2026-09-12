@@ -1,5 +1,5 @@
 /**
- * 代理工作台（/bench）：Molto 整合 —— GUI 流式对话（assistant-ui）+ PTY TUI
+ * 代理工作台（/bench）：上游域层整合 —— GUI 流式对话（assistant-ui）+ PTY TUI
  * （xterm，codex 等 resumeViaTui 会话的续聊）+ Recall 全文搜索。
  * 已打开的会话进「会话池」保持挂载（切走仅隐藏，终端缓冲/对话状态不丢）。
  */

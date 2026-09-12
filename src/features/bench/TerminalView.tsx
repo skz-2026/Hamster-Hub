@@ -100,7 +100,7 @@ export default function TerminalView({
       if (!disposed) void benchCommands.benchPtyWrite(realSid, d);
     });
 
-    // 卸载不杀会话（Molto 语义：会话存活，视图重建经 attach 重新接管输出）；
+    // 卸载不杀会话（上游 语义：会话存活，视图重建经 attach 重新接管输出）；
     // 结束会话走头部按钮 / 页面关闭（benchPtyKill）
     return () => {
       disposed = true;

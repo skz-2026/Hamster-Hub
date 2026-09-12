@@ -12,6 +12,26 @@ pub struct Settings {
     pub weather: Weather,
     pub ai: Ai,
     pub behavior: Behavior,
+    /// Agent 域（桌面助手 / computer use，M4）
+    pub agent: Agent,
+}
+
+/// Agent 域设置：桌面助手 persona、computer use 安全开关与桌面 MCP 分发
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
+#[serde(default)]
+pub struct Agent {
+    /// computer use 总开关：允许 agent 经桌面 MCP server 操作真实鼠标键盘
+    /// （HAMSTER_CU_MODE 注入；默认关，安全红线见 docs/03 §3.4）
+    pub computer_use_enabled: bool,
+    /// 桌面助手 persona（追加为 agent system prompt；空 = 内置仓鼠默认）
+    pub assistant_persona: String,
+    /// 桌面 MCP 端口（None = 默认 47613；被占用时回退随机端口，实际值见设置页）
+    pub mcp_port: Option<u16>,
+    /// 用户级长效令牌：写入各 agent 配置文件供外部 MCP 宿主接入
+    /// （None = 首启自动生成；区别于 bench 助手会话的一次性令牌）
+    pub mcp_user_token: Option<String>,
+    /// 已开启桌面 MCP 分发的 agent id（写入其配置文件；移除 = 从配置摘除条目）
+    pub mcp_agents: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]

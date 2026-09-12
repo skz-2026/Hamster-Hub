@@ -20,3 +20,11 @@ pub fn desktop_mode_exit(app: tauri::AppHandle) -> Result<(), AppError> {
 pub fn desktop_mode_is_active() -> bool {
     desktop_mode::is_active()
 }
+
+/// 唤出系统真实「开始」菜单（注入 Ctrl+Esc，见 hamster_platform::shell）
+#[tauri::command]
+#[specta::specta]
+pub fn start_menu_open() -> Result<(), AppError> {
+    hamster_platform::shell::open_start_menu();
+    Ok(())
+}

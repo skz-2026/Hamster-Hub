@@ -1,5 +1,5 @@
 /**
- * 原生视图时间线逻辑（纯函数，自 Molto timeline-logic.ts 1:1 移植）：
+ * 原生视图时间线逻辑（纯函数，自 上游 timeline-logic.ts 1:1 移植）：
  * 工具行分组折叠（①）、历史轮次折叠（③）、滚动锚定辅助（②）。
  * 渲染形态归 TimelineView；本文件不碰 React 与 DOM。
  */

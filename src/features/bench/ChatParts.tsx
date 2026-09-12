@@ -59,7 +59,7 @@ function DiffCard({ path, oldText, newText }: { path: string; oldText: string | 
   );
 }
 
-/** 工具卡：toolName + 状态图标 + 结果文本（result 内嵌 Molto 的 status/diff payload） */
+/** 工具卡：toolName + 状态图标 + 结果文本（result 内嵌上游的 status/diff payload） */
 export function ToolCard({ toolName, result, isError }: ToolCallMessagePartProps) {
   const r = (result ?? {}) as Partial<ToolResult>;
   const failed = isError || r.status === 'failed';

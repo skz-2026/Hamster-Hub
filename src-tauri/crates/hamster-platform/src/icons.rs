@@ -69,6 +69,79 @@ pub fn extract_icon_png(source: &Path, out_png: &Path) -> bool {
     }
 }
 
+/// HICON → PNG 字节（内存版，托盘图标提取用；跨进程 HICON 可直接传）
+///
+/// # Safety
+/// `hicon` 必须是有效图标句柄（跨进程 GDI 图标对象可直接使用）
+pub unsafe fn hicon_png_bytes(hicon: HICON) -> Option<Vec<u8>> {
+    let mut ii = ICONINFO::default();
+    if GetIconInfo(hicon, &mut ii).is_err() {
+        return None;
+    }
+
+    let mut bmp = BITMAP::default();
+    if GetObjectW(
+        ii.hbmColor.into(),
+        std::mem::size_of::<BITMAP>() as i32,
+        Some(&mut bmp as *mut BITMAP as *mut core::ffi::c_void),
+    ) == 0
+    {
+        cleanup_iconinfo(&ii);
+        return None;
+    }
+    let w = bmp.bmWidth.unsigned_abs();
+    let h = bmp.bmHeight.unsigned_abs();
+    if w == 0 || h == 0 || w > 256 || h > 256 {
+        cleanup_iconinfo(&ii);
+        return None;
+    }
+
+    let hdc = GetDC(None);
+    let memdc = CreateCompatibleDC(Some(hdc));
+
+    let mut bmi: BITMAPINFO = std::mem::zeroed();
+    bmi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
+    bmi.bmiHeader.biWidth = w as i32;
+    bmi.bmiHeader.biHeight = -(h as i32);
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+
+    let mut buf = vec![0u8; (w * h * 4) as usize];
+    let old = SelectObject(memdc, ii.hbmColor.into());
+    let got = GetDIBits(
+        memdc,
+        ii.hbmColor,
+        0,
+        h,
+        Some(buf.as_mut_ptr() as *mut core::ffi::c_void),
+        &mut bmi,
+        DIB_RGB_COLORS,
+    );
+    SelectObject(memdc, old);
+    let _ = DeleteDC(memdc);
+    ReleaseDC(None, hdc);
+    cleanup_iconinfo(&ii);
+    if got == 0 {
+        return None;
+    }
+
+    // BGRA → RGBA
+    for px in buf.as_chunks_mut::<4>().0 {
+        px.swap(0, 2);
+    }
+    if !buf.as_chunks::<4>().0.iter().any(|p| p[3] != 0) {
+        for px in buf.as_chunks_mut::<4>().0 {
+            px[3] = 255;
+        }
+    }
+
+    let mut out = Vec::new();
+    image::RgbaImage::from_raw(w, h, buf)?
+        .write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
+        .ok()?;
+    Some(out)
+}
+
 unsafe fn hicon_to_png(hicon: HICON, out_png: &Path) -> bool {
     let mut ii = ICONINFO::default();
     if GetIconInfo(hicon, &mut ii).is_err() {

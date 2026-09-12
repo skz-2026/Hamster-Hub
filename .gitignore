@@ -31,3 +31,4 @@ playwright-report/
 .dbg*.mjs
 .dd*.mjs
 .reg*.mjs
+.tray-verify.mjs

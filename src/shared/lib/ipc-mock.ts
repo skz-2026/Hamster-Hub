@@ -17,8 +17,12 @@ import type {
 } from '@/shared/types/ipc';
 import type {
   AgentInfo,
+  AgentMcpStatus,
+  AssistantCreateArgs,
+  AssistantSessionInfo,
   IndexStatus,
   LiveSessionInfo,
+  McpAccessInfo,
   SearchHit,
   SearchQuery,
   SessionMessagesPage,
@@ -83,7 +87,11 @@ const DEFAULT_SETTINGS: Settings = {
   weather: { provider: 'open-meteo', city_id: '', qweather_key: null },
   ai: { base_url: 'https://open.bigmodel.cn/api/paas/v4', model: '', api_key: null },
   behavior: { autostart: false, start_minimized: false, language: 'zh-CN', desktop_mode_hotkey: 'Ctrl+Alt+D', desktop_mode_on_launch: true },
+  agent: { computer_use_enabled: false, assistant_persona: '', mcp_port: null, mcp_user_token: null, mcp_agents: [] },
 };
+
+/** mock 的按 agent 分发开关状态（内存） */
+let mockMcpAgents: string[] = [];
 
 // ===== mock 事件总线（模拟 tauri-specta 生成的事件对象） =====
 
@@ -386,6 +394,10 @@ export const mockCommands = {
   async desktopModeIsActive(): Promise<boolean> {
     return desktopActive;
   },
+  async startMenuOpen(): Promise<null> {
+    // 浏览器预览无系统壳：注入 Ctrl+Esc 唤出真开始菜单仅 tauri 环境有效
+    return null;
+  },
 
   // ===== 代理工作台（bench）：GUI 流式对话 + Recall（与生成绑定同名）=====
 
@@ -445,6 +457,46 @@ export const mockCommands = {
       scheduleFakeTurn(info.sessionId, firstPrompt.trim());
     }
     return info;
+  },
+  // ===== 桌面助手（浏览器假会话复用同一假流式代理；真机由 Rust 注入 hamster-desktop MCP server）=====
+  async benchAssistantCreate(args: AssistantCreateArgs): Promise<AssistantSessionInfo> {
+    const agentId = args.agentId ?? 'claude';
+    const session = await mockCommands.benchStreamCreate(
+      agentId,
+      'C:\\Users\\hamster\\AppData\\Roaming\\com.hamsterhub.appgentssistant',
+      args.firstPrompt ?? null,
+      args.model ?? null,
+      null,
+      null,
+      false,
+    );
+    return { session, agentId, mcpInjected: true, computerUseEnabled: false };
+  },
+  // ===== 桌面 MCP 分发（浏览器假数据：开关状态仅存内存）=====
+  async agentMcpStatus(): Promise<AgentMcpStatus[]> {
+    return MOCK_AGENTS.filter((a) => a.installed).map((a) => ({
+      agentId: a.id,
+      agentName: a.name,
+      installed: true,
+      mcpCapable: true,
+      enabled: mockMcpAgents.includes(a.id),
+      configPath: `C:\\Users\\hamster\\.${a.id}\\config`,
+    }));
+  },
+  async agentMcpSetEnabled(agentId: string, enabled: boolean): Promise<null> {
+    if (enabled && !mockMcpAgents.includes(agentId)) mockMcpAgents.push(agentId);
+    if (!enabled) mockMcpAgents = mockMcpAgents.filter((a) => a !== agentId);
+    console.log('[mock] agentMcpSetEnabled', agentId, enabled);
+    return null;
+  },
+  async agentMcpAccessInfo(): Promise<McpAccessInfo> {
+    return {
+      url: 'http://127.0.0.1:47613/mcp',
+      token: 'mock-user-token-0000',
+      port: 47613,
+      portFellBack: false,
+      defaultPort: 47613,
+    };
   },
   async benchStreamSend(sessionId: string, text: string): Promise<null> {
     const s = liveStreams.get(sessionId);
@@ -606,6 +658,11 @@ export const mockCommands = {
       MOCK_HISTORY.find((h) => h.agent === agent && h.projectPath === projectDir) ?? null
     );
   },
+  // ===== 托盘（浏览器预览无系统弹层，仅日志）=====
+  async trayOpenOverflow() {
+    console.log('[mock] 打开 Windows 原生托盘溢出弹层');
+    return null;
+  },
 };
 
 // ===== bench mock 状态与假流式代理 =====
@@ -667,7 +724,7 @@ const MOCK_AGENTS: AgentInfo[] = [
   },
 ];
 
-const MOCK_PROJECTS = ['D:\\ksa\\desk-helper', 'D:\\ksa\\Molto', 'D:\\work\\api-server'];
+const MOCK_PROJECTS = ['D:\\ksa\\desk-helper', 'D:\ksa\notes-app', 'D:\\work\\api-server'];
 
 const MOCK_HISTORY: SessionSummary[] = [
   {
@@ -683,7 +740,7 @@ const MOCK_HISTORY: SessionSummary[] = [
   {
     agent: 'codex',
     sessionKey: 'thread_9d01',
-    projectPath: 'D:\\ksa\\Molto',
+    projectPath: 'D:\ksa\notes-app',
     title: '为 ACP 方言补充 opencode 模型切换',
     lastActiveAt: Date.now() - 3600_000 * 26,
     sourcePath: 'C:\\Users\\you\\.codex\\sessions\\thread_9d01.jsonl',
@@ -782,7 +839,7 @@ function scheduleFakeTurn(sessionId: string, userText: string): void {
     `1. **先定位**：从入口函数开始跟踪数据流，确认问题出现在哪一层。\n` +
     `2. **再验证**：补一个最小复现用例，避免只修表象。\n` +
     `3. **最后收口**：回归相关路径后提交。\n\n` +
-    '示例代码：\n\n```rust\nfn main() {\n    println!("仓鼠Hub × Molto 🐹");\n}\n```\n\n' +
+    '示例代码：\n\n```rust\nfn main() {\n    println!("仓鼠Hub 🐹");\n}\n```\n\n' +
     '如果方向不对，告诉我更多上下文，我再调整。（浏览器 mock 输出——真机上将由官方 CLI 流式返回）';
 
   const reasonText = '先理解需求，再拆解步骤：定位 → 验证 → 收口，回复保持简洁。';

@@ -93,7 +93,7 @@ test.describe('仓鼠Hub 冒烟（浏览器预览 + IPC mock）', () => {
   });
 });
 
-test.describe('代理工作台（bench，Molto 整合 MVP）', () => {
+test.describe('代理工作台（bench，上游域层整合 MVP）', () => {
   test('GUI 流式对话：首页 composer 创建会话 → 假代理流式回一轮', async ({ page }) => {
     await page.goto('/#/bench');
     await page.waitForTimeout(1000);
@@ -121,5 +121,27 @@ test.describe('代理工作台（bench，Molto 整合 MVP）', () => {
     await expect(page.getByText('修复 Spotlight 拼音首字母搜索的回退').first()).toBeVisible();
     // 命中卡片 → 上下文消息回看
     await expect(page.locator('mark')).toBeVisible();
+  });
+});
+
+test.describe('AI 助手（/agent，M4 Agent 原生桌面）', () => {
+  test('桌面助手：默认模式 + 创建假会话流式回一轮 + 工具徽标；快问模式可切换', async ({ page }) => {
+    await page.goto('/#/agent');
+    await page.waitForTimeout(1000);
+
+    // 默认进入桌面助手欢迎态（能力说明 + 首问输入）
+    await expect(page.getByText(/桌面助手 · 听得懂话/)).toBeVisible();
+    await page.locator('input[placeholder*="记成待办"]').fill('E2E：打开计算器');
+    await page.getByTitle('启动桌面助手').click();
+
+    // 首条消息上屏 + 假代理流式回一轮（与 bench 同一事件通道）
+    await expect(page.getByText('E2E：打开计算器')).toBeVisible();
+    await expect(page.getByText('桌面工具已接入')).toBeVisible();
+    await expect(page.getByText('思考中…').or(page.getByText('已思考'))).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('运行中')).toBeHidden({ timeout: 15_000 });
+
+    // 切到快问模式（ai_chat 兜底）不残留助手会话
+    await page.getByRole('button', { name: '快问', exact: true }).click();
+    await expect(page.getByText('问答、写作、翻译、点子')).toBeVisible();
   });
 });

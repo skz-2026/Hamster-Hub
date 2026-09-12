@@ -10,14 +10,16 @@ rust-version = "1.77"
 members = [
     "crates/hamster-platform",
     "crates/hamster-watchdog",
-    # bench（代理工作台）：vendor 自 Molto 的域层 crate，零 Tauri 依赖
-    "crates/molto-core",
-    "crates/molto-adapters",
-    "crates/molto-runtime",
-    "crates/molto-index",
+    # bench（代理工作台）：源自上游（Apache-2.0，整合时更名）的域层 crate，零 Tauri 依赖
+    "crates/hamster-core",
+    "crates/hamster-adapters",
+    "crates/hamster-runtime",
+    "crates/hamster-index",
+    # 第 5 个 vendor crate：桌面 MCP server（desktop/browser/computer 三工具组）
+    "crates/hamster-mcp",
 ]
 
-# vendor crate 以 workspace = true 引用的共享依赖（与 Molto 仓库同版本）
+# vendor crate 以 workspace = true 引用的共享依赖（与 上游 仓库同版本）
 [workspace.package]
 version = "0.2.0"
 edition = "2021"
@@ -27,6 +29,7 @@ license = "Apache-2.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 thiserror = "2"
+base64 = "0.22"
 sha2 = "0.10"
 similar = "2"
 tempfile = "3"
@@ -37,13 +40,12 @@ specta = { version = "=2.0.0-rc.22", features = ["derive"] }
 portable-pty = "0.8"
 uuid = { version = "1", features = ["v4"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
-molto-core = { path = "crates/molto-core" }
-molto-adapters = { path = "crates/molto-adapters" }
+hamster-core = { path = "crates/hamster-core" }
+hamster-adapters = { path = "crates/hamster-adapters" }
 
 [lib]
 name = "hamster_hub_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
-
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -64,15 +66,19 @@ notify = "7"
 chrono = "0.4"
 sysinfo = "0.36"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+# 桌面 MCP server 内嵌 HTTP 承载（tokio Mutex 类型）+ 会话令牌
+tokio = { version = "1", default-features = false, features = ["sync"] }
+uuid = { version = "1", features = ["v4"] }
+hamster-mcp = { path = "crates/hamster-mcp" }
 
 # 平台层（任务栏/图标接管、快照、图标提取、Shell 启动）
 hamster-platform = { path = "crates/hamster-platform" }
 
-# bench（代理工作台）：vendor 自 Molto 的域层
-molto-core = { path = "crates/molto-core" }
-molto-adapters = { path = "crates/molto-adapters" }
-molto-runtime = { path = "crates/molto-runtime" }
-molto-index = { path = "crates/molto-index" }
+# bench（代理工作台）：源自上游（Apache-2.0，整合时更名）的域层
+hamster-core = { path = "crates/hamster-core" }
+hamster-adapters = { path = "crates/hamster-adapters" }
+hamster-runtime = { path = "crates/hamster-runtime" }
+hamster-index = { path = "crates/hamster-index" }
 
 # IPC 类型生成（Rust → TypeScript 单一事实源）
 tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"] }

@@ -4,7 +4,11 @@
  */
 import type {
   AgentInfo,
+  AgentMcpStatus,
+  AssistantCreateArgs,
+  AssistantSessionInfo,
   IndexStatus,
+  McpAccessInfo,
   SearchHit,
   SearchQuery,
   SessionMessagesPage,
@@ -18,7 +22,11 @@ import type {
 
 export type {
   AgentInfo,
+  AgentMcpStatus,
+  AssistantCreateArgs,
+  AssistantSessionInfo,
   IndexStatus,
+  McpAccessInfo,
   LaunchOption,
   LaunchOptions,
   LiveSessionInfo,
@@ -34,7 +42,7 @@ export type {
   WorkspaceRecord,
 } from '@/shared/types/ipc';
 
-/** 渲染行（stream-registry 归并产物；对齐 Molto StreamRow） */
+/** 渲染行（stream-registry 归并产物；对齐 上游 StreamRow） */
 export interface StreamRow {
   itemId: string;
   role: 'user' | 'assistant' | 'thinking' | 'tool' | 'system';
@@ -109,4 +117,8 @@ export interface BenchCommands {
   benchIndexRefresh(): Promise<IndexStatus>;
   benchReindex(): Promise<IndexStatus>;
   benchSessionDelete(agent: string, sessionKey: string): Promise<null>;
+  // 托盘：打开 Windows 原生托盘溢出弹层
+  trayOpenOverflow(): Promise<null>;
+  // 桌面助手（Agent 原生桌面：persona + hamster-desktop MCP 注入，不绑项目目录）
+  benchAssistantCreate(args: AssistantCreateArgs): Promise<AssistantSessionInfo>;
 }

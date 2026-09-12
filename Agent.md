@@ -5,6 +5,7 @@
 ## 项目一句话
 
 Windows 上的 iOS 风格桌面（对标水豚hub 的 macOS 风）：Tauri 2 + React 18 + TS + SQLite。
+AI 走「集成 agent 为大脑 + 桌面 MCP」路线，不自研 agent（2026-09-12 决议，见文末状态）。
 详细设计见 [docs/01-product-plan.md](docs/01-product-plan.md)（产品）、[docs/02-sdd.md](docs/02-sdd.md)（SDD）、
 [docs/03-tech-roadmap.md](docs/03-tech-roadmap.md)（技术路线）、[docs/04-architecture.md](docs/04-architecture.md)（代码架构）。
 
@@ -325,12 +326,12 @@ src-tauri/
   - **④ 点任务栏不切视图**：主窗口被浏览器等盖住时导航事件只改路由不提前台。
     AppShell 的 hamster:navigate 监听补 `show()+setFocus()`（浏览器打开→切回仓鼠视图）
   - 浏览器验证：+ → 选 Edge → 同实例任务栏立即出现 ✓；全门禁绿
-- ▶ 剩余可选项：代码签名（发布前必须）· 通知中心/灵动岛/锁屏（M3+）· macOS 预研 ·
+- 剩余可选项（阶段十三时点）：代码签名（发布前必须）· 通知中心/灵动岛/锁屏 · macOS 预研 ·
   应用搜索拼音路已在 M1 完成（app_fts）
-- ✅ **M2 阶段十四：Molto 整合——代理工作台 MVP（2026-09-12，来源 `D:\ksa\Molto`）**：
-  - **方案**：原生深度整合（用户拍板：GUI 对话优先）。vendor 4 个零 Tauri 依赖的 Molto 域 crate
-    到 `src-tauri/crates/`（molto-core/adapters/runtime/index，crate 名不改、Apache-2.0 头保留，
-    Molto 源仓库不动）；管理域（MCP 同步）/交付看板/PTY 终端/远程访问/插件系统留待后续阶段
+- ✅ **M2 阶段十四：上游域层整合——代理工作台 MVP（2026-09-12，来源 `D:\ksa\上游`）**：
+  - **方案**：原生深度整合（用户拍板：GUI 对话优先）。vendor 4 个零 Tauri 依赖的 上游域 crate
+    到 `src-tauri/crates/`（hamster-core/adapters/runtime/index，crate 名不改、Apache-2.0 头保留，
+    上游源仓库不动）；管理域（MCP 同步）/交付看板/PTY 终端/远程访问/插件系统留待后续阶段
   - **Rust**：workspace.members +`[workspace.package]`/`[workspace.dependencies]`（rusqlite/thiserror/
     chrono 与主库同版无冲突）；`.cargo/config.toml` 加 `TS_RS_EXPORT_DIR`（ts-rs 导出进 target，防污染）
   - **specta 适配**：vendor 类型补 `specta::Type` derive（specta = rc.22 + **derive feature 必须显式开**，
@@ -339,10 +340,10 @@ src-tauri/
   - **流式通道改事件**：tauri-specta rc.21 对 ipc Channel 的 JS 侧生成「Coming soon」→
     GUI 对话数据改走两个强类型事件：`BenchStreamEvent`（serde transparent，payload=StreamEvent）
     + `BenchStreamExit`；前端 `useBenchEvents` 订阅 → stream-registry
-  - **装配层**：`src/bench/`（BenchContext：store_root=%APPDATA%/com.hamsterhub.app/molto/，
-    sessions.db 由 molto-index 自管 schema 不入主库迁移链）+ 15 条 `bench_*` 命令
+  - **装配层**：`src/bench/`（BenchContext：store_root=%APPDATA%/com.hamsterhub.app/agent/，
+    sessions.db 由 hamster-index 自管 schema 不入主库迁移链）+ 15 条 `bench_*` 命令
     （stream create/send/interrupt/kill/list + 历史/索引 Recall 7 条 + agents 2 条）；
-    async 命令直调 rusqlite（State 借用不进 spawn_blocking——Molto 同款）
+    async 命令直调 rusqlite（State 借用不进 spawn_blocking——上游同款）
   - **前端**：**assistant-ui 0.15**（用户选型）——`useExternalStoreRuntime` 桥接移植版
     stream-registry（Vue reactive → 写时复制 + useSyncExternalStore 版本号快照）；StreamRow→
     ThreadMessageLike 映射（工具行→tool-call part，错误行→data part）；消息 part 渲染器
@@ -356,3 +357,97 @@ src-tauri/
     重跑 check.ps1**（运行中的 debug 实例锁 resources/hamster-watchdog.exe，非代码问题）
   - 已知取舍：组件 ≤250 行达标；bench 命令名带前缀避免与未来域冲突；RecallSearch 上下文
     渲染复用 SnapshotMessage（未走 timeline 折叠）；pty_* 命令与 SessionManager 留待终端模式阶段
+- ▶ **进行中：任务栏托盘区镜像（工作区未提交）**——`hamster-platform/tray.rs`（UIA 枚举常驻+溢出区、
+  BitBlt 图标裁剪、Invoke 点击转发）+ `tray_list`/`tray_click` 命令 + `TrayArea.tsx`（10s 轮询）。
+  已知权宜：每次枚举任务栏闪烁 ~1s；右键转发未做（当前仅左键 Invoke 语义）→ 列入 M3 收尾项
+- ▶ **方向决议（2026-09-12，用户确认）：AI 原生桌面——不自研 agent，集成 agent 为大脑**
+  - 否决阶段十一挂点「ai_chat 加 tools/function-calling 自研桌面操作」：流式/tool-calling/MCP
+    生态全由集成 agent CLI 原生承担，自研是重复造轮子，且维护面从「养一个 agent 引擎」缩到
+    「一个 MCP server + 入口胶水」
+  - 架构三层：**大脑** = bench 会话（hamster-runtime，BenchStreamEvent 流式通道已有）；
+    **手脚** = 桌面 MCP server（既有 IPC 能力包 stdio MCP，经 hamster-core MCP 同步引擎注册进
+    四家 agent，用户可关；高危工具白名单 + 调用审计）；**兜底** = ai_chat 降级（未装 agent 的
+    用户 + 微任务分层路由——「加个待办」级别不拉起 coding agent）
+  - 里程碑改版（已回写 docs/01 §4、docs/02 §3.9、docs/03 §3.4+§4）：
+    M3 接管收尾&公开发布（托盘收尾/通知中心 v1/search+files 页/代码签名，v0.2.0）→
+    M4 Agent 原生桌面（MCP server 5-8 核心工具 + Spotlight 问 AI 接 bench 会话 + 后台任务
+    通知联动 + 主屏 agent 小组件，v0.3.0）→ M5 生态（灵动岛/锁屏/主题/插件/macOS 预研）
+  - 通知中心从 P2 提为 M3 前置（agent 异步通知的承载）；macOS 预研继续后置
+- ▶ **补强（2026-09-12，用户提出）：computer use 列入 M4——竞争点（NomiFun 等竞品均已具备）**
+  - 竞品：NomiFun（糯米饭，nomifun-desktop，开源、React+Rust 同构栈）内置会话引擎原生
+    browser-use + computer-use；上游源仓库有现成 `hamster-mcp` crate（MCP stdio server：
+    browser 8 工具 CDP + computer 4 工具 xcap/enigo，注入走会话级 `--mcp-config` 不写用户
+    配置——见 `D:\ksa\上游\crates\hamster-mcp` 与 `D:\ksa\上游\docs\verify-agent.md`，
+    注入参考 上游仓库 channel 模块的 verify.rs）
+  - 方案：M4 vendor hamster-mcp 为第 5 个 crate，desktop 工具组（应用/文件/待办/音量等
+    既有能力）并入同一 server，形成 desktop/browser/computer 三组工具；注册主路 = 会话级
+    `--mcp-config`（零侵入），hamster-core 同步引擎持久化注册可选
+  - 安全红线：computer use 默认关闭；确认档位（每步/仅高危/全自动）；审计 + 截图留证；
+    急停热键；操作期 UI 宣告。桌面接管形态下系统任务栏已隐藏、误操作更难自救——
+    先过安全设计再放开能力
+  - 已回写 docs/01（竞品表 NomiFun 行、§1.2 机会点、§3.2 功能表、M4 路线、风险表）、
+    docs/02 §3.9、docs/03（§2 技术栈、§3.4 手脚+安全设计+验收、§4 M4、§5 风险）
+- ✅ **M4 阶段一：Agent 原生桌面核心（2026-09-12，门禁全绿）**：
+  - **vendor `hamster-mcp`（第 5 个 上游 crate）→ 桌面 MCP server**：保留 browser-use
+    （chromiumoxide CDP 8 工具，快照 [ref] 编号）+ computer-use（xcap 截图 + enigo 鼠标键盘
+    4 工具，截图以 image content 直供视觉模型）；新增 `desktop.rs` 工具组（同仓鼠目录约定，
+    零 Tauri）：app_search / app_launch（查 exec_target→ShellExecute→落 usage_log 与常用组
+    同源）/ file_search / file_open（**白名单**=settings 的 file_index.roots，~ 按 USERPROFILE
+    展开）/ todo_list / todo_create / todo_set_done / volume_get / volume_set——共 21 工具。
+    DB 查询 = FTS5 短语前缀（`"q"*`）+ LIKE 子串回退；连接 WAL + busy_timeout 3s 与主进程并发
+  - **承载形态演进（用户两次决策定稿）**：① 独立 hamster-mcp.exe（上游原形）→
+    ② 合并进主二进制（`hamster-hub.exe mcp serve` 子命令，argv 在 Tauri/单实例初始化前分发，
+    无 GUI 无冲突）→ ③ **HTTP 内嵌为正式承载**（用户拍板「HTTP 通用，与 agent 无关」）：
+    `src/mcp_server.rs` McpHub——127.0.0.1 随机端口 + 每会话 Bearer 令牌（Authorization 头 /
+    `?token=` 双通道）+ Streamable HTTP 单帧回（通知 202 / GET 405）；stdio 子命令保留作
+    调试/兜底。内嵌红利：急停=吊销令牌（在途调用立即 401）、CU 档位即时生效
+    （settings_save → set_cu_allowed）、审计直写助手目录、主库连接免跨进程争用
+  - **注入（统一 HTTP 形态）**：claude = `--mcp-config` 内联 JSON（type:"http"+headers）+
+    `--allowedTools mcp__hamster-desktop`（Bash/Edit 等宿主工具 headless 自动拒绝）+
+    `--append-system-prompt` persona；其它方言 = ACP `session/new` mcpServers（runtime
+    StreamOptions 扩展 `mcp_servers` 字段透传，默认空=行为不变）+ persona 前缀回退
+  - **`bench_assistant_create`（bench/assistant.rs）**：桌面助手预设——仓鼠 persona
+    （settings.agent.assistant_persona 可覆盖）、不绑项目目录（cwd=store_root/assistant）、
+    默认代理解析 claude→zcode→首个已装；spawn 公共路径从 bench_stream_create 重构为
+    `spawn_stream_session` 共用；令牌 mint→bind→（kill 时）revoke 全生命周期
+  - **安全门（hamster-mcp mcp.rs）**：computer_* 四工具由 cu_allowed 拦截（默认关），
+    错误码 -32001 带开启引导；HAMSTER_CU_MODE env 供 stdio 模式；每次 tools/call
+    审计 JSONL（ts/tool/args/ok/err）。**注意：安全门在 tools/call 层不区分传输**，
+    HTTP/stdio 共用
+  - **Settings.agent**（serde default 旧数据兼容）：computer_use_enabled（默认 false）+
+    assistant_persona；settings_save 即时联动 McpHub
+  - **前端**：codegen（benchAssistantCreate/AssistantCreateArgs/AssistantSessionInfo/
+    Settings.agent）；ipc-mock 假助手会话（复用假流式代理）；`features/agent/AssistantPanel`
+    （欢迎态/流式复用 bench ChatSessionView + stream-registry/失败回退快问/工具接入徽标）；
+    /agent 页双模式（桌面助手默认 + 快问兜底，pendingQ 优先路由助手）；设置页新增
+    CU 开关 + persona 编辑；e2e +1 场景（7/7 全过）
+  - **门禁**：cargo fmt/clippy -D warnings/test 全绿（hamster-mcp 27 + hamster-hub 31 含
+    mcp_server 6 个 HTTP 回环用例：令牌 mint/revoke 急停、CU 拒绝→放行、todo HTTP 往返、
+    202/404/405/400）；pnpm build + vitest 31 绿；真机冒烟：`hamster-hub.exe mcp serve`
+    tools/list ✓、CU 默认拒绝 ✓、真实 DB todo_list + 审计 JSONL ✓
+  - 已知取舍：①chromiumoxide/enigo/xcap 链入主二进制（debug 41MB，release LTO+strip 待
+    实测，装机包涨幅需盯轻量承诺）；②未认 HTTP 的旧版 agent 自然降级为无工具普通会话；
+    ③codex 无会话级 MCP 注入通道，需走 hamster-core 同步引擎持久化注册（后续阶段）；
+    ④确认档位（每步/仅高危）、通知中心联动、主屏 agent 小组件 → M4 阶段二
+- ✅ **M4 阶段二：桌面 MCP 分发——按 agent 开关写入配置（2026-09-12，用户定调「HTTP 通用，
+  与啥 agent 没关系」+「写入 agent 配置自然生效」）**：
+  - **目的澄清（本阶段根本）**：内嵌 MCP 不是「给助手加工具」，而是把仓鼠Hub 做成这台
+    机器上 agent 操作桌面的**统一入口与信任层**——桌面对人是什么，对 agent 就是什么。
+    承载随之演进：独立 exe → 合并子命令 → **HTTP 内嵌常驻**（可寻址服务，非会话插件）
+  - **hamster-core 同步引擎接线**（第 5 个 vendor 能力域启用）：设置页按 agent 开关 →
+    hamster-desktop HTTP IR（`model::mcp::McpServer` + `Transport::Http`）upsert 进
+    Store 源 → `SyncEngine::plan/apply` 写入该 agent 配置文件（备份 + 原子写 +
+    history.jsonl）；关闭 = 源临时置 disabled 仅对该 target apply（渲染省略 = 摘除）+
+    target 停用 + 源恢复；Drift 统一 Overwrite（render「读现有→合并」保留用户既有条目，
+    apply 自动备份可回滚）
+  - **接入三要素**：①固定默认端口 47613（settings.agent.mcp_port 可配；占用回退随机 +
+    设置页黄字提示）；②用户级长效令牌（settings.agent.mcp_user_token，首启自动生成，
+    设置页可再生成——旧令牌经 rotate_user_token 即刻失效）；③三命令
+    agent_mcp_status / agent_mcp_set_enabled / agent_mcp_access_info
+  - **前端**：`features/agent/McpSyncCard`（设置页卡片：URL/令牌 展示复制再生成 +
+    per-agent 开关列表）；settings_save 钩子联动令牌轮换 + CU 档位
+  - 门禁全绿：cargo fmt/clippy -D/test（+2 分发用例）/ pnpm build + vitest 31 / e2e 7/7
+  - 遗留：per-agent 开关的真机端到端（在运行中的应用里开关并核对各 agent 配置文件）；
+    codex/oc/pi 等未入 registry 的 agent 走「手动复制接入信息」兜底（McpAccessInfo
+    已给全 url+token）；审计 UI 与「agent 正在操作」宣告 → M4 阶段三
+

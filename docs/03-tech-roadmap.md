@@ -38,6 +38,8 @@
 | 窗口效果 | window-vibrancy | Mica/Acrylic | Win10 降级链路 |
 | Win32 系统交互 | windows crate（raw FFI） | 任务栏 AppBar/SetWindowPos、图标注册表、WorkerW、亮度/音量 WMI | 系统接管唯一可行路线，封装进 `platform/` |
 | 农历 | lunar-javascript（前端） | 农历/节气/节日 | 纯本地计算 |
+| Agent 集成 | 上游四 crate 已 vendor（core/adapters/runtime/index）；第五个 `hamster-mcp`（browser/computer use MCP server）M4 vendor | agent 会话宿主/流式/MCP 配置同步/PTY/会话全文索引/computer use | AI 主线架构见 §3.4 |
+| 桌面 MCP server | vendor `hamster-mcp`（最小 MCP stdio JSON-RPC）+ 扩展 desktop 工具组；computer use = xcap（截图）+ enigo（鼠标键盘），browser use = chromiumoxide（CDP） | 把桌面 IPC 能力 + browser/computer use 暴露给集成 agent | 上游现成实现：browser 8 工具 + computer 4 工具 |
 | 官方插件 | single-instance / global-shortcut / autostart / notification / updater | 系统集成 | – |
 | 测试 | cargo test / Vitest / Playwright | 三层测试 | – |
 | CI/CD | GitHub Actions + tauri-action | 构建/发布 | NSIS 安装包 + portable zip |
@@ -64,11 +66,21 @@
 - 拼音列索引期生成：中文文件名 → 全拼串 + 首字母串（「微信.png」→ `weixin` / `wx`）。
 - 容量预估：10 万文件 SQLite ≈ 25-40MB，查询 p95 < 50ms（FTS 命中路径）。
 
-### 3.4 AI 流式
+### 3.4 AI 架构：集成 agent 为大脑，不自研（2026-09-12 方向决议）
 
-- reqwest SSE 逐 chunk → `app_handle.emit("ai://chunk/{id}", delta)` → 前端增量渲染。
-- 中断：前端关闭面板 → invoke `ai_cancel(id)` → tokio CancellationToken。
-- Key 存储：Windows DPAPI（`CryptProtectData`）加密后落盘，仅本机可解。
+**决策：不自研 agent 引擎与 tool-calling 循环。** 流式、工具调用、上下文管理、MCP 生态全部复用集成 agent CLI 的原生能力，随上游升级白拿。要新写的只有「胶水」：一个 MCP server + 入口接线。
+
+| 层 | 方案 | 现状 |
+|---|---|---|
+| 大脑 | 集成 agent（Claude Code/ZCode/Codex/Gemini），hamster-runtime 会话宿主 + `BenchStreamEvent` 强类型流式事件通道 | ✅ bench 已就绪（23 条 bench_* 命令、GUI 流式对话、PTY、Recall） |
+| 手脚 | **桌面 MCP server = vendor `hamster-mcp` 扩展**，三组工具：① desktop——app_launch / app_search / file_search / file_open（白名单）/ todo CRUD / volume；② browser——CDP（chromiumoxide），快照带 `[ref]` 元素编号，SPA 友好；③ computer——xcap 截图（image content 直供视觉模型）+ enigo 鼠标键盘（覆盖原生弹窗/第三方应用）。**承载：HTTP 内嵌**——主进程 127.0.0.1 随机端口监听 + 每会话 Bearer 令牌（Streamable HTTP 单帧回），注入 = claude `--mcp-config` 内联 JSON（`type:"http"`）与 ACP `session/new` mcpServers（统一规范形态，用户决策：HTTP 与具体 agent 无关）；`hamster-hub.exe mcp serve`（stdio 子命令）留作调试/兜底 | M4 已落地（HTTP 内嵌 + 21 工具） |
+| 入口 | Spotlight「问 AI」与 /agent 页路由到 bench 桌面助手会话（hamster-adapters 加轻量预设：persona system prompt、不绑定项目目录、快速拉起） | M4 接线 |
+| 兜底 | `ai_chat`（OpenAI 兼容单次调用）保留并降级：未装 agent 的用户 + 微任务分层路由——「加个待办」级别请求不拉起 coding agent，省冷启动与 token | ✅ 已有（非流式，保持简单） |
+
+- Key 存储：Windows DPAPI（`CryptProtectData`）加密后落盘，仅本机可解（沿用）。
+- 信任边界：MCP 工具白名单分级，高危（process_kill 等）默认关闭或需确认；工具调用落审计日志（「agent 动了什么」可回看）。
+- **computer use 安全设计（红线，先过安全再放开能力）**：默认关闭、显式开启（设置页开关经 McpHub::set_cu_allowed 即时生效）；操作全程审计 + 截图留证；急停 = 会话结束自动吊销 Bearer 令牌（在途调用立即 401）；操作期 UI 宣告；优先结构化路径（自家 IPC 工具 → CDP/UIA → 坐标点击兜底）。HTTP 承载安全：仅绑 127.0.0.1 + 每会话随机令牌（Authorization 头 / `?token=` 双通道）。桌面接管形态下风险放大——系统任务栏已隐藏，误操作更难自救，急停与宣告为必须项。
+- 验收口径：真机走通「Spotlight 一句话 → agent 调 MCP 工具 → 桌面实际变化」端到端链路；computer use 走通「agent 截图看屏 → 点击原生弹窗/第三方应用 → 实际生效」。
 
 ### 3.5 桌面接管与状态恢复（iOS 桌面模式的地基，竞品方案实证）
 
@@ -111,18 +123,30 @@
 - W3-4：iOS Dock 置顶小窗（毛玻璃 + 圆角）；「进入/退出桌面模式」入口与还原动效。
 - 验收：进入/退出 ≤ 2s 且系统完全还原（含崩溃场景）；网格拖拽 60fps（见产品规划 §3.3）。
 
-### M2 桌面模式 MVP（4 周，v0.2.0 公开版）
-- fileindex（扫描/监听/拼音/FTS）+ Spotlight 搜索浮层（apps+files+web，Alt+Space）。
+### M2 桌面模式 MVP（4 周）✅ 已完成（2026-09-12，超范围交付）
+- fileindex（扫描/监听/拼音/FTS）+ Spotlight 搜索浮层（apps+files+web+问 AI，Alt+Space）。
 - iOS 风设置 App（壁纸/热键/图标布局/退出模式/开机进入桌面模式）。
-- 性能达标（冷启 ≤ 2s、内存 ≤ 250MB、搜索 p95 ≤ 100ms）+ 代码签名 + Playwright E2E 冒烟。
+- 性能达标（冷启 ≤ 2s、内存 ≤ 250MB、搜索 p95 = 42.6ms）+ Playwright E2E 6 场景。
+- 超范围提前交付：小组件×6、控制中心（真实音量）、待办/便签/倒数日/日程、AI 兜底问答、贴边常驻任务栏（独立置顶窗 + 定制/常用分组）、bench 代理工作台（上游 vendor 四 crate）。
+- 代码签名未做 → 移入 M3（发布硬门槛）。
 
-### M3 iOS 全家桶（6 周）
-- 小组件系统（时钟/天气/待办/日历/电池，iOS 尺寸规范）+ 控制中心（Wi-Fi/蓝牙/亮度/音量/勿扰磁贴）+ AI 问答（Spotlight 尾部 + 独立面板）+ 待办/便签/倒数日。
-- 多显示器与高 DPI 全面适配、自更新灰度。
+### M3 接管收尾 & 公开发布（2-3 周，v0.2.0 首个公开版）
+- 任务栏托盘区收尾：右键转发（当前仅左键 Invoke 语义）、消除每次枚举 ~1s 的任务栏闪烁（tray.rs 权宜实现优化）。
+- 通知中心 v1：顶部下拉、应用通知聚合、统一事件源——为 M4 agent 后台任务通知预留通道（前置项）。
+- /search、/files 路由页补齐（后端命令已就绪，纯前端）。
+- 代码签名证书 + `tauri-plugin-updater` 灰度；性能与还原测试矩阵复验；公开渠道发布。
 
-### M4 生态（持续）
-- 通知中心、灵动岛、锁屏、多任务视图。
-- 壁纸/主题市场、小组件插件化（前端动态导入 + manifest 权限沙箱）、macOS 技术预研。
+### M4 Agent 原生桌面（4-6 周，v0.3.0）—— 阶段一已落地（2026-09-12）
+- ✅ vendor `hamster-mcp`（第 5 个 上游 crate）：browser-use（CDP 8 工具）+ computer-use（xcap/enigo 4 工具）+ 扩展 desktop 工具组（app_search/app_launch/file_search/file_open 白名单/todo 三件/volume 两件，共 21 工具）+ 最小 MCP 协议。
+- ✅ HTTP 内嵌承载（`src/mcp_server.rs` McpHub）：127.0.0.1 随机端口 + 每会话 Bearer 令牌（Authorization 头 / `?token=` 双通道）+ Streamable HTTP 单帧回；急停 = 吊销令牌；CU 档位即时生效。stdio 子命令 `hamster-hub.exe mcp serve` 留作调试/兜底（argv 在 Tauri 前分发）。
+- ✅ 统一 HTTP 注入：claude `--mcp-config` 内联 JSON + `--allowedTools mcp__hamster-desktop`（Bash/Edit 等宿主工具 headless 自动拒绝）；ACP `session/new` mcpServers 透传（runtime 扩展）。
+- ✅ **按 agent 分发（hamster-core 同步引擎接线）**：设置页按 agent 开关 → hamster-desktop 的 HTTP IR（url + 用户长效令牌）upsert 进 Store 源 → `SyncEngine.plan/apply` 写入该 agent 配置文件（备份 + 历史 + 摘除语义：源临时 disabled 渲染省略）；Drift 统一 Overwrite（render 合并保留既有条目）。接入三要素：固定默认端口 47613（可配，占用回退随机并在设置页提示）+ 用户级长效令牌（首启生成、可轮换、旧令牌即时失效）+ `agent_mcp_status/access_info/set_enabled` 三命令。
+- ✅ `bench_assistant_create`：桌面助手预设（仓鼠 persona 可配 + 不绑项目目录 + 默认代理解析 claude→zcode→首个）+ 前端 /agent 双模式（桌面助手默认 / 快问兜底）+ Spotlight「问 AI」路由；settings.agent（computer_use_enabled + assistant_persona）。
+- 待办：agent 后台任务 + 通知中心联动；主屏 agent 状态小组件；确认档位（每步/仅高危）；codex 持久化注册（hamster-core 同步引擎）。
+
+### M5 生态（持续）
+- 灵动岛、锁屏、多任务视图。
+- 壁纸/主题市场、小组件插件化（前端动态导入 + manifest 权限沙箱）、多显示器与高 DPI 全面适配、macOS 技术预研。
 
 ## 5. 技术风险登记册
 
@@ -130,6 +154,9 @@
 |---|---|---|---|
 | **系统接管崩溃残留/兼容性（最高风险）** | 高 | 高 | 快照→操作→看门狗三段式（§3.5）；还原测试矩阵每版本必过；Win10/Win11 双轨回归 |
 | **杀软/EDR 误报** | 中 | 高 | M2 前购代码签名证书；行为透明说明；规避高危 API 组合 |
+| agent CLI 缺位 / coding agent 冷启动与 token 成本（微任务杀鸡用牛刀） | 高 | 中 | 分层路由 + ai_chat 兜底 + 首启引导安装配置 |
+| MCP 工具信任边界（agent 误操作系统） | 中 | 高 | 工具白名单分级 + 高危确认 + 调用审计日志；可一键整体禁用 |
+| computer use 驱动真实鼠标键盘（误操作/抢焦点，接管桌面场景放大风险） | 中 | 高 | 默认关闭；确认档位 + 急停热键 + 审计截图留证 + 操作期宣告；优先 UIA/CDP/自家 IPC 结构化路径，坐标点击兜底 |
 | UWP 枚举与图标提取兼容坑 | 高 | 中 | M1 第一周专项攻坚；真机样本库；失败占位不阻塞 |
 | Acrylic 在 Win10 拖动抖动 | 中 | 低 | 降级纯色选项；圆角分层窗口 |
 | 热榜接口变动/反爬 | 高 | 低 | 源抽象可单点禁用；缓存兜底；P2 定位 |

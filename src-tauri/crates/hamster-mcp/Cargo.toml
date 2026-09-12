@@ -1,0 +1,21 @@
+[package]
+name = "hamster-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Hamster 桌面 MCP server：desktop 工具组（应用/文件/待办/音量）+ browser-use（CDP）+ computer-use，经 HTTP/stdio 暴露给宿主 Agent（源自上游开源项目，整合时更名）"
+
+[dependencies]
+hamster-core.workspace = true
+# 桌面工具组复用仓鼠平台层（ShellExecute 启动 / 音量 COM），同为零 Tauri crate
+hamster-platform = { path = "../hamster-platform" }
+rusqlite = { workspace = true }
+serde.workspace = true
+serde_json.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+futures-util = "0.3"
+base64 = { workspace = true }
+image = { version = "0.25", default-features = false, features = ["png"] }
+enigo = "0.3"
+xcap = "0.4"
+chromiumoxide = { version = "0.7", default-features = false, features = ["tokio-runtime"] }

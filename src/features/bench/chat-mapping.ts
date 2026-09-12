@@ -2,7 +2,7 @@
  * StreamRow[] → assistant-ui ThreadMessageLike[] 映射（chat-mapping）：
  * 行与消息 1:1 对应；工具行 → tool-call part（text/status/diff 装进 result payload），
  * 错误行 → data part（name=error），流式中的行 → running status。
- * 轮次进行中且末尾无流式行时追加「工作中」指示消息（对齐 Molto working 行）。
+ * 轮次进行中且末尾无流式行时追加「工作中」指示消息（对齐 上游 working 行）。
  */
 import type { ThreadMessageLike } from '@assistant-ui/react';
 import type { StreamRow } from '@/shared/types/bench';
