@@ -17,7 +17,7 @@
     "codegen:ipc": "cargo test --manifest-path src-tauri/Cargo.toml export_bindings"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13"
   },
   "dependencies": {
     "@assistant-ui/react": "^0.15.18",
