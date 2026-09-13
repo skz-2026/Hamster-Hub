@@ -6,6 +6,7 @@ import { classifyApp } from '@/features/apps/category';
 import type {
   AppEntry,
   AppHealth,
+  DockMenuPayload,
   PluginInfo,
   CountdownCustom,
   CountdownItem,
@@ -84,6 +85,17 @@ const APPS: AppEntry[] = RAW_APPS.map(([name, icon], i) => ({
   kind: 'lnk',
   icon_path: icon,
 }));
+
+// dock 运行态模拟：种子 3 个「已打开」应用（key 跟语言走，按 APPS 索引取），
+// launch / 多开 / 关闭同步增删——浏览器层能完整验证指示点 + 右键菜单条件项
+const MOCK_RUNNING = new Set<string>(
+  [APPS[0]?.app_key, APPS[4]?.app_key, APPS[7]?.app_key].filter(
+    (k): k is string => typeof k === 'string',
+  ),
+);
+
+// dock 右键菜单弹窗载荷（浏览器内 /dock-menu 路由预览种子：微信运行中+可移除）
+let MOCK_DOCK_MENU: DockMenuPayload | null = { appKey: 'mock:微信', x: 200, removable: true, running: true };
 
 const MOCK_FILES: FileHit[] = [
   { path: L('C:\\Users\\you\\Desktop\\微信截图_0901.png', 'C:\\Users\\you\\Desktop\\screenshot_0901.png'), name: L('微信截图_0901.png', 'screenshot_0901.png'), ext: 'png', kind: L('图片', 'image'), size: 240000, mtime: 1757000000 },
@@ -640,6 +652,34 @@ export const mockCommands = {
   },
   async appLaunch(appKey: string): Promise<null> {
     console.log('[mock] 启动应用', appKey);
+    MOCK_RUNNING.add(appKey);
+    return null;
+  },
+  async appLaunchNew(appKey: string): Promise<null> {
+    console.log('[mock] 多开应用', appKey);
+    MOCK_RUNNING.add(appKey);
+    return null;
+  },
+  async appClose(appKey: string): Promise<null> {
+    console.log('[mock] 关闭应用', appKey);
+    MOCK_RUNNING.delete(appKey);
+    return null;
+  },
+  async appsRunning(keys: string[]): Promise<string[]> {
+    return keys.filter((k) => MOCK_RUNNING.has(k));
+  },
+  // dock 右键菜单弹窗（真机是独立置顶小窗；浏览器内仅 /dock-menu 路由预览用，
+  // 事件推送走原生 listen 在浏览器不可达，靠挂载时拉取）
+  async dockMenuOpen(payload: DockMenuPayload): Promise<null> {
+    console.log('[mock] 打开 dock 菜单弹窗', payload);
+    MOCK_DOCK_MENU = payload;
+    return null;
+  },
+  async dockMenuPayload(): Promise<DockMenuPayload | null> {
+    return MOCK_DOCK_MENU;
+  },
+  async dockMenuHide(): Promise<null> {
+    MOCK_DOCK_MENU = null;
     return null;
   },
   async appSearch(query: string, _limit: number | null): Promise<AppEntry[]> {

@@ -46,6 +46,20 @@
         "resizable": false,
         "shadow": false,
         "transparent": true
+      },
+      {
+        "label": "dock-menu",
+        "url": "index.html#/dock-menu",
+        "width": 176,
+        "height": 110,
+        "decorations": false,
+        "visible": false,
+        "skipTaskbar": true,
+        "alwaysOnTop": true,
+        "focus": true,
+        "resizable": false,
+        "shadow": false,
+        "transparent": true
       }
     ],
     "security": {

@@ -35,6 +35,8 @@ export const chrome: Record<keyof typeof chromeZh, string> = {
   'chrome.tray.trayAndApps': 'Tray and apps',
 
   'chrome.dock.customZone': 'Custom area',
+  'chrome.dock.closeWindow': 'Close window',
+  'chrome.dock.newInstance': 'New window',
 
   'chrome.picker.searchApps': 'Search apps',
   'chrome.picker.dockFull': 'Custom area is full ({n} apps) — right-click an icon to remove one first',

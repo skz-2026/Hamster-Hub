@@ -3,6 +3,7 @@ import { AppShell } from '@/app/AppShell';
 import HomePage from '@/app/routes/home';
 import SpotlightPage from '@/app/routes/spotlight';
 import TaskbarPage from '@/app/routes/taskbar';
+import DockMenuPage from '@/app/routes/dock-menu';
 import AgentPage from '@/app/routes/agent';
 import BenchPage from '@/app/routes/bench';
 import WorkbenchPage from '@/app/routes/workbench';
@@ -20,6 +21,8 @@ export function AppRoutes() {
       <Route path="/spotlight" element={<SpotlightPage />} />
       {/* 任务栏独立置顶窗口（桌面接管时贴屏幕底部条） */}
       <Route path="/taskbar" element={<TaskbarPage />} />
+      {/* dock 右键菜单独立置顶弹窗（桌面接管时任务栏条内右键弹出） */}
+      <Route path="/dock-menu" element={<DockMenuPage />} />
       <Route element={<AppShell />}>
         <Route path="/home" element={<HomePage />} />
         <Route path="/agent" element={<AgentPage />} />

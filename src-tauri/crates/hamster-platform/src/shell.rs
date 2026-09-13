@@ -73,13 +73,39 @@ fn lnk_exe_file_name(path: &Path) -> Option<String> {
 /// （浏览器等单进程多窗应用，再次 shell_open 会新开一扇窗而非复用）。
 /// 返回 true = 已激活，调用方不必再 shell_open；false = 未在运行，走正常启动。
 pub fn activate_running(target: &Path) -> bool {
-    let Some(exe) = lnk_exe_file_name(target) else {
+    let Some(exe) = cached_exe_file_name(target) else {
         return false;
     };
     let Some(id) = crate::tray::find_by_process(std::process::id(), &exe) else {
         return false;
     };
     crate::tray::activate(id).is_ok()
+}
+
+/// target(.lnk) → exe 名解析缓存：dock 运行态每 2.5s 轮询一批，
+/// 不缓存则每轮都要重新打开解析全部 .lnk（文件 IO + lnk 反序列化）。
+/// 键 = target 路径，值 = (mtime, 解析结果)；mtime 变化才重新解析。
+type ExeNameCache = std::collections::HashMap<String, (std::time::SystemTime, Option<String>)>;
+static EXE_NAME_CACHE: std::sync::OnceLock<std::sync::Mutex<ExeNameCache>> =
+    std::sync::OnceLock::new();
+
+/// 解析 target 的 exe 文件名（小写；非 exe 目标/UWP/folder 返回 None），带 mtime 缓存
+pub fn cached_exe_file_name(target: &Path) -> Option<String> {
+    let mtime = std::fs::metadata(target).and_then(|m| m.modified()).ok()?;
+    let key = target.to_string_lossy().into_owned();
+    let cache = EXE_NAME_CACHE.get_or_init(Default::default);
+    if let Ok(guard) = cache.lock() {
+        if let Some((seen_at, hit)) = guard.get(&key) {
+            if *seen_at == mtime {
+                return hit.clone();
+            }
+        }
+    }
+    let resolved = lnk_exe_file_name(target);
+    if let Ok(mut guard) = cache.lock() {
+        guard.insert(key, (mtime, resolved.clone()));
+    }
+    resolved
 }
 
 /// 在资源管理器中定位文件

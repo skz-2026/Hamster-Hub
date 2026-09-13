@@ -30,6 +30,7 @@ export type {
   AppEntry,
   AppHealth,
   AppError,
+  DockMenuPayload,
   CountdownCustom,
   CountdownItem,
   FileHit,

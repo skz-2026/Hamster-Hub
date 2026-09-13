@@ -281,6 +281,76 @@ unsafe extern "system" fn find_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
     BOOL(1)
 }
 
+/// 当前存在用户可见窗口的进程 exe 名集合（小写，不含路径）。
+/// dock 运行态判定用：一次枚举得到全集，再对每个应用做集合匹配，
+/// 避免 N 个应用各自 EnumWindows + OpenProcess。
+pub fn visible_process_set(self_pid: u32) -> std::collections::HashSet<String> {
+    let mut ctx = CollectCtx {
+        self_pid,
+        out: std::collections::HashSet::new(),
+    };
+    unsafe {
+        let _ = EnumWindows(
+            Some(collect_proc),
+            LPARAM(&mut ctx as *mut CollectCtx as isize),
+        );
+    }
+    ctx.out
+}
+
+struct CollectCtx {
+    self_pid: u32,
+    out: std::collections::HashSet<String>,
+}
+
+unsafe extern "system" fn collect_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
+    let ctx = &mut *(lparam.0 as *mut CollectCtx);
+    if user_visible_pid(hwnd, ctx.self_pid).is_some() {
+        let name = process_name(hwnd).to_ascii_lowercase();
+        if !name.is_empty() {
+            ctx.out.insert(name);
+        }
+    }
+    BOOL(1)
+}
+
+/// 按 exe 文件名（大小写不敏感）关闭其全部可见顶层窗口。
+/// WM_CLOSE 温和关闭（应用可弹保存确认/拦截），不用 TerminateProcess；
+/// PostMessage 异步投递，回调内不会边枚举边销毁窗口。
+/// 提权进程的窗口会被 UIPI 静默拦截，属预期。返回已送达 WM_CLOSE 的窗口数。
+pub fn close_all_by_process(self_pid: u32, exe: &str) -> usize {
+    let mut ctx = CloseCtx {
+        self_pid,
+        exe: exe.to_ascii_lowercase(),
+        sent: 0,
+    };
+    unsafe {
+        let _ = EnumWindows(Some(close_proc), LPARAM(&mut ctx as *mut CloseCtx as isize));
+    }
+    ctx.sent
+}
+
+struct CloseCtx {
+    self_pid: u32,
+    exe: String,
+    sent: usize,
+}
+
+unsafe extern "system" fn close_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
+    use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_CLOSE};
+    let ctx = &mut *(lparam.0 as *mut CloseCtx);
+    if user_visible_pid(hwnd, ctx.self_pid).is_some()
+        && process_name(hwnd).to_ascii_lowercase() == ctx.exe
+    {
+        unsafe {
+            if PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0)).is_ok() {
+                ctx.sent += 1;
+            }
+        }
+    }
+    BOOL(1)
+}
+
 const CHEVRON_NAME: &str = "显示隐藏的图标";
 /// chevron Invoke 后等弹层弹出
 const FLYOUT_WAIT_MS: u64 = 600;

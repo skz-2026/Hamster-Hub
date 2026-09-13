@@ -221,9 +221,13 @@ pub fn exit(app: &tauri::AppHandle) -> Result<(), crate::error::AppError> {
         }
     }
 
-    // 隐藏 taskbar 置顶窗（替代系统任务栏的渲染结束）
+    // 隐藏 taskbar 置顶窗（替代系统任务栏的渲染结束）；
+    // dock 右键菜单弹窗也是置顶窗，不跟着收会一直浮在桌面上
     if let Some(tb) = app.get_webview_window("taskbar") {
         let _ = tb.hide();
+    }
+    if let Some(dm) = app.get_webview_window("dock-menu") {
+        let _ = dm.hide();
     }
 
     apply_windowed_mode(app);
@@ -292,12 +296,15 @@ fn fullscreen_main(app: &tauri::AppHandle) {
         .as_ref()
         .and_then(|w| w.current_monitor().ok().flatten());
     if let Some(w) = main {
-        let _ = w.set_fullscreen(true);
-        // 全屏目标屏 = 当前所在显示器（先把窗口挪到该屏原点再进全屏）
+        // 全屏目标屏 = 当前所在显示器（先把窗口挪到该屏原点再进全屏）。
+        // set_position 必须在 set_fullscreen 之前：tao 的 set_position 会
+        // 解除最大化（对 MAXIMIZED 标志做 SW_RESTORE），放在全屏之后会把
+        // 全屏打回最大化前的旧尺寸（最大化进接管时必现的缩窗 bug）。
         if let Some(m) = &mon {
             let mp = m.position();
             let _ = w.set_position(tauri::PhysicalPosition::new(mp.x, mp.y));
         }
+        let _ = w.set_fullscreen(true);
         let _ = w.show();
         let _ = w.unminimize();
         let _ = w.set_focus();

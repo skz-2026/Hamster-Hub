@@ -3,6 +3,7 @@ pub mod apps;
 pub mod control;
 pub mod dashboard;
 pub mod desktop;
+pub mod dock;
 pub mod files;
 pub mod focus;
 pub mod note;

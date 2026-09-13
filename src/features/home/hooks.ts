@@ -108,3 +108,18 @@ export function useWallpaper() {
   const { layout } = useHomeLayout(apps);
   return resolveWallpaper(layout);
 }
+
+/**
+ * dock 应用运行态：2.5s 轮询（EnumWindows 全集一次取回，毫秒级），
+ * 返回「当前有可见窗口」的 app_key 集合。keys 需传稳定引用（useMemo），
+ * 否则每次渲染都开新 Query 缓存项。
+ */
+export function useRunningAppKeys(keys: string[]) {
+  const q = useQuery({
+    queryKey: ['apps', 'running', keys],
+    queryFn: () => commands.appsRunning(keys),
+    refetchInterval: 2500,
+    staleTime: 1500,
+  });
+  return useMemo(() => new Set(q.data ?? []), [q.data]);
+}

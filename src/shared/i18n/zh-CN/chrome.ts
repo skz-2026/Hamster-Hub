@@ -39,6 +39,8 @@ export const chrome = {
 
   // 任务栏
   'chrome.dock.customZone': '定制区',
+  'chrome.dock.closeWindow': '关闭窗口',
+  'chrome.dock.newInstance': '多开应用',
 
   // 应用选择器弹层
   'chrome.picker.searchApps': '搜索应用',

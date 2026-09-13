@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { emitTo, emit } from '@tauri-apps/api/event';
+import { emitTo, emit, listen } from '@tauri-apps/api/event';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { House, LayoutGrid, LogOut, Bot, MonitorSmartphone, Plus, Search, Settings } from 'lucide-react';
@@ -12,7 +12,8 @@ import { getLang } from '@/shared/i18n/core';
 import type { TKey } from '@/shared/i18n/core';
 import { useTopApps } from '@/features/dashboard/hooks';
 import TrayButton from './TrayArea';
-import { useApps, useHomeLayout } from './hooks';
+import { useApps, useHomeLayout, useRunningAppKeys } from './hooks';
+import DockAppMenu from './DockAppMenu';
 import { Monogram } from './AppIcon';
 import { DOCK_CAPACITY, removeFromDock } from './layout';
 
@@ -57,8 +58,8 @@ export function DockBar({ desktop }: DockBarProps) {
   const { layout, commit } = useHomeLayout(apps);
   const { data: top = [] } = useTopApps(10);
   const now = useClockMinute();
-  // 右键菜单（任务栏定制组）：目标 dock 索引 + 屏幕坐标
-  const [menu, setMenu] = useState<{ idx: number; x: number } | null>(null);
+  // 右键菜单：目标应用 + 锚点坐标 + 是否定制组（可移除）
+  const [menu, setMenu] = useState<{ key: string; x: number; removable: boolean } | null>(null);
 
   // 任务栏独立窗口内不能本地 navigate（会把 /home 载入 72px 窗口条），
   // 改为发事件让主窗口导航并前置
@@ -73,7 +74,16 @@ export function DockBar({ desktop }: DockBarProps) {
 
   const size = desktop ? 44 : 50;
   const appByKey = new Map(apps.map((a) => [a.app_key, a]));
-  const frequent = top.filter((a) => !layout.dock.includes(a.app_key)).slice(0, desktop ? 6 : 4);
+  const frequent = useMemo(
+    () => top.filter((a) => !layout.dock.includes(a.app_key)).slice(0, desktop ? 6 : 4),
+    [top, layout.dock, desktop],
+  );
+  // 运行态轮询目标：定制 + 常用两组去重后的 key（稳定引用，见 useRunningAppKeys）
+  const dockAppKeys = useMemo(
+    () => [...layout.dock, ...frequent.map((a) => a.app_key)],
+    [layout.dock, frequent],
+  );
+  const runningKeys = useRunningAppKeys(dockAppKeys);
   const exitDesktop = () => commands.desktopModeExit().catch(console.error);
   const enterDesktop = () => commands.desktopModeEnter().catch(console.error);
   /** 开始：注入 Ctrl+Esc 召出系统真实开始菜单（全局键注入，任务栏窗口内调用同样有效） */
@@ -108,13 +118,39 @@ export function DockBar({ desktop }: DockBarProps) {
   const launchApp = (key: string) => {
     commands.appLaunch(key).catch(console.error);
     qc.invalidateQueries({ queryKey: ['apps', 'top'] });
+    qc.invalidateQueries({ queryKey: ['apps', 'running'] });
+  };
+  /** 多开：绕过「已运行激活」，直接再开一个窗口/实例（单击仍是默认逻辑） */
+  const launchNew = (key: string) => {
+    commands.appLaunchNew(key).catch(console.error);
+    qc.invalidateQueries({ queryKey: ['apps', 'top'] });
+    qc.invalidateQueries({ queryKey: ['apps', 'running'] });
+    setMenu(null);
+  };
+  /** 关闭应用：温和关掉其全部可见窗口（WM_CLOSE，应用可弹保存确认） */
+  const closeApp = (key: string) => {
+    commands.appClose(key).catch(console.error);
+    qc.invalidateQueries({ queryKey: ['apps', 'running'] });
+    setMenu(null);
   };
 
   /** 任务栏定制组的增删（主屏编辑模式之外的第二入口） */
-  const removeDockItem = (idx: number) => {
-    commit(removeFromDock(layout, idx));
+  const removeDockItem = (key: string) => {
+    const idx = layout.dock.indexOf(key);
+    if (idx >= 0) commit(removeFromDock(layout, idx));
     setMenu(null);
     syncLayout();
+  };
+  /** 右键呼出应用菜单：任务栏独立窗口一条高放不下纵向菜单，弹独立置顶
+   *  小窗（载荷 + 定位后端算）；主窗口/胶囊内空间充足，本地渲染 */
+  const openContextMenu = (key: string, x: number, removable: boolean) => {
+    if (inTaskbarWindow) {
+      commands
+        .dockMenuOpen({ appKey: key, x, removable, running: runningKeys.has(key) })
+        .catch(console.error);
+    } else {
+      setMenu({ key, x, removable });
+    }
   };
   const syncLayout = () => {
     if (isTauri) emit('hamster:layout-updated').catch(console.error);
@@ -127,13 +163,45 @@ export function DockBar({ desktop }: DockBarProps) {
     }
   };
 
-  // 点击菜单外关闭
+  // 点击菜单外 / Esc 关闭
   useEffect(() => {
     if (!menu) return;
     const close = () => setMenu(null);
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenu(null);
+    };
     window.addEventListener('pointerdown', close);
-    return () => window.removeEventListener('pointerdown', close);
+    window.addEventListener('keydown', esc);
+    return () => {
+      window.removeEventListener('pointerdown', close);
+      window.removeEventListener('keydown', esc);
+    };
   }, [menu]);
+
+  // 任务栏窗口任意点击收回菜单弹窗：任务栏不抢焦点，点它不会让弹窗失焦
+  useEffect(() => {
+    if (!inTaskbarWindow) return;
+    const hide = () => commands.dockMenuHide().catch(console.error);
+    window.addEventListener('pointerdown', hide);
+    return () => window.removeEventListener('pointerdown', hide);
+  }, [inTaskbarWindow]);
+
+  // 弹窗菜单动作回传：主窗口执行（remove 需要 layout commit；close/new
+  // 顺带失效主窗口查询，运行指示点即时变化）。弹窗自身只广播不执行。
+  useEffect(() => {
+    if (!isTauri || inTaskbarWindow) return;
+    let un: (() => void) | undefined;
+    listen<{ action: string; key: string }>('hamster:dock-menu-action', (e) => {
+      const { action, key } = e.payload;
+      if (action === 'close') closeApp(key);
+      else if (action === 'new') launchNew(key);
+      else if (action === 'remove') removeDockItem(key);
+    })
+      .then((fn) => (un = fn))
+      .catch(console.error);
+    return () => un?.();
+    // removeDockItem 闭包依赖 layout；布局/常用排名变更时重挂监听
+  }, [layout, top]);
 
   if (desktop) {
     // 贴边通栏任务栏（完全替代系统任务栏）：左端入口 + 定制（可增删）…… 右端退出 + 时钟
@@ -161,7 +229,7 @@ export function DockBar({ desktop }: DockBarProps) {
             </span>
           </DockItem>
           {layout.dock.length > 0 && <Divider />}
-          {layout.dock.map((key, idx) => {
+          {layout.dock.map((key) => {
             const a = appByKey.get(key);
             if (!a) return null;
             return (
@@ -170,12 +238,9 @@ export function DockBar({ desktop }: DockBarProps) {
                 app={a}
                 size={size}
                 nativeTipOnly={desktop}
+                running={runningKeys.has(key)}
                 onLaunch={launchApp}
-                onContextMenu={
-                  desktop
-                    ? (x: number) => setMenu({ idx, x })
-                    : undefined
-                }
+                onContextMenu={(x) => openContextMenu(key, x, true)}
               />
             );
           })}
@@ -192,7 +257,15 @@ export function DockBar({ desktop }: DockBarProps) {
           )}
           {frequent.length > 0 && <Divider />}
           {frequent.map((a) => (
-            <AppDockItem key={a.app_key} app={a} size={size} nativeTipOnly={desktop} onLaunch={launchApp} />
+            <AppDockItem
+              key={a.app_key}
+              app={a}
+              size={size}
+              nativeTipOnly={desktop}
+              running={runningKeys.has(a.app_key)}
+              onLaunch={launchApp}
+              onContextMenu={(x) => openContextMenu(a.app_key, x, false)}
+            />
           ))}
           <div className="ml-auto flex items-end gap-2 pl-3">
             {/* 设置入口（右端）：与胶囊系统组末位同一渲染 */}
@@ -225,27 +298,17 @@ export function DockBar({ desktop }: DockBarProps) {
           </div>
         </div>
 
-        {/* 右键菜单：从任务栏移除（贴窗口顶渲染，避免 72px 窗口裁剪） */}
+        {/* 右键菜单：关闭窗口（运行中）/ 多开 / 移除（定制组）。
+            任务栏独立窗口 72px 高 → 横向贴顶胶囊；主窗口内 → 纵向弹上方 */}
         {menu && (
-          <div
-            className="absolute top-1 z-50 flex items-center gap-1 rounded-xl bg-[#232028]/97 py-1 pl-3 pr-1 text-[12px] text-white/90 ring-1 ring-white/15 backdrop-blur-xl"
-            style={{ left: Math.min(menu.x, window.innerWidth - 200) }}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <span className="text-white/50">{t('chrome.dock.customZone')}</span>
-            <button
-              onClick={() => removeDockItem(menu.idx)}
-              className="rounded-lg bg-red-500/25 px-2.5 py-1 font-medium text-red-200 transition-colors hover:bg-red-500/40"
-            >
-              {t('chrome.action.remove')}
-            </button>
-            <button
-              onClick={() => setMenu(null)}
-              className="rounded-lg bg-white/8 px-2.5 py-1 transition-colors hover:bg-white/16"
-            >
-              {t('chrome.action.cancel')}
-            </button>
-          </div>
+          <DockAppMenu
+            x={menu.x}
+            running={runningKeys.has(menu.key)}
+            removable={menu.removable}
+            onCloseApp={() => closeApp(menu.key)}
+            onNewInstance={() => launchNew(menu.key)}
+            onRemove={() => removeDockItem(menu.key)}
+          />
         )}
       </div>
     );
@@ -254,10 +317,28 @@ export function DockBar({ desktop }: DockBarProps) {
   // 窗口化：居中胶囊
   const customGroup = layout.dock.map((key) => {
     const a = appByKey.get(key);
-    return a ? <AppDockItem key={key} app={a} size={size} onLaunch={launchApp} /> : null;
+    return a ? (
+      <AppDockItem
+        key={key}
+        app={a}
+        size={size}
+        running={runningKeys.has(key)}
+        onLaunch={launchApp}
+        onContextMenu={(x) => openContextMenu(key, x, true)}
+      />
+    ) : null;
   });
   const frequentGroup = frequent.map(
-    (a) => <AppDockItem key={a.app_key} app={a} size={size} onLaunch={launchApp} />,
+    (a) => (
+      <AppDockItem
+        key={a.app_key}
+        app={a}
+        size={size}
+        running={runningKeys.has(a.app_key)}
+        onLaunch={launchApp}
+        onContextMenu={(x) => openContextMenu(a.app_key, x, false)}
+      />
+    ),
   );
   const groups = [
     { key: 'custom', nodes: customGroup },
@@ -275,28 +356,43 @@ export function DockBar({ desktop }: DockBarProps) {
           </div>
         ))}
       </div>
+      {/* 右键菜单：胶囊空间充足，纵向弹在图标上方 */}
+      {menu && (
+        <DockAppMenu
+          x={menu.x}
+          running={runningKeys.has(menu.key)}
+          removable={menu.removable}
+          onCloseApp={() => closeApp(menu.key)}
+          onNewInstance={() => launchNew(menu.key)}
+          onRemove={() => removeDockItem(menu.key)}
+        />
+      )}
     </div>
   );
 }
 
-/** 应用图标 Dock 项：真图标 PNG / 字母占位，单击启动（顺手刷新常用组） */
+/** 应用图标 Dock 项：真图标 PNG / 字母占位，单击启动（顺手刷新常用组），
+ * 运行中点亮底部指示点；右键呼出应用菜单（关闭/多开/移除） */
 function AppDockItem({
   app,
   size,
+  running = false,
   onLaunch,
   onContextMenu,
   nativeTipOnly = false,
 }: {
   app: AppEntry;
   size: number;
+  running?: boolean;
   onLaunch: (key: string) => void;
-  /** 桌面任务栏定制组：右键呼出移除菜单（传窗口内 clientX） */
+  /** 右键呼出应用菜单（传窗口内 clientX） */
   onContextMenu?: (x: number) => void;
   nativeTipOnly?: boolean;
 }) {
   return (
     <DockItem
       label={app.display_name}
+      running={running}
       nativeTipOnly={nativeTipOnly}
       onClick={() => onLaunch(app.app_key)}
       onContextMenu={
@@ -353,12 +449,15 @@ function StartLogo({ size }: { size: number }) {
 }
 
 /** Dock 通用项：tooltip + 悬停放大上浮 + 底部活动指示点（macOS 运行指示）。
+ * 指示点点亮条件：active（系统入口 = 当前路由）或 running（应用图标 = 进程在跑，
+ * 解决 Windows 任务栏 pin 后看不出开没开的诟病）。
  * nativeTipOnly：桌面任务栏条内不渲染自绘 tooltip（超出窗口上边界会被裁剪，
  * 交给按钮原生 title 弹系统提示）；窗口化胶囊内空间充足，仍用自绘样式。 */
 function DockItem({
   label,
   onClick,
   active,
+  running = false,
   onContextMenu,
   nativeTipOnly = false,
   children,
@@ -366,6 +465,7 @@ function DockItem({
   label: string;
   onClick: () => void;
   active?: boolean;
+  running?: boolean;
   onContextMenu?: (e: React.MouseEvent) => void;
   nativeTipOnly?: boolean;
   children: ReactNode;
@@ -385,11 +485,11 @@ function DockItem({
       >
         {children}
       </button>
-      {/* 指示点不占布局流，图标保持垂直居中；活动/悬停时点亮 */}
+      {/* 指示点不占布局流，图标保持垂直居中；运行中常亮，悬停微亮 */}
       <span
         aria-hidden
         className={`absolute -bottom-[5px] left-1/2 h-[5px] w-[5px] -translate-x-1/2 rounded-full bg-white shadow-[0_0_6px_rgba(255,255,255,.9)] transition-opacity ${
-          active ? 'opacity-100' : 'opacity-0 group-hover:opacity-45'
+          active || running ? 'opacity-100' : 'opacity-0 group-hover:opacity-45'
         }`}
       />
     </div>

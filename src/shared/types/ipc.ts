@@ -63,10 +63,50 @@ async appLaunch(appKey: string) : Promise<null> {
     return await TAURI_INVOKE("app_launch", { appKey });
 },
 /**
+ * 多开：绕过「已运行激活现有窗口」，直接 shell_open 再开一个。
+ * 文件夹/记事本/浏览器得到新窗口；单实例应用由其自身去重（等效激活）。
+ */
+async appLaunchNew(appKey: string) : Promise<null> {
+    return await TAURI_INVOKE("app_launch_new", { appKey });
+},
+/**
+ * 关闭应用：对其 exe 名下全部可见窗口投递 WM_CLOSE（温和关闭，应用可弹
+ * 保存确认）。解析不出 exe（UWP/文件夹）或没有可见窗口时报错。
+ */
+async appClose(appKey: string) : Promise<null> {
+    return await TAURI_INVOKE("app_close", { appKey });
+},
+/**
+ * dock 运行态轮询：返回 keys 中当前有可见窗口的应用 app_key。
+ * DB 查询留在调用线程（毫秒级）；lnk 解析 + EnumWindows 放线程池，不占主线程。
+ */
+async appsRunning(keys: string[]) : Promise<string[]> {
+    return await TAURI_INVOKE("apps_running", { keys });
+},
+/**
  * 拼音/首字母/名称检索（Spotlight 应用路）
  */
 async appSearch(query: string, limit: number | null) : Promise<AppEntry[]> {
     return await TAURI_INVOKE("app_search", { query, limit });
+},
+/**
+ * 打开（或换目标重开）dock 右键菜单弹窗：水平钳进任务栏范围，
+ * 垂直落在任务栏条上沿上方 8px。
+ */
+async dockMenuOpen(payload: DockMenuPayload) : Promise<null> {
+    return await TAURI_INVOKE("dock_menu_open", { payload });
+},
+/**
+ * 弹窗挂载时拉取当前载荷（之后靠 payload 事件增量更新）
+ */
+async dockMenuPayload() : Promise<DockMenuPayload | null> {
+    return await TAURI_INVOKE("dock_menu_payload");
+},
+/**
+ * 收回弹窗（失焦/Esc/动作完成/退出桌面模式）
+ */
+async dockMenuHide() : Promise<null> {
+    return await TAURI_INVOKE("dock_menu_hide");
 },
 async todoList() : Promise<Todo[]> {
     return await TAURI_INVOKE("todo_list");
@@ -672,6 +712,22 @@ export type DiskStat = {
  * 挂载点，如 "C:\"
  */
 mount: string; total_gb: number; used_gb: number; percent: number }
+/**
+ * 菜单载荷（dock-menu 弹窗渲染 + 定位所需；文案在弹窗内用 i18n 现算）
+ */
+export type DockMenuPayload = { appKey: string; 
+/**
+ * 右键锚点 x（任务栏窗口内逻辑 px，用于水平居中弹窗）
+ */
+x: number; 
+/**
+ * 定制组项才显示「移除」
+ */
+removable: boolean; 
+/**
+ * 运行中才显示「关闭窗口」
+ */
+running: boolean }
 export type FileHit = { path: string; name: string; ext: string | null; kind: string; size: number; mtime: number }
 export type FileIndex = { roots: string[]; max_files: number }
 export type FileIndexUpdated = { count: number }
