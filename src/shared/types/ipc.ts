@@ -86,6 +86,70 @@ async todoSetDue(id: number, dueAt: number | null, remind: boolean) : Promise<To
 async todoSetRecur(id: number, recur: string | null) : Promise<Todo> {
     return await TAURI_INVOKE("todo_set_recur", { id, recur });
 },
+async vaultStatus() : Promise<VaultStatus> {
+    return await TAURI_INVOKE("vault_status");
+},
+/**
+ * 首次创建密码库：生成 KDF 参数与 verifier，解锁会话
+ */
+async vaultSetup(password: string, hint: string | null, autoLockSecs: number | null) : Promise<VaultStatus> {
+    return await TAURI_INVOKE("vault_setup", { password, hint, autoLockSecs });
+},
+async vaultUnlock(password: string) : Promise<VaultStatus> {
+    return await TAURI_INVOKE("vault_unlock", { password });
+},
+async vaultLock() : Promise<VaultStatus> {
+    return await TAURI_INVOKE("vault_lock");
+},
+async vaultSetAutoLock(secs: number) : Promise<VaultStatus> {
+    return await TAURI_INVOKE("vault_set_auto_lock", { secs });
+},
+/**
+ * 换主密码：校验旧密码 → 全量重加密 → 轮换 KDF 参数与 verifier
+ */
+async vaultChangePassword(oldPassword: string, newPassword: string, hint: string | null) : Promise<VaultStatus> {
+    return await TAURI_INVOKE("vault_change_password", { oldPassword, newPassword, hint });
+},
+async vaultItemList() : Promise<VaultItem[]> {
+    return await TAURI_INVOKE("vault_item_list");
+},
+async vaultItemSearch(query: string) : Promise<VaultItem[]> {
+    return await TAURI_INVOKE("vault_item_search", { query });
+},
+async vaultItemCreate(input: VaultItemInput) : Promise<VaultItem> {
+    return await TAURI_INVOKE("vault_item_create", { input });
+},
+async vaultItemUpdate(id: number, input: VaultItemInput) : Promise<VaultItem> {
+    return await TAURI_INVOKE("vault_item_update", { id, input });
+},
+async vaultItemToggleFavorite(id: number, favorite: boolean) : Promise<VaultItem> {
+    return await TAURI_INVOKE("vault_item_toggle_favorite", { id, favorite });
+},
+/**
+ * 软删除（回收站 M2 展示）
+ */
+async vaultItemDelete(id: number) : Promise<null> {
+    return await TAURI_INVOKE("vault_item_delete", { id });
+},
+/**
+ * 取某条敏感字段（唯一取密口；UI 显式点击才调用）
+ */
+async vaultItemReveal(id: number) : Promise<VaultSecret> {
+    return await TAURI_INVOKE("vault_item_reveal", { id });
+},
+/**
+ * 复制字段到剪贴板（Rust 侧写入；密码在 CLIPBOARD_CLEAR_SECS 后自动清除，
+ * 仅当剪贴板内容仍是本次写入时才清，避免误伤用户后续复制）
+ */
+async vaultCopyField(id: number, field: string) : Promise<number> {
+    return await TAURI_INVOKE("vault_copy_field", { id, field });
+},
+async vaultPasswordGenerate(options: GenOptions) : Promise<string> {
+    return await TAURI_INVOKE("vault_password_generate", { options });
+},
+async vaultPasswordStrength(password: string) : Promise<number> {
+    return await TAURI_INVOKE("vault_password_strength", { password });
+},
 async focusStart(minutes: number, todoId: number | null) : Promise<FocusStatus> {
     return await TAURI_INVOKE("focus_start", { minutes, todoId });
 },
@@ -363,6 +427,20 @@ async pluginBridgeCall(pluginId: string, capability: string, payload: string) : 
  */
 async trayOpenOverflow() : Promise<null> {
     return await TAURI_INVOKE("tray_open_overflow");
+},
+/**
+ * 检查更新：None = 已是最新；Some = 可升级到对应版本
+ */
+async updateCheck() : Promise<UpdateInfo | null> {
+    return await TAURI_INVOKE("update_check");
+},
+/**
+ * 下载并安装更新：进度经 UpdateProgress 事件推送（约 100ms 一帧节流）。
+ * 完成后应用退出、由 NSIS 静默安装器接管（installMode=quiet）；若进程
+ * 未被接管（非 Windows 行为兜底）则主动重启。
+ */
+async updateInstall() : Promise<null> {
+    return await TAURI_INVOKE("update_install");
 }
 }
 
@@ -379,7 +457,9 @@ desktopModeChanged: DesktopModeChanged,
 fileIndexUpdated: FileIndexUpdated,
 focusFinished: FocusFinished,
 focusTick: FocusTick,
-todoReminder: TodoReminder
+todoReminder: TodoReminder,
+updateProgress: UpdateProgress,
+vaultLocked: VaultLocked
 }>({
 appIndexUpdated: "app-index-updated",
 benchPtyExit: "bench-pty-exit",
@@ -390,7 +470,9 @@ desktopModeChanged: "desktop-mode-changed",
 fileIndexUpdated: "file-index-updated",
 focusFinished: "focus-finished",
 focusTick: "focus-tick",
-todoReminder: "todo-reminder"
+todoReminder: "todo-reminder",
+updateProgress: "update-progress",
+vaultLocked: "vault-locked"
 })
 
 /** user-defined constants **/
@@ -512,7 +594,12 @@ effort: string | null;
 /**
  * 指定代理；缺省按 设置默认 → claude → zcode → 首个已装 顺序解析
  */
-agentId: string | null }
+agentId: string | null; 
+/**
+ * 恢复记忆：传入上一次会话的 rollout 键（codex thread/resume、claude
+ * --resume），MCP 注入照常生效；进程仍存活时按幂等裁决直接重挂
+ */
+resumeKey: string | null }
 /**
  * 桌面助手会话信息（返回给前端；附注入摘要便于调试与展示）
  */
@@ -531,7 +618,7 @@ export type Behavior = { autostart: boolean; start_minimized: boolean; language:
  */
 desktop_mode_hotkey: string; 
 /**
- * 启动即进入桌面模式（对齐水豚hub：打开应用直接全屏工作台 + 底部 Dock）
+ * 启动即进入桌面模式（打开应用直接全屏工作台 + 底部 Dock）
  */
 desktop_mode_on_launch: boolean }
 /**
@@ -610,6 +697,10 @@ kind: string; total_secs: number; remaining_secs: number; paused: boolean; todo_
  * 计时心跳（每秒）
  */
 export type FocusTick = { kind: string; remaining_secs: number; paused: boolean }
+/**
+ * 生成选项（length 8..=64；至少启用一个字符类）
+ */
+export type GenOptions = { length: number; upper: boolean; lower: boolean; digits: boolean; symbols: boolean; exclude_ambiguous: boolean }
 /**
  * 索引库状态（Settings / Doctor 展示）。
  */
@@ -894,6 +985,34 @@ recur: string | null }
  * 待办提醒到点（系统通知已同时发出）
  */
 export type TodoReminder = { id: number; content: string; due_at: number | null }
+/**
+ * 可用更新摘要（version 为目标版本；notes 为 release 正文，仅展示用）
+ */
+export type UpdateInfo = { version: string; notes: string | null }
+/**
+ * 更新下载进度（done=true 表示安装包已就绪，应用即将退出交由安装器接管）
+ */
+export type UpdateProgress = { downloaded: number; total: number | null; done: boolean }
+/**
+ * 条目元数据（列表用，不含敏感字段）
+ */
+export type VaultItem = { id: number; title: string; username: string; url: string; favorite: boolean; created_at: number; updated_at: number; password_updated_at: number }
+/**
+ * 新建/编辑入参（明文经 IPC 传入，store 层立即加密落库）
+ */
+export type VaultItemInput = { title: string; username: string; url: string; password: string; notes: string; favorite: boolean }
+/**
+ * 密码箱已锁定（reason: manual | idle）
+ */
+export type VaultLocked = { reason: string }
+/**
+ * 敏感字段（信封内的 JSON 明文结构）
+ */
+export type VaultSecret = { password: string; notes: string }
+/**
+ * 密码箱总览状态（页面三态：未初始化 / 已锁 / 已解锁）
+ */
+export type VaultStatus = { initialized: boolean; unlocked: boolean; hint: string | null; auto_lock_secs: number }
 export type VolumeState = { 
 /**
  * 0.0 - 1.0

@@ -17,7 +17,7 @@
    `NO_PROXY='*'` 前缀；https 偶发吊销检查离线 → curl 加 `--ssl-no-revoke`，cargo 用 `.cargo/config.toml`
    的 `check-revoke=false`（已配）。
 8. **测试二进制必须嵌 manifest**（build.rs 已做）：comctl32 v6 缺失会 STATUS_ENTRYPOINT_NOT_FOUND。
-9. **水豚hub 常驻且提权**：测系统接管前确认任务栏状态基线（IsWindowVisible），别拿截图肉眼判断。
+9. **第三方常驻软件可能提权占用任务栏**：测系统接管前确认任务栏状态基线（IsWindowVisible），别拿截图肉眼判断。
 10. **Alt+Space 是 Windows 系统菜单保留键**，RegisterHotKey 大概率失败：已做容错注册（日志告警 +
     托盘菜单兜底）；Spotlight 默认热键后续可配。
 11. **看门狗判活必须校验进程镜像名**（QueryFullProcessImageNameW 包含 hamster-hub）：裸 OpenProcess
@@ -52,3 +52,24 @@
     又被回滚）。症状与坑 1（vite 重载竞态）高度相似，用 pushState 补丁时间线区分。
     修法（AppShell）：初始对齐 `[]` 依赖 + `window.location.hash` 守卫只跑一次；事件监听 effect 用
     alive 标志兜底「注销函数晚于卸载 resolve」造成的 StrictMode 重复监听。
+22. **桌面接管的恢复链路必须两条腿：看门狗 + 启动对账**（2026-09-13 补缺口，对标竞品反推）：
+    看门狗只覆盖「主进程死了但它活着」的窗口；断电/蓝屏（双进程同死）、watchdog exe 缺失被跳过、
+    watchdog 被杀或 24h 自杀退出（现行为：超时不恢复直接退）都会留下「系统隐藏态 + 残留快照」。
+    更糟的是污染：下次 enter() 会把隐藏态拍成「原始状态」存进新快照，退出时忠实还原到隐藏——
+    副屏任务栏与桌面图标（HideIcons=1 被回放）永久消失，仅主任务栏有按类名兜底可救。
+    修法（desktop_mode::reconcile_stale_snapshot）：app 启动（setup）与 enter() 拍快照前各对账一次，
+    快照存在即无条件恢复并删除，损坏时无差别恢复（可见桌面优于黑屏）。
+    遗留：watchdog 24h 自杀保护仍是「不恢复直接退」，有启动对账兜底、下次启动自愈，暂不改。
+    经验：恢复逻辑不能只活在「某进程还活着」的前提里；落盘快照的另一个读者必须是下一次启动。
+23. **cargo 拉依赖挂死：crates.io 被墙 → schannel 吊销检查离线 → dev-sidecar 系统代理黑洞**（2026-09-13，接 updater 插件首次拉取新依赖时踩，三层叠加）：
+    症状：任意 cargo 命令报 `download of config.json failed: transfer too slow (0 bytes in 30s)`；
+    换 rsproxy 镜像后仍挂（0 CPU 无 rustc、curl 却秒通）；并行会话的 cargo 全部互等构建/包缓存锁。
+    排查链（每层都可能单独坑）：
+    ① index.crates.io 直连被墙 → `~/.cargo/config.toml` 配 rsproxy sparse 镜像；
+    ② cargo（libcurl+schannel）做证书吊销检查而 CRL/OCSP 不可达 → `[http] check-revoke = false`；
+    ③ **dev-sidecar 把 Windows 系统代理设为 127.0.0.1:31181，cargo 会读注册表 ProxyServer 但不理会
+    ProxyOverride 白名单**，请求全进 dev-sidecar 而它对 rsproxy.cn 黑洞（连接 ESTABLISHED 但 0 字节）。
+    修法：`setx NO_PROXY rsproxy.cn,.rsproxy.cn,index.crates.io,static.crates.io,...`（env 层短路，已设置）。
+    诊断口诀：`Get-NetTCPConnection -RemotePort 31181` 看谁挂在代理上；cargo 全家 0 CPU 无 rustc
+    = 有人在等锁/等网络，先 `Get-Process cargo | Stop-Process -Force` 清场再重试。失败重试前不清
+    孤儿进程 = 越积越多互相锁死。CI（GitHub Actions）无此问题。

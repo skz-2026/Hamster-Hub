@@ -32,14 +32,14 @@ export const bench: Record<keyof typeof benchZh, string> = {
 
   // 歡迎頁：composer 與錯誤
   'bench.welcome.promptProjectPath': '輸入專案目錄路徑（瀏覽器預覽層無原生選擇器）',
-  'bench.welcome.error.noStreamableAgent': '沒有支援 GUI 對話的代理（需已安裝且支援串流通道）',
+  'bench.welcome.error.noStreamableAgent': '沒有支援 GUI 對話的 AI Agent（需已安裝且支援串流通道）',
   'bench.welcome.error.selectProjectDir': '請先選擇專案目錄',
   'bench.welcome.selectProjectDir': '選擇專案目錄',
   'bench.welcome.browseFolders': '瀏覽資料夾…',
-  'bench.welcome.composerPlaceholder': '向代理提問，描述你的任務…（Enter 傳送，Shift+Enter 換行）',
+  'bench.welcome.composerPlaceholder': '向 AI Agent 提問，描述你的任務…（Enter 傳送，Shift+Enter 換行）',
   'bench.welcome.addAttachment': '新增附件（即將支援）',
-  'bench.welcome.selectAgent': '選擇代理',
-  'bench.welcome.agentTitle': '代理（需支援 GUI 串流對話）',
+  'bench.welcome.selectAgent': '選擇 AI Agent',
+  'bench.welcome.agentTitle': 'AI Agent（需支援 GUI 串流對話）',
   'bench.welcome.selectModel': '選擇模型',
   'bench.welcome.effort': '推理強度',
   'bench.welcome.send': '傳送並建立會話',
@@ -62,9 +62,9 @@ export const bench: Record<keyof typeof benchZh, string> = {
   'bench.newSession.notInstalled': '未安裝',
   'bench.newSession.guiStreamingVersioned': 'v{ver} · GUI 串流',
   'bench.newSession.guiStreaming': 'GUI 串流',
-  'bench.newSession.title': '新增代理會話',
-  'bench.newSession.agentsLabel': '代理（支援 GUI 串流）',
-  'bench.newSession.scanning': '掃描已安裝代理…',
+  'bench.newSession.title': '新增 AI Agent 會話',
+  'bench.newSession.agentsLabel': 'AI Agent（支援 GUI 串流）',
+  'bench.newSession.scanning': '掃描已安裝 AI Agent…',
   'bench.newSession.projectDir': '專案目錄',
   'bench.newSession.modelEffort': '模型 / 推理強度',
   'bench.newSession.firstMessage': '第一則訊息（選填）',
@@ -73,7 +73,7 @@ export const bench: Record<keyof typeof benchZh, string> = {
 
   // 訊息角色徽標
   'bench.role.user': '使用者',
-  'bench.role.assistant': '代理',
+  'bench.role.assistant': 'AI Agent',
   'bench.role.thinking': '思考',
   'bench.role.tool': '工具',
   'bench.role.system': '系統',
@@ -84,11 +84,11 @@ export const bench: Record<keyof typeof benchZh, string> = {
   'bench.recall.indexStatus': '{sessions} 會話 · {messages} 訊息 · {kb} KB',
   'bench.recall.reindexTitle': '重建索引',
   'bench.recall.reindex': '重建',
-  'bench.recall.searchPlaceholder': '搜尋所有代理的歷史會話…',
+  'bench.recall.searchPlaceholder': '搜尋所有 AI Agent 的歷史會話…',
   'bench.recall.searching': '搜尋中…',
   'bench.recall.noHits': '沒有符合「{query}」的結果',
   'bench.recall.backToResults': '返回結果',
-  'bench.recall.hint': '輸入關鍵字，搜尋 Claude / Codex 等代理的全部歷史會話',
+  'bench.recall.hint': '輸入關鍵字，搜尋 Claude / Codex 等 AI Agent 的全部歷史會話',
 
   // 對話視圖
   'bench.chat.thinking': '思考中…',
@@ -96,9 +96,9 @@ export const bench: Record<keyof typeof benchZh, string> = {
   'bench.chat.running': '執行中',
   'bench.chat.endSessionTitle': '結束會話',
   'bench.chat.end': '結束',
-  'bench.chat.emptyTitle': '開始與編碼代理對話',
-  'bench.chat.emptyHint': '選擇代理與專案目錄後，傳送第一則訊息',
-  'bench.chat.composerPlaceholder': '傳訊息給代理…（Enter 傳送，Shift+Enter 換行）',
+  'bench.chat.emptyTitle': '開始與編碼 AI Agent 對話',
+  'bench.chat.emptyHint': '選擇 AI Agent 與專案目錄後，傳送第一則訊息',
+  'bench.chat.composerPlaceholder': '傳訊息給 AI Agent…（Enter 傳送，Shift+Enter 換行）',
 
   // 終端機（PTY）
   'bench.terminal.createFailed': '會話建立失敗：{msg}',

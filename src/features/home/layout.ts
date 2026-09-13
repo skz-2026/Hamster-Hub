@@ -227,7 +227,8 @@ export function buildDefaultLayout(apps: AppEntry[], usageRank: string[] = []): 
     pages.push(rest.slice(i, i + PAGE_CAPACITY));
   }
   if (pages.length === 0) pages.push([]);
-  return { version: 1, wallpaper: 'midnight', pages, dock, folders: {} };
+  // 出厂默认壁纸：仓鼠木屋插画（产品安装后即是它；用户换过壁纸后 customized 置位冻结）
+  return { version: 1, wallpaper: 'burrow', pages, dock, folders: {} };
 }
 
 /**
@@ -338,7 +339,7 @@ export function removeFromDock(layout: HomeLayout, dockIdx: number): HomeLayout 
   return { ...layout, pages, dock: layout.dock.filter((_, i) => i !== dockIdx) };
 }
 
-/** 拖拽合并到文件夹：目标是应用 → 新建文件夹；目标是文件夹 → 加入 */
+/** 悬停合并到文件夹：目标是应用 → 新建文件夹；目标是文件夹 → 加入 */
 export function mergeIntoFolder(
   layout: HomeLayout,
   pageIdx: number,
@@ -371,6 +372,76 @@ export function mergeIntoFolder(
     return layout;
   }
   return { ...layout, pages: compactPages(pages), folders };
+}
+
+/**
+ * 松手合并（iOS 范式：应用拖到应用/文件夹上直接松手即建夹/入夹，不必悬停
+ * 等待）。同页复用 mergeIntoFolder；跨页与 Dock 来源在此处理：目标应用原位
+ * 换成新文件夹（或并入既有文件夹），拖拽项从原容器移除、空页收紧。
+ * 不可合并（拖的不是应用、目标非应用/文件夹、自己落回自己）返回 null，
+ * 调用方回退重排逻辑。
+ */
+export function mergeDrop(
+  layout: HomeLayout,
+  from: { kind: 'page' | 'dock'; page: number; idx: number },
+  toPage: number,
+  toIdx: number,
+): HomeLayout | null {
+  let dragKey: string | null = null;
+  if (from.kind === 'dock') {
+    dragKey = layout.dock[from.idx] ?? null;
+  } else {
+    const it = layout.pages[from.page]?.[from.idx];
+    if (it?.startsWith('app:')) dragKey = rawAppKey(it);
+  }
+  if (!dragKey) return null; // 文件夹/小组件拖到应用上是移动，不是合并
+  if (from.kind === 'page' && from.page === toPage && from.idx === toIdx) return null;
+
+  // 同页：与悬停合并同一套规则
+  if (from.kind === 'page' && from.page === toPage) {
+    const next = mergeIntoFolder(layout, toPage, from.idx, toIdx);
+    return next === layout ? null : next;
+  }
+
+  const targetItem = layout.pages[toPage]?.[toIdx];
+  if (!targetItem) return null;
+  const folders = { ...layout.folders };
+  let folderRef: string;
+  if (targetItem.startsWith('folder:')) {
+    const id = rawFolderId(targetItem);
+    const f = folders[id];
+    if (!f || f.apps.includes(dragKey)) return null;
+    folders[id] = { ...f, apps: [...f.apps, dragKey] };
+    folderRef = targetItem;
+  } else if (targetItem.startsWith('app:')) {
+    const id = `f${Date.now().toString(36)}`;
+    folders[id] = { name: '新建文件夹', apps: [rawAppKey(targetItem), dragKey] };
+    folderRef = folderRefOf(id);
+  } else {
+    return null; // 目标是小组件等，不合并
+  }
+
+  const pages = layout.pages.map((p) => [...p]);
+  if (targetItem.startsWith('app:')) pages[toPage].splice(toIdx, 1, folderRef);
+  if (from.kind === 'dock') {
+    return {
+      ...layout,
+      pages: compactPages(pages),
+      dock: layout.dock.filter((_, i) => i !== from.idx),
+      folders,
+    };
+  }
+  pages[from.page] = pages[from.page].filter((_, i) => i !== from.idx);
+  return { ...layout, pages: compactPages(pages), folders };
+}
+
+/** 重命名文件夹：空白名保持原名（视为取消） */
+export function renameFolder(layout: HomeLayout, id: string, name: string): HomeLayout {
+  const f = layout.folders[id];
+  if (!f) return layout;
+  const trimmed = name.trim();
+  if (!trimmed || trimmed === f.name) return layout;
+  return { ...layout, folders: { ...layout.folders, [id]: { ...f, name: trimmed } } };
 }
 
 /** 移除页面槽位：文件夹删除时内部应用散落到最后一页 */

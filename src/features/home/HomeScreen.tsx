@@ -14,9 +14,11 @@ import {
   Monogram,
 } from './AppIcon';
 import { HomeWidget } from './HomeWidget';
+import FloatingAgent from './FloatingAgent';
 import { usePluginList } from '@/features/plugins/registry';
 import {
   addWidget,
+  mergeDrop,
   mergeIntoFolder,
   moveAcrossPages,
   moveToDock,
@@ -29,6 +31,7 @@ import {
   reorder,
   removeFromDock,
   removeFromPage,
+  renameFolder,
   resolveWallpaper,
   TASKBAR_H_PX,
   WIDGET_TYPES,
@@ -129,7 +132,7 @@ export default function HomeScreen() {
     if (!d) return;
     const target = hitTest(x, y);
     if (!target) return;
-    commit(applyDrop(layout, d, target, hoverKeyRefToBool(hoverKey, target)));
+    commit(applyDrop(layout, d, target));
   };
 
   const onPointerMoveDoc = useCallback((e: PointerEvent) => {
@@ -283,8 +286,39 @@ export default function HomeScreen() {
   const removeSlot = (page: number, idx: number) => commit(removeFromPage(layout, page, idx));
   const removeDock = (idx: number) => commit(removeFromDock(layout, idx));
 
+  // ===== 文件夹 =====
+  const [folderNameDraft, setFolderNameDraft] = useState('');
+
+  const openFolderById = (id: string) => {
+    setOpenFolder(id);
+    setFolderNameDraft(layout.folders[id]?.name ?? '');
+  };
+
+  /** 标题失焦/回车提交重命名（空白名视为取消）；无实际变更不置 customized */
+  const commitFolderRename = () => {
+    if (!openFolder) return;
+    const next = renameFolder(layout, openFolder, folderNameDraft);
+    if (next !== layout) commit(next);
+    setFolderNameDraft(next.folders[openFolder]?.name ?? folderNameDraft);
+  };
+
   const cycleWallpaper = () => {
     commit({ ...layout, wallpaper: nextWallpaperId(layout.wallpaper) });
+  };
+
+  // iOS 范式：编辑模式点空白处退出编辑。用 pointerdown 落点区分「真点空白」
+  // 与「拖拽图标后松手经过空白」（后者 click 会冒泡到页面，但落点在图标上，不退出）。
+  // stopPropagation 不能省：页面/dock 的 pointerdown 若冒泡到外层容器，
+  // 会被容器的「target≠currentTarget」判定覆盖回 false，点击退出就失效了
+  const bgDownRef = useRef(false);
+  const emptyBgProps = {
+    onPointerDown: (e: React.PointerEvent) => {
+      bgDownRef.current = e.target === e.currentTarget;
+      e.stopPropagation();
+    },
+    onClick: (e: React.MouseEvent) => {
+      if (edit && bgDownRef.current && e.target === e.currentTarget) setEdit(false);
+    },
   };
 
   // ===== 渲染 =====
@@ -316,13 +350,14 @@ export default function HomeScreen() {
           height: takeover ? `calc(100% - ${TASKBAR_H_PX}px)` : '100%',
           background: wallpaper.css,
         }}
+        {...emptyBgProps}
       >
       {/* 图片壁纸层（渐变壁纸不渲染；自定义图片经 asset protocol） */}
       <WallpaperLayer wallpaper={wallpaper} />
 
       {/* 顶部状态栏：时间 | 搜索 | 编辑/壁纸/退出 */}
       <header className="absolute inset-x-0 top-0 z-20 flex items-center gap-3 px-6 pt-4">
-        <div className="w-32 text-left">
+        <div className="w-32 shrink-0 text-left">
           <div className="text-[15px] font-semibold tabular-nums [text-shadow:0_1px_4px_rgba(0,0,0,.4)]">
             {now.time}
           </div>
@@ -331,7 +366,7 @@ export default function HomeScreen() {
           </div>
         </div>
 
-        <div className="relative mx-auto w-[min(380px,42vw)]">
+        <div className="relative mx-auto w-[min(380px,42vw)] min-w-0 shrink">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/60" />
           <input
             value={query}
@@ -349,7 +384,7 @@ export default function HomeScreen() {
           )}
         </div>
 
-        <div className="flex w-32 items-center justify-end gap-1.5">
+        <div className="flex shrink-0 items-center justify-end gap-1.5">
           {edit && (
             <IconBtn title={t('home.action.cycleWallpaper')} onClick={cycleWallpaper}>
               <Palette size={15} />
@@ -399,7 +434,7 @@ export default function HomeScreen() {
             {edit ? <Check size={15} /> : <span className="text-[11px]">{t('home.action.arrange')}</span>}
           </IconBtn>
           {!edit && (
-            <IconBtn title={t('home.action.backToDesktop')} onClick={() => navigate('/desktop')}>
+            <IconBtn title={t('home.action.backToDesktop')} onClick={() => navigate('/')}>
               <span className="text-[11px]">{t('home.nav.desktop')}</span>
             </IconBtn>
           )}
@@ -444,6 +479,7 @@ export default function HomeScreen() {
             <div
               key={pi}
               className="home-page grid h-full w-full shrink-0 snap-center grid-cols-7 auto-rows-min content-start justify-items-center gap-y-6 px-10"
+              {...emptyBgProps}
             >
               {page.map((item, idx) => {
                 const key = `p:${pi}:${idx}`;
@@ -495,7 +531,7 @@ export default function HomeScreen() {
                         dragging={isDragSource}
                         onRemove={edit ? () => removeSlot(pi, idx) : undefined}
                         onPointerDown={iconPointerDown('page', pi, idx)}
-                        onClick={() => !edit && setOpenFolder(id)}
+                        onClick={() => !edit && openFolderById(id)}
                       />
                     </div>
                   );
@@ -551,6 +587,7 @@ export default function HomeScreen() {
         <div
           className="ios-dock flex items-center gap-4 rounded-[28px] px-5 py-3"
           onDragOver={(e) => e.preventDefault()}
+          {...emptyBgProps}
         >
           {layout.dock.map((key, idx) => {
             const a = appByKey.get(key);
@@ -593,9 +630,16 @@ export default function HomeScreen() {
             className="ios-folder-panel flex max-h-[68vh] w-[min(640px,80vw)] flex-col gap-5 rounded-[40px] px-8 py-7"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-center text-[17px] font-semibold [text-shadow:0_1px_4px_rgba(0,0,0,.4)]">
-              {folder.name}
-            </h2>
+            <input
+              value={folderNameDraft}
+              onChange={(e) => setFolderNameDraft(e.target.value)}
+              onBlur={commitFolderRename}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur();
+              }}
+              aria-label={t('home.action.renameFolder')}
+              className="mx-auto block w-full max-w-[320px] rounded-lg bg-transparent px-2 py-0.5 text-center text-[17px] font-semibold [text-shadow:0_1px_4px_rgba(0,0,0,.4)] outline-none transition-colors focus:bg-white/15"
+            />
             <div className="grid grid-cols-6 justify-items-center gap-y-5 overflow-y-auto">
               {folder.apps.map((key) => {
                 const a = appByKey.get(key);
@@ -639,6 +683,9 @@ export default function HomeScreen() {
           )}
         </div>
       )}
+
+      {/* AI 整理悬浮球：文件夹/搜索浮层打开时让位隐藏 */}
+      <FloatingAgent hidden={!!folder || !!q} />
       </div>
     </div>
   );
@@ -649,9 +696,13 @@ export default function HomeScreen() {
   }
 }
 
-/** pointerup 落点提交（普通重排 / 跨容器移动） */
-function applyDrop(layout: HomeLayout, d: DragState, target: string, _hint: boolean): HomeLayout {
+/** pointerup 落点提交：应用落到应用/文件夹上 → 松手合并（iOS 范式）；其余重排/跨容器移动 */
+function applyDrop(layout: HomeLayout, d: DragState, target: string): HomeLayout {
   const [tKind, tPage, tIdx] = parseCellKey(target);
+  if (tKind === 'page') {
+    const merged = mergeDrop(layout, { kind: d.kind, page: d.page, idx: d.idx }, tPage, tIdx);
+    if (merged) return merged;
+  }
   if (tKind === 'dock') {
     if (d.kind === 'page') return moveToDock(layout, d.page, d.idx);
     if (d.kind === 'dock' && tIdx !== d.idx) {
@@ -683,10 +734,6 @@ function applyMerge(layout: HomeLayout, d: DragState, target: string): HomeLayou
 function parseCellKey(key: string): ['page' | 'dock', number, number] {
   const [k, p, i] = key.split(':');
   return [k === 'd' ? 'dock' : 'page', Number(p), Number(i)];
-}
-
-function hoverKeyRefToBool(_hoverKey: string | null, target: string) {
-  return _hoverKey === target;
 }
 
 function DragGhost({
@@ -743,7 +790,7 @@ function IconBtn({
     <button
       title={title}
       onClick={onClick}
-      className="grid h-8 min-w-8 place-items-center rounded-full bg-white/18 px-2 text-white/90 backdrop-blur-md ring-1 ring-white/15 transition-colors hover:bg-white/28 ios-ease"
+      className="grid h-8 min-w-8 place-items-center rounded-full bg-white/18 px-3.5 text-white/90 backdrop-blur-md ring-1 ring-white/15 transition-colors hover:bg-white/28 ios-ease"
     >
       {children}
     </button>

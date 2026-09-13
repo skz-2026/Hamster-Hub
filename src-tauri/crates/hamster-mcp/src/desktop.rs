@@ -101,8 +101,8 @@ pub fn app_search(conn: &Connection, query: &str, limit: i64) -> Result<Vec<AppH
     Ok(hits)
 }
 
-/// 按 app_key 启动应用：查 exec_target → ShellExecute；写入 usage_log
-/// 保持主界面「常用组」与 agent 启动同源。
+/// 按 app_key 启动应用：查 exec_target → 已运行则激活现有窗口，否则 ShellExecute；
+/// 写入 usage_log。保持主界面「常用组」与 agent 启动同源。
 pub fn app_launch(conn: &Connection, app_key: &str) -> Result<String, HamsterError> {
     let target: Option<String> = conn
         .query_row(
@@ -118,6 +118,14 @@ pub fn app_launch(conn: &Connection, app_key: &str) -> Result<String, HamsterErr
     let Some(target) = target else {
         return Err(HamsterError::not_found(format!("应用 {app_key}（未索引）")));
     };
+    // 已运行则激活现有窗口（浏览器等单进程多窗应用，重复 shell_open 会再开新窗）
+    if hamster_platform::shell::activate_running(Path::new(&target)) {
+        let _ = conn.execute(
+            "INSERT INTO usage_log(target_key, target_kind, at) VALUES (?1, 'app', unixepoch())",
+            params![app_key],
+        );
+        return Ok(target);
+    }
     if !hamster_platform::shell::shell_open(Path::new(&target)) {
         return Err(HamsterError::Other(format!("启动失败：{target}")));
     }

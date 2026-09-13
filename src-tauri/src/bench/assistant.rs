@@ -5,11 +5,11 @@
 //! 2. 注入 hamster-desktop MCP server：**统一 HTTP 形态**（用户决策：HTTP 是
 //!    MCP 规范传输，与具体 agent 无关）——claude 走 `--mcp-config` 内联 JSON，
 //!    ACP 走 session/new 的 mcpServers（runtime 透传）；server 本体随主进程
-//!    常驻（mcp_server.rs：127.0.0.1 + 每会话 Bearer 令牌）；
+//!    常驻（mcp_server.rs：127.0.0.1，无鉴权 + Origin 防 drive-by）；
 //! 3. persona：claude 走 `--append-system-prompt`，其它方言回退为首条 prompt 前缀；
 //! 4. computer use 受 settings.agent.computer_use_enabled 门控（默认关，
 //!    McpHub::set_cu_allowed 运行时联动）；全部工具调用经审计留证；
-//! 5. 急停 = 吊销会话令牌（bench_stream_kill 时自动执行，调用立即 401）。
+//! 5. 急停 = bench_stream_kill 杀会话进程（进程终止后工具调用自然停止）。
 
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -282,6 +282,9 @@ pub struct AssistantCreateArgs {
     pub effort: Option<String>,
     /// 指定代理；缺省按 设置默认 → claude → zcode → 首个已装 顺序解析
     pub agent_id: Option<String>,
+    /// 恢复记忆：传入上一次会话的 rollout 键（codex thread/resume、claude
+    /// --resume），MCP 注入照常生效；进程仍存活时按幂等裁决直接重挂
+    pub resume_key: Option<String>,
 }
 
 /// 桌面助手会话信息（返回给前端；附注入摘要便于调试与展示）
@@ -458,6 +461,11 @@ pub fn bench_assistant_create(
     // 统一 HTTP 形态注入：claude = spawn flag（内联 JSON）；其它 = ACP mcpServers
     // （运行时透传 session/new）+ persona 前缀回退。Bash 等宿主工具不在
     // allowedTools 内，headless 自动拒绝。
+    // resume（恢复记忆）时跳过 persona 前缀——线程历史里已有人设，重复注入是噪音。
+    let resume_key = args
+        .resume_key
+        .map(|k| k.trim().to_string())
+        .filter(|k| !k.is_empty());
     let url = hub.url();
     let (extra_args, mcp_servers, first_prompt) =
         if channel.dialect == hamster_core::ProtocolDialect::ClaudeStream {
@@ -471,7 +479,13 @@ pub fn bench_assistant_create(
             (
                 Vec::new(),
                 vec![acp_http_entry(&url, &token)],
-                args.first_prompt.map(|p| prompt_with_persona(&persona, &p)),
+                args.first_prompt.map(|p| {
+                    if resume_key.is_some() {
+                        p
+                    } else {
+                        prompt_with_persona(&persona, &p)
+                    }
+                }),
             )
         };
 
@@ -486,7 +500,7 @@ pub fn bench_assistant_create(
         extra_args,
         model,
         effort,
-        None,
+        resume_key,
         false,
         first_prompt,
         mcp_servers,

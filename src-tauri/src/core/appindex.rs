@@ -40,6 +40,15 @@ fn start_menu_dirs() -> Vec<PathBuf> {
     dirs
 }
 
+/// 同名/同路径去重：app_key（全路径小写）或 display_name（ASCII 大小写不敏感）
+/// 任一重复即视为同一应用。ProgramData（系统级）先扫先留，用户 AppData 与
+/// 子目录里的重复快捷方式（同一应用装了两份 .lnk）不再生成重复图标。
+fn is_dup(entries: &[AppEntry], entry: &AppEntry) -> bool {
+    entries.iter().any(|e| {
+        e.app_key == entry.app_key || e.display_name.eq_ignore_ascii_case(&entry.display_name)
+    })
+}
+
 /// 扫描并重建 app_meta（含图标缓存提取）
 pub fn scan_and_rebuild(conn: &Connection, icons_dir: &Path) -> Result<usize, AppError> {
     let mut entries: Vec<AppEntry> = Vec::new();
@@ -65,8 +74,7 @@ pub fn scan_and_rebuild(conn: &Connection, icons_dir: &Path) -> Result<usize, Ap
                 continue;
             }
             if let Some(entry) = build_entry(path, stem, icons_dir) {
-                // 同名去重：保留 ProgramData（系统级）优先出现的
-                if !entries.iter().any(|e| e.app_key == entry.app_key) {
+                if !is_dup(&entries, &entry) {
                     entries.push(entry);
                 }
             }
@@ -258,6 +266,33 @@ mod tests {
         assert!(is_skippable("微信卸载程序"));
         assert!(!is_skippable("微信"));
         assert!(!is_skippable("Visual Studio Code"));
+    }
+
+    #[test]
+    fn dedup_same_path_or_name() {
+        let mk = |key: &str, name: &str| AppEntry {
+            app_key: key.into(),
+            display_name: name.into(),
+            exec_target: format!("{key}.lnk"),
+            kind: "lnk".into(),
+            icon_path: None,
+        };
+        let entries = vec![mk("c:/pd/programs/firefox.lnk", "Firefox")];
+        // 同路径（重复扫描）与同名（系统级/用户级各一份 .lnk）都算重复
+        assert!(is_dup(
+            &entries,
+            &mk("c:/pd/programs/firefox.lnk", "Firefox")
+        ));
+        assert!(is_dup(
+            &entries,
+            &mk("c:/user/programs/firefox.lnk", "Firefox")
+        ));
+        assert!(is_dup(
+            &entries,
+            &mk("c:/user/programs/firefox.lnk", "FIREFOX")
+        ));
+        // 不同名不同路径才是新应用
+        assert!(!is_dup(&entries, &mk("c:/pd/programs/steam.lnk", "Steam")));
     }
 
     #[test]

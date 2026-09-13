@@ -33,3 +33,6 @@ playwright-report/
 .reg*.mjs
 .tray-verify.mjs
 *.tmp.mjs
+
+# 本地主屏布局调试导出
+/.layout-*.json

@@ -24,6 +24,19 @@ export const home: Record<keyof typeof homeZh, string> = {
   'home.nav.exit': '結束',
   'home.action.remove': '移除',
   'home.action.deleteFolder': '刪除資料夾',
+  'home.action.renameFolder': '重新命名資料夾',
+
+  // ===== 主屏：AI 整理懸浮球 =====
+  'home.ball.title': 'AI 整理助手',
+  'home.ball.placeholder': '下個指令，如「依用途分組建資料夾」',
+  'home.ball.send': '傳送',
+  'home.ball.stop': '停止',
+  'home.ball.collapse': '收起',
+  'home.ball.done': '已完成，主畫面已按最新版面重新整理',
+  'home.ball.again': '新指令',
+  'home.ball.goConfig': '去設定 Agent',
+  'home.ball.newChat': '重設對話',
+  'home.ball.restored': '已恢復上次對話，可繼續追問',
 
   // ===== 主屏：小工具類型標籤（顯式映射，禁止拼 key） =====
   'home.widget.clock': '時鐘',
@@ -81,7 +94,7 @@ export const home: Record<keyof typeof homeZh, string> = {
   'home.cc.settings': '設定',
   'home.cc.exitTakeover': '結束接管',
 
-  // ===== 待辦：截止 / 循環 / 提醒（TodoItem / DueEditor / ReminderToast / due.ts） =====
+  // ===== 待辦：截止 / 循環 / 提醒（TodoItem / DueEditor / ReminderDialog / due.ts） =====
   'home.todo.recur.daily': '每天',
   'home.todo.recur.weekly': '每週',
   'home.todo.recur.monthly': '每月',
@@ -100,6 +113,8 @@ export const home: Record<keyof typeof homeZh, string> = {
   'home.todo.save': '儲存',
   'home.reminder.title': '待辦提醒',
   'home.reminder.ok': '知道了',
+  'home.reminder.done': '完成待辦',
+  'home.reminder.more': '還有 {n} 條到期代辦',
   'home.due.today': '今天',
   'home.due.tomorrow': '明天',
   'home.due.yesterday': '昨天',

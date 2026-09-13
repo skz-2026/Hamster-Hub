@@ -15,6 +15,8 @@
   --text: #f4f0ea;
   --text-muted: #a79e96;
   --hover: rgba(255, 255, 255, 0.07);
+  /* 实色表面 hover：比 --panel-strong 再亮一档（light 下反向压暗） */
+  --hover-strong: rgba(255, 255, 255, 0.18);
   /* 弹层/大卡片的实体表面（不透光，保证任意底色上可读） */
   --popover: #26242b;
 }
@@ -27,6 +29,7 @@
   --text: #2a2521;
   --text-muted: #8b8178;
   --hover: rgba(28, 26, 32, 0.05);
+  --hover-strong: rgba(28, 26, 32, 0.08);
   --popover: #ffffff;
 }
 
@@ -39,6 +42,7 @@
   --text: #efead8;
   --text-muted: #8f96bb;
   --hover: rgba(255, 255, 255, 0.08);
+  --hover-strong: rgba(255, 255, 255, 0.14);
   --popover: #262b4a;
 }
 
@@ -242,6 +246,23 @@ body {
 .bench-md table { border-collapse: collapse; margin: 0.5em 0; font-size: 0.95em; }
 .bench-md th, .bench-md td { border: 1px solid var(--border); padding: 0.25em 0.7em; }
 .bench-md hr { border: 0; border-top: 1px solid var(--border); margin: 0.7em 0; }
+
+/* ===== 桌面接管子页壁纸 backdrop（AppShell）：高斯模糊 + 主题纱罩 ===== */
+/* 模糊向外扩 12px 容器 + scale，避免 blur 边缘采样到透明出现白晕 */
+.desktop-backdrop img {
+  filter: blur(44px) saturate(1.25);
+  transform: scale(1.12);
+}
+/* 纱罩保 --text/--panel 对比度：深色主题压暗，light 蒙一层暖纸色 */
+.desktop-backdrop-veil {
+  background: rgba(23, 21, 27, 0.45);
+}
+:root[data-theme='light'] .desktop-backdrop-veil {
+  background: rgba(250, 246, 240, 0.6);
+}
+:root[data-theme='pixel'] .desktop-backdrop-veil {
+  background: rgba(26, 28, 44, 0.55);
+}
 
 /* ===== 像素主题（data-theme='pixel'）：复古游戏机质感 ===== */
 /* 全局直角：覆盖 Tailwind 圆角工具类与 .squircle（:root[data-theme] 的特异性高于单类） */

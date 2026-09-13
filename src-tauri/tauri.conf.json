@@ -63,6 +63,7 @@
     "targets": [
       "nsis"
     ],
+    "createUpdaterArtifacts": true,
     "resources": {
       "resources/hamster-watchdog.exe": "hamster-watchdog.exe"
     },
@@ -79,6 +80,17 @@
           "SimpChinese"
         ],
         "displayLanguageSelector": false
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc0MzZEMDk3NkFBMzYzMDUKUldRRlk2TnFsOUEyZElmd2h2bklFMHpFMDI1SjVpVG9vR2ZhOVg3WUtPQS9Zd2p6amFTNkszZ1UK",
+      "endpoints": [
+        "https://github.com/skz-2026/Hamster-Hub/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "quiet"
       }
     }
   }

@@ -82,7 +82,7 @@
 - **computer use 安全设计（红线，先过安全再放开能力）**：默认关闭、显式开启（设置页开关经 McpHub::set_cu_allowed 即时生效）；操作全程审计 + 截图留证；急停 = 会话结束自动吊销 Bearer 令牌（在途调用立即 401）；操作期 UI 宣告；优先结构化路径（自家 IPC 工具 → CDP/UIA → 坐标点击兜底）。HTTP 承载安全：仅绑 127.0.0.1 + 每会话随机令牌（Authorization 头 / `?token=` 双通道）。桌面接管形态下风险放大——系统任务栏已隐藏，误操作更难自救，急停与宣告为必须项。
 - 验收口径：真机走通「Spotlight 一句话 → agent 调 MCP 工具 → 桌面实际变化」端到端链路；computer use 走通「agent 截图看屏 → 点击原生弹窗/第三方应用 → 实际生效」。
 
-### 3.5 桌面接管与状态恢复（iOS 桌面模式的地基，竞品方案实证）
+### 3.5 桌面接管与状态恢复（iOS 桌面模式的地基）
 
 进入「桌面模式」时依次执行，退出/崩溃时反向还原：
 
@@ -91,9 +91,9 @@
 | 1. 状态快照 | 写 `system-state-recovery.json`：任务栏窗口 hwnd / ex_style / appbar_state / 分层属性、桌面图标可见性注册表值 | 快照先行，任何后续操作失败都按快照回滚 |
 | 2. 隐藏任务栏 | 对 Shell_TrayWnd / Shell_SecondaryTrayWnd：去 WS_EX_TOPMOST + `SHAppBarMessage(ABM_SETSTATE, ABS_AUTOHIDE)` + 移出工作区边缘（SetWindowPos） | Win11 与 Win10 行为差异大，需分别适配与回归 |
 | 3. 隐藏桌面图标 | 注册表 `HKCU\...\Explorer\Advanced\HideIcons=1` + `SHChangeNotify` 广播；保留原始值用于还原 | 或 FOLDERFLAGS 路线，实测取舍 |
-| 4. 主屏幕层 | 全屏无边框窗口置于 WorkerW 之下（`SetParent` 到 Progman/WorkerW）或 always-on-bottom 全屏窗 | 竞品采用「隐藏图标 + 全屏底层窗」方案（实测其桌面层窗口接管全屏点击），我们默认同路线，WorkerW 为备选 |
-| 5. 看门狗进程 | 独立小 exe（`hamster-watchdog.exe`）：心跳监测主进程，主进程死亡且未正常还原时按快照恢复任务栏/图标并弹引导 | 参考竞品 `capybara-system-state-watchdog.exe`（714KB）实证该方案必要 |
-| 6. 卸载清理 | NSIS 卸载脚本 + 竞品同款 `clean` 工具兜底：删除自启项、还原注册表、清理数据目录（可选保留） | 「卸载无残留」写进验收 |
+| 4. 主屏幕层 | 全屏无边框窗口置于 WorkerW 之下（`SetParent` 到 Progman/WorkerW）或 always-on-bottom 全屏窗 | 「隐藏图标 + 全屏底层窗」是业界已验证的成熟路线，我们默认同路线，WorkerW 为备选 |
+| 5. 看门狗进程 | 独立小 exe（`hamster-watchdog.exe`）：心跳监测主进程，主进程死亡且未正常还原时按快照恢复任务栏/图标并弹引导 | 接管类产品的必要性保障：主进程崩溃不能留下「任务栏消失」的桌面 |
+| 6. 卸载清理 | NSIS 卸载脚本 + 附带 `clean` 清理工具兜底：删除自启项、还原注册表、清理数据目录（可选保留） | 「卸载无残留」写进验收 |
 
 **还原测试矩阵（每版本必过）**：正常退出 / 主进程被杀 / 看门狗被杀（双双阵亡时下次开机自检还原）/ 断电重启 / 资源管理器重启（explorer.exe 崩溃会重建任务栏，需重隐藏并保持快照一致）。
 
@@ -106,9 +106,22 @@
 - **Spotlight/控制中心**：独立覆盖层窗口（透明全屏），热键/热区触发，失焦即隐。
 - **壁纸**：主屏窗口直接渲染（图片/纯色/渐变），不用系统壁纸（避免与 DWM 壁纸切换竞态）。
 
-### 3.7 自更新
+### 3.7 自更新 ✅ 已落地（2026-09-13，GitHub Releases 单源，fallback 后议）
 
-- `tauri-plugin-updater` + GitHub Releases 作为更新源；构建产物签名（minisign），M2 前购置代码签名证书（杀软误报对桌面接管类应用是致命项）。
+- `tauri-plugin-updater`（纯 Rust 命令，不引入 JS 插件，capabilities 零新增）+ GitHub Releases `latest.json` 端点：
+  `https://github.com/skz-2026/Hamster-Hub/releases/latest/download/latest.json`。
+- 命令/事件：`update_check`（None=已最新）与 `update_install`（下载进度经 `UpdateProgress` 事件 ~100ms 节流推送；
+  完成后 NSIS 静默安装器（installMode=quiet）接管并退出应用）；UI 在设置 → 系统「软件更新」，
+  附「打开发布页」手动下载兜底（国内直连 GitHub 慢/失败场景）。
+- **签名与密钥边界（仓库未来转 public，此条是红线）**：minisign 公钥在 tauri.conf.json（本就公开）；
+  私钥只存本机 `~/.tauri/hamsterhub-updater.key`（无密码）**永不入库**，CI 从 repo secrets
+  `TAURI_SIGNING_PRIVATE_KEY`/`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`（留空）注入 release.yml。
+  私钥丢失 = 已发布版本无法再自更新，只能换公钥重发。
+- 发布流程生效点：tauri-action 构建时因 `bundle.createUpdaterArtifacts: true` 产出 `.nsis.zip + .sig` 并生成
+  `latest.json` 上传 Draft Release；**publish 后**端点才解析到资产（Draft 状态下检查 404 属预期）。
+- 本地 `pnpm tauri build` 会因 createUpdaterArtifacts 要求签名环境：
+  PowerShell `setx TAURI_SIGNING_PRIVATE_KEY_PATH "$env:USERPROFILE\.tauri\hamsterhub-updater.key"`（重开终端生效）。
+- 代码签名证书（杀软误报）仍按计划 M3 购置，与本签名体系互不影响。
 
 ## 4. 阶段技术路线（与产品里程碑对齐）
 
@@ -171,7 +184,7 @@
 - 代码质量：Rust `cargo fmt + clippy -D warnings`；TS ESLint + Prettier；CI 强制。
 - 版本：SemVer，`v0.x.y`；DB 迁移只增不改，破坏性变更写迁移与回滚说明。
 - 依赖治理：每月 `cargo audit` + `pnpm audit`；新增依赖需在 PR 说明理由；锁定 lockfile。
-- 发布流程：tag → CI 构建（NSIS+portable）→ 签名 → Draft Release → 冒烟清单 → publish。
+- 发布流程：tag → CI 构建（NSIS+portable）+ 更新包签名（latest.json）→ Draft Release → 冒烟清单 → publish（publish 后自更新端点生效）。
 
 ## 7. 开发环境
 

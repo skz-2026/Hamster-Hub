@@ -40,11 +40,15 @@ pub fn settings_save(
             .map_err(|e| AppError::poison(e.to_string()))?;
         repo::load(&conn)?.agent.mcp_user_token
     };
-    let conn = state
-        .db
-        .lock()
-        .map_err(|e| AppError::poison(e.to_string()))?;
-    let saved = repo::save(&conn, &settings)?;
+    // db 锁必须在 refresh_tray_menu 前释放：build_tray_menu 会重新 lock 读语言设置，
+    // 而同步命令跑在主线程，嵌套加锁 = 同线程死锁（窗口表现为永久「未响应」）
+    let saved = {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|e| AppError::poison(e.to_string()))?;
+        repo::save(&conn, &settings)?
+    };
     // computer use 档位即时生效（内嵌 server 红利：无需重启助手会话）
     hub.set_cu_allowed(saved.agent.computer_use_enabled);
     // 用户令牌轮换：旧令牌立即失效，新令牌即刻可用（外部配置需同步更新）

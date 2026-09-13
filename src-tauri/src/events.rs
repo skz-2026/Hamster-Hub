@@ -67,3 +67,21 @@ pub struct FocusTick {
 pub struct FocusFinished {
     pub kind: String,
 }
+
+// ===== 应用自更新（commands::updater 下载安装进度）=====
+
+/// 更新下载进度（done=true 表示安装包已就绪，应用即将退出交由安装器接管）
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type, tauri_specta::Event)]
+pub struct UpdateProgress {
+    pub downloaded: u64,
+    pub total: Option<u64>,
+    pub done: bool,
+}
+
+// ===== 密码箱（闲置自动锁看门狗 → 前端锁屏覆盖层）=====
+
+/// 密码箱已锁定（reason: manual | idle）
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type, tauri_specta::Event)]
+pub struct VaultLocked {
+    pub reason: String,
+}

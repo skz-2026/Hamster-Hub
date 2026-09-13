@@ -6,5 +6,6 @@ import { agent } from './agent';
 import { bench } from './bench';
 import { home } from './home';
 import { pages } from './pages';
+import { vault } from './vault';
 
-export const en: Record<keyof typeof zhCN, string> = { ...chrome, ...settings, ...agent, ...bench, ...home, ...pages };
+export const en: Record<keyof typeof zhCN, string> = { ...chrome, ...settings, ...agent, ...bench, ...home, ...pages, ...vault };

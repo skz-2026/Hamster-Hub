@@ -26,6 +26,19 @@ export const home = {
   'home.nav.exit': '退出',
   'home.action.remove': '移除',
   'home.action.deleteFolder': '删除文件夹',
+  'home.action.renameFolder': '重命名文件夹',
+
+  // ===== 主屏：AI 整理悬浮球 =====
+  'home.ball.title': 'AI 整理助手',
+  'home.ball.placeholder': '下个指令，如「按用途分组建文件夹」',
+  'home.ball.send': '发送',
+  'home.ball.stop': '停止',
+  'home.ball.collapse': '收起',
+  'home.ball.done': '已完成，主屏已按最新布局刷新',
+  'home.ball.again': '新指令',
+  'home.ball.goConfig': '去配置 Agent',
+  'home.ball.newChat': '重置对话',
+  'home.ball.restored': '已恢复上次对话，可继续追问',
 
   // ===== 主屏：小组件类型标签（显式映射，禁止拼 key） =====
   'home.widget.clock': '时钟',
@@ -83,7 +96,7 @@ export const home = {
   'home.cc.settings': '设置',
   'home.cc.exitTakeover': '退出接管',
 
-  // ===== 待办：截止 / 循环 / 提醒（TodoItem / DueEditor / ReminderToast / due.ts） =====
+  // ===== 待办：截止 / 循环 / 提醒（TodoItem / DueEditor / ReminderDialog / due.ts） =====
   'home.todo.recur.daily': '每天',
   'home.todo.recur.weekly': '每周',
   'home.todo.recur.monthly': '每月',
@@ -102,6 +115,8 @@ export const home = {
   'home.todo.save': '保存',
   'home.reminder.title': '待办提醒',
   'home.reminder.ok': '知道了',
+  'home.reminder.done': '完成待办',
+  'home.reminder.more': '还有 {n} 条到期待办',
   'home.due.today': '今天',
   'home.due.tomorrow': '明天',
   'home.due.yesterday': '昨天',

@@ -4,3 +4,4 @@ pub mod focus;
 pub mod note;
 pub mod settings;
 pub mod todo;
+pub mod vault;

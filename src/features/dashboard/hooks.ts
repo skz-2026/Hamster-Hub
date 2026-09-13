@@ -1,5 +1,7 @@
+import { useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { commands, isTauri, type CountdownItem, type FileHit, type WeatherNow, type AppEntry } from '@/shared/lib/ipc';
+import { normalizeLayout, type DashboardLayout, type TileSpec } from './layout';
 
 export function useWeather() {
   return useQuery({
@@ -66,6 +68,44 @@ export function useKillProcess() {
     mutationFn: (pid: number) => commands.processKill(pid),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['sys'] }),
   });
+}
+
+const DASH_LAYOUT_KEY = 'dashboard.layout';
+
+/**
+ * 首页编排布局：同 useHomeLayout 范式——Query 缓存为单一事实源 + 防抖持久化。
+ * 首页只在主窗口渲染，无需跨窗口同步（home 是主窗口+任务栏两处用才要）。
+ */
+export function useDashboardLayout() {
+  const qc = useQueryClient();
+  const { data: stored } = useQuery({
+    queryKey: ['dashboard', 'layout'],
+    queryFn: async () => {
+      const raw = await commands.kvGet(DASH_LAYOUT_KEY);
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw) as DashboardLayout;
+      } catch {
+        return null;
+      }
+    },
+    staleTime: Infinity,
+  });
+
+  const save = useMutation({
+    mutationFn: (l: DashboardLayout) => commands.kvSet(DASH_LAYOUT_KEY, JSON.stringify(l)),
+  });
+
+  const timer = useRef<number | undefined>(undefined);
+  const commit = (tiles: TileSpec[]) => {
+    const next: DashboardLayout = { tiles, customized: true };
+    qc.setQueryData(['dashboard', 'layout'], next);
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => save.mutate(next), 500);
+  };
+
+  const layout = normalizeLayout(stored ?? null);
+  return { layout, commit, ready: stored !== undefined };
 }
 
 export type { WeatherNow, CountdownItem, FileHit, AppEntry };

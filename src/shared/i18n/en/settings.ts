@@ -33,7 +33,7 @@ export const settings: Record<keyof typeof settingsZh, string> = {
   'settings.desktopMode.backToHome': 'Back to desktop home',
   'settings.desktopMode.enter': 'Enter desktop mode',
   'settings.desktopMode.launch.label': 'Launch into Desktop Mode',
-  'settings.desktopMode.launch.desc': 'Start HamsterHub straight into fullscreen (aligned with CapybaraHub; takes effect after restart)',
+  'settings.desktopMode.launch.desc': 'Start HamsterHub straight into fullscreen (takes effect after restart)',
   'settings.desktopMode.hotkey.label': 'Desktop Mode hotkey',
   'settings.desktopMode.hotkey.desc': 'Enter/leave the iOS-style home screen (takes effect after restart; also available from the tray menu)',
   'settings.desktopMode.hotkey.placeholder': 'e.g. Ctrl+Alt+D',
@@ -49,7 +49,21 @@ export const settings: Record<keyof typeof settingsZh, string> = {
   'settings.autostart.desc': 'Start with Windows and minimize to tray',
   'settings.about.label': 'About',
   'settings.about.desc': 'HamsterHub {version} · Local-first, data never leaves this machine',
-  'settings.about.feedback': 'Feedback & updates',
+  'settings.about.feedback': 'Feedback',
+
+  // Software update (GitHub Releases)
+  'settings.update.label': 'Software Update',
+  'settings.update.desc': 'Checks and installs new versions automatically via GitHub Releases',
+  'settings.update.check': 'Check for Updates',
+  'settings.update.checking': 'Checking for updates…',
+  'settings.update.upToDate': 'You are on the latest version',
+  'settings.update.available': 'New version v{version} available',
+  'settings.update.download': 'Download & Install',
+  'settings.update.downloading': 'Downloading {percent}%…',
+  'settings.update.installing': 'Installer ready — the app will exit and update itself',
+  'settings.update.error': 'Update failed: {message}',
+  'settings.update.releasePage': 'Open releases page',
+  'settings.update.releasePageHint': 'Manually download the installer if automatic download is slow or fails',
 
   // AI & assistant
   'settings.computerUse.label': 'Allow computer control (Computer Use)',

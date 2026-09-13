@@ -1,8 +1,9 @@
-//! 桌面模式：完全接管整个桌面（对齐水豚hub）——隐藏 Windows 任务栏与桌面图标，
+//! 桌面模式：完全接管整个桌面——隐藏 Windows 任务栏与桌面图标，
 //! 主窗口铺满「屏幕减去底部任务栏条」，底部由**独立置顶 taskbar 窗口**完全替代系统任务栏：
 //! 任务栏窗口 always-on-top，打开任何应用都不会遮挡它（持续渲染，和系统任务栏同语义）。
-//! 进入前落盘系统状态快照；正常退出按快照还原；主进程崩溃由 hamster-watchdog
-//! 凭快照兜底还原；进入期间每 5s 巡检，explorer 重启导致的任务栏复活会被重新隐藏。
+//! 启动/进入前对账残留快照（崩溃、断电、看门狗失守都可能留下隐藏态残留）；进入前落盘
+//! 系统状态快照；正常退出按快照还原；主进程崩溃由 hamster-watchdog 凭快照兜底还原；
+//! 进入期间每 2s 巡检，explorer 重启导致的任务栏复活会被重新隐藏。
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -65,6 +66,31 @@ fn expand_workarea(app: &tauri::AppHandle) {
     }
 }
 
+/// 启动对账：发现残留快照即无条件恢复并删除。上次会话若崩溃/断电/看门狗
+/// 失守，系统可能仍处于隐藏态；若不先恢复，enter() 会把该隐藏态拍成
+/// 「原始状态」存进新快照，退出时忠实还原到隐藏（副屏任务栏与桌面图标
+/// 永久消失，仅主任务栏有按类名兜底可救）。正常路径无快照文件，是纯检查。
+pub fn reconcile_stale_snapshot() {
+    let Some(path) = hamster_platform::snapshot::snapshot_path() else {
+        return;
+    };
+    if !path.exists() {
+        return;
+    }
+    eprintln!("[desktop_mode] 发现残留快照（上次会话未正常还原？），先恢复系统状态");
+    match hamster_platform::snapshot::read(&path) {
+        Some(snap) => hamster_platform::snapshot::restore(&snap),
+        None => {
+            // 快照损坏时无从得知原始状态：无差别恢复（可见桌面优于黑屏），
+            // 与 exit() 的无快照兜底同语义
+            eprintln!("[desktop_mode] 残留快照损坏，无差别恢复任务栏与桌面图标");
+            hamster_platform::taskbar::restore_all_by_class();
+            let _ = hamster_platform::desktop_icons::set_hide_icons(0);
+        }
+    }
+    hamster_platform::snapshot::remove(&path);
+}
+
 pub fn enter(app: &tauri::AppHandle) -> Result<(), crate::error::AppError> {
     eprintln!("[desktop_mode] enter() called, active={}", is_active());
     if is_active() {
@@ -73,6 +99,10 @@ pub fn enter(app: &tauri::AppHandle) -> Result<(), crate::error::AppError> {
     ACTIVE.store(true, Ordering::SeqCst);
 
     let pid = std::process::id();
+
+    // ⓪ 启动对账：清掉上次会话可能的残留，确保下面拍到的是系统真实
+    // 原始状态而非上一次接管的隐藏态（污染场景见 reconcile 注释）
+    reconcile_stale_snapshot();
 
     // ① 快照当前系统状态（任务栏可见性 + 桌面图标注册表值），崩溃兜底凭据
     if let Some(path) = hamster_platform::snapshot::snapshot_path() {
@@ -97,7 +127,7 @@ pub fn enter(app: &tauri::AppHandle) -> Result<(), crate::error::AppError> {
 
     // ③½ Win+D 守卫：接管期间吞掉系统「显示桌面」（否则全屏主窗被最小化，
     // 露出无图标无任务栏的黑屏），改为仓鼠版「显示桌面」——清开别的窗口、
-    // 仓鼠桌面主页回到眼前，接管保持不动（对齐水豚hub：仓鼠桌面就是桌面）
+    // 仓鼠桌面主页回到眼前，接管保持不动（仓鼠桌面就是桌面）
     {
         let guard_app = app.clone();
         hamster_platform::wind_guard::install(Box::new(move || {
@@ -218,11 +248,23 @@ fn watchdog_exe_path() -> Option<PathBuf> {
 
 fn spawn_watchdog(pid: u32) {
     match watchdog_exe_path() {
-        Some(p) => match std::process::Command::new(p).arg(pid.to_string()).spawn() {
-            // Child 句柄直接丢弃（不 kill 不 wait）：看门狗生命周期由快照文件驱动
-            Ok(_child) => eprintln!("[desktop_mode] watchdog started (main pid={pid})"),
-            Err(e) => eprintln!("[desktop_mode] 看门狗拉起失败: {e}"),
-        },
+        Some(p) => {
+            let mut cmd = std::process::Command::new(p);
+            cmd.arg(pid.to_string());
+            // 看门狗是控制台子系统程序：发布版主进程是 GUI 子系统（无控制台），
+            // 直接拉起会给它新分配一个控制台窗口（用户看到黑框）。CREATE_NO_WINDOW
+            // 压住——看门狗日志本就写 watchdog.log，不依赖控制台。
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+            }
+            match cmd.spawn() {
+                // Child 句柄直接丢弃（不 kill 不 wait）：看门狗生命周期由快照文件驱动
+                Ok(_child) => eprintln!("[desktop_mode] watchdog started (main pid={pid})"),
+                Err(e) => eprintln!("[desktop_mode] 看门狗拉起失败: {e}"),
+            }
+        }
         None => {
             eprintln!("[desktop_mode] 未找到 hamster-watchdog.exe，跳过看门狗（崩溃兜底不可用）")
         }
@@ -243,7 +285,7 @@ fn settle_workarea(app: &tauri::AppHandle) {
 ///
 /// 注意不能用 set_position/set_size 手摆「屏幕减 dock」矩形：无边框**可缩放**
 /// 窗口自带 ~8px 隐形缩放边框（rect 含边框、client 内缩），手摆必留左/底缝隙——
-/// set_fullscreen(true) 由系统铺满整屏，内容直达边缘（水豚hub 同效果）。
+/// set_fullscreen(true) 由系统铺满整屏，内容直达边缘。
 fn fullscreen_main(app: &tauri::AppHandle) {
     let main = app.get_webview_window("main");
     let mon = main
@@ -304,5 +346,20 @@ fn apply_windowed_mode(app: &tauri::AppHandle) {
         let _ = w.center();
         let _ = w.show();
         let _ = w.set_focus();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reconcile_without_snapshot_is_noop() {
+        // 无残留快照必须是纯检查（不动任务栏、不写注册表）；测试机若恰有
+        // 残留快照，本函数的恢复语义正是期望行为
+        reconcile_stale_snapshot();
+        assert!(!hamster_platform::snapshot::snapshot_path()
+            .unwrap()
+            .exists());
     }
 }

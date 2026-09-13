@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { emit, listen } from '@tauri-apps/api/event';
 import { commands, events, isTauri, type AppEntry } from '@/shared/lib/ipc';
 import type { HomeLayout } from './layout';
-import { normalizeLayout } from './layout';
+import { normalizeLayout, resolveWallpaper } from './layout';
 
 export function useApps() {
   const qc = useQueryClient();
@@ -100,4 +100,11 @@ export function useHomeLayout(apps: AppEntry[]) {
     [stored, apps, usageRank],
   );
   return { layout, usageRank, commit, ready: stored !== undefined, isSaving: save.isPending };
+}
+
+/** 壁纸跟随主屏布局（/、/home、接管子页 backdrop 换壁纸即时同步） */
+export function useWallpaper() {
+  const { data: apps = [] } = useApps();
+  const { layout } = useHomeLayout(apps);
+  return resolveWallpaper(layout);
 }

@@ -33,7 +33,7 @@ const CAT_COLOR: Record<AppCategory, string> = {
   other: 'bg-neutral-500/25 text-neutral-300',
 };
 
-/** 应用页：分类药丸 + 真实图标宫格（桌面整理核心，对标 CapyHub 应用页） */
+/** 应用页：分类药丸 + 真实图标宫格 */
 export default function AppsPage() {
   const { t } = useI18n();
   const { data: apps = [], isLoading } = useApps();

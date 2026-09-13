@@ -56,6 +56,10 @@ tauri-plugin-autostart = "2"
 tauri-plugin-global-shortcut = "2"
 # 待办提醒系统通知（Rust 侧直发，不走 JS 权限）
 tauri-plugin-notification = "2"
+# 密码箱：Rust 侧写剪贴板 + 到时自动清除（不走 JS 权限）
+tauri-plugin-clipboard-manager = "2"
+# 应用自更新：GitHub Releases latest.json 端点（minisign 签名校验，走 Rust 命令）
+tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
@@ -67,6 +71,12 @@ pinyin = "0.10"
 notify = "7"
 chrono = "0.4"
 sysinfo = "0.36"
+# 密码箱（字段级加密）：Argon2id 派生主密钥 + AES-256-GCM 信封；密钥仅存内存并 zeroize
+argon2 = "0.5"
+aes-gcm = "0.10"
+zeroize = "1"
+base64 = "0.22"
+rand_core = { version = "0.6", features = ["getrandom"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 # 桌面 MCP server 内嵌 HTTP 承载（tokio Mutex 类型）+ 会话令牌
 tokio = { version = "1", default-features = false, features = ["sync"] }

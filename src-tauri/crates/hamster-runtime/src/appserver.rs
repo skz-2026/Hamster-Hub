@@ -594,7 +594,10 @@ impl StreamSession {
 
     /// ACP server→client 请求应答（runtime-design §11.5）：
     /// session/request_permission 自动选择第一个 allow_once 选项（MVP 无审批 UI，
-    /// R4 接交互）；其余方法回 JSON-RPC error，防止 agent 无限等待。
+    /// R4 接交互）；codex app-server 方言的 MCP 工具调用审批以
+    /// `mcpServer/elicitation/request` 形态到达（codex_approval_kind=mcp_tool_call），
+    /// 同样无人值守自动放行——不做应答会导致 codex 无限等待（工具调用卡死）；
+    /// 其余方法回 JSON-RPC error，防止 agent 无限等待。
     fn answer_acp_server_request(&self, id: i64, method: &str, params: &serde_json::Value) {
         let response = match method {
             "session/request_permission" => {
@@ -615,6 +618,10 @@ impl StreamSession {
                     "result": { "outcome": { "outcome": "selected", "optionId": option_id } }
                 })
             }
+            "mcpServer/elicitation/request" => serde_json::json!({
+                "jsonrpc": "2.0", "id": id,
+                "result": { "action": "accept", "content": {} }
+            }),
             other => serde_json::json!({
                 "jsonrpc": "2.0", "id": id,
                 "error": { "code": -32601, "message": format!("上游 未支持该 agent 侧请求：{other}") }
@@ -736,6 +743,17 @@ fn spawn_reader_thread(
                     // 其余（method 无 id）= 通知，落公共归一化路径
                 }
                 // —— codex 方言（JSON-RPC）——
+                // server→client 请求（method + id）：MCP 工具调用审批以
+                // mcpServer/elicitation/request 形态到达，必须应答，否则 codex
+                // 无限等待、工具调用卡死（带 id 但无 method 的才是响应）
+                if let (Some(method), Some(req_id)) = (
+                    v.get("method").and_then(|m| m.as_str()),
+                    v.get("id").and_then(|i| i.as_i64()),
+                ) {
+                    let params = v.get("params").cloned().unwrap_or(serde_json::Value::Null);
+                    session.answer_acp_server_request(req_id, method, &params);
+                    continue;
+                }
                 // 响应：回填等待者
                 if let Some(id) = v.get("id").and_then(|i| i.as_i64()) {
                     if let Some(tx) = lock_ok(&session.pending).remove(&id) {

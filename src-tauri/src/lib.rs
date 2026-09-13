@@ -30,6 +30,8 @@ pub struct AppState {
     pub db: Mutex<rusqlite::Connection>,
     pub db_path: std::path::PathBuf,
     pub icons_dir: std::path::PathBuf,
+    /// 密码箱会话（主密钥仅存内存；锁定/退出即丢弃）
+    pub vault: Mutex<core::vault::VaultSession>,
 }
 
 impl AppState {
@@ -77,6 +79,23 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::todo::todo_delete,
             commands::todo::todo_set_due,
             commands::todo::todo_set_recur,
+            // 密码箱（字段级加密：Argon2id + AES-256-GCM；密钥不出后端）
+            commands::vault::vault_status,
+            commands::vault::vault_setup,
+            commands::vault::vault_unlock,
+            commands::vault::vault_lock,
+            commands::vault::vault_set_auto_lock,
+            commands::vault::vault_change_password,
+            commands::vault::vault_item_list,
+            commands::vault::vault_item_search,
+            commands::vault::vault_item_create,
+            commands::vault::vault_item_update,
+            commands::vault::vault_item_toggle_favorite,
+            commands::vault::vault_item_delete,
+            commands::vault::vault_item_reveal,
+            commands::vault::vault_copy_field,
+            commands::vault::vault_password_generate,
+            commands::vault::vault_password_strength,
             // 番茄钟（后端计时 + 历史聚合）
             commands::focus::focus_start,
             commands::focus::focus_break,
@@ -148,6 +167,9 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             plugins::plugin_bridge_call,
             // 托盘管理（dock 右侧系统托盘区）
             commands::tray::tray_open_overflow,
+            // 应用自更新（GitHub Releases latest.json）
+            commands::updater::update_check,
+            commands::updater::update_install,
         ])
         .events(collect_events![
             events::CoreReady,
@@ -159,7 +181,9 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             events::BenchPtyExit,
             events::TodoReminder,
             events::FocusTick,
-            events::FocusFinished
+            events::FocusFinished,
+            events::VaultLocked,
+            events::UpdateProgress
         ])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
 }
@@ -214,10 +238,18 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         // 待办提醒的系统通知（Rust 侧直发）
         .plugin(tauri_plugin_notification::init())
+        // 密码箱：剪贴板写入与到时自动清除（Rust 侧直调，不走 JS 权限）
+        .plugin(tauri_plugin_clipboard_manager::init())
+        // 应用自更新（GitHub Releases）：检查/安装经 commands::updater 的 Rust 命令
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             builder.mount_events(app);
+
+            // 桌面接管对账：上次会话崩溃/断电/看门狗失守可能留下隐藏态残留
+            // 快照，启动即恢复，避免用户面对无任务栏无图标的桌面（见 desktop_mode）
+            desktop_mode::reconcile_stale_snapshot();
 
             // 本地存储（迁移在 open 内完成）
             let db_path = app
@@ -231,6 +263,7 @@ pub fn run() {
                 db: Mutex::new(db),
                 db_path,
                 icons_dir,
+                vault: Mutex::new(core::vault::VaultSession::locked()),
             });
             // 系统信息监控（内存/磁盘/CPU/温度/进程）
             app.manage(commands::sysinfo::SharedMonitor::new(
@@ -415,7 +448,28 @@ pub fn run() {
             // 待办提醒调度（独立连接轮询到点提醒 → 系统通知 + 应用内事件）
             core::reminder::spawn(app.handle().clone(), state.db_path.clone());
 
-            // 启动即进入桌面模式（对齐水豚hub：打开应用直接全屏工作台 + 底部 Dock）
+            // 密码箱自动锁看门狗：闲置超时 → 丢弃密钥并广播（前端弹锁屏覆盖层）
+            {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || loop {
+                    std::thread::sleep(std::time::Duration::from_secs(10));
+                    let state: tauri::State<AppState> = handle.state();
+                    let locked = {
+                        let Ok(mut session) = state.vault.lock() else {
+                            continue;
+                        };
+                        session.lock_if_idle()
+                    };
+                    if locked {
+                        let _ = events::VaultLocked {
+                            reason: "idle".to_string(),
+                        }
+                        .emit(&handle);
+                    }
+                });
+            }
+
+            // 启动即进入桌面模式（打开应用直接全屏工作台 + 底部 Dock）
             {
                 let enable_launch_desktop = {
                     let conn = state

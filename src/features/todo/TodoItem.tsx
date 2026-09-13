@@ -33,7 +33,7 @@ export default function TodoItem({ todo, onToggle, onSetDue, onSetRecur, onRemov
 
   return (
     <div>
-      <div className="group flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-[var(--hover)]">
+      <div className="group flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-white/8">
         <button
           role="checkbox"
           aria-checked={todo.done}
@@ -42,7 +42,7 @@ export default function TodoItem({ todo, onToggle, onSetDue, onSetRecur, onRemov
           className={`grid size-[18px] shrink-0 place-items-center rounded-full border transition-colors ${
             todo.done
               ? 'border-[var(--accent)] bg-[var(--accent)] text-white'
-              : 'border-[var(--text-muted)]'
+              : 'border-white/45'
           }`}
         >
           {todo.done && (
@@ -53,7 +53,7 @@ export default function TodoItem({ todo, onToggle, onSetDue, onSetRecur, onRemov
         </button>
         <span
           className={`min-w-0 flex-1 truncate text-[13px] ${
-            todo.done ? 'text-[var(--text-muted)] line-through' : 'text-[var(--text)]'
+            todo.done ? 'text-white/45 line-through' : 'text-white/90'
           }`}
         >
           {todo.content}
@@ -71,13 +71,13 @@ export default function TodoItem({ todo, onToggle, onSetDue, onSetRecur, onRemov
           onClick={() => setEditing((v) => !v)}
           title={label || t('home.todo.setDue')}
           className={`flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] tabular-nums transition-colors ${
-            label ? '' : 'text-[var(--text-muted)] opacity-0 group-hover:opacity-100'
+            label ? '' : 'text-white/50 opacity-0 group-hover:opacity-100'
           } ${
             overdue
               ? 'bg-red-500/15 text-red-400'
               : label
-                ? 'bg-[var(--hover)] text-[var(--text-muted)] hover:text-[var(--text)]'
-                : 'hover:bg-[var(--hover)]'
+                ? 'bg-white/10 text-white/60 hover:text-white/90'
+                : 'hover:bg-white/8'
           }`}
         >
           {todo.remind_at != null && <AlarmClock size={9} />}
@@ -86,7 +86,7 @@ export default function TodoItem({ todo, onToggle, onSetDue, onSetRecur, onRemov
         <button
           onClick={onRemove}
           title={t('home.todo.delete')}
-          className="shrink-0 text-[var(--text-muted)] opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
+          className="shrink-0 text-white/50 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
         >
           <X size={13} />
         </button>

@@ -16,12 +16,16 @@ export function WallpaperLayer({ wallpaper }: { wallpaper: Wallpaper }) {
   const src = wallpaperSrcOf(wallpaper);
   if (!src) return null;
   return (
-    <img
-      src={src}
-      alt=""
-      aria-hidden
-      draggable={false}
-      className="pointer-events-none absolute inset-0 size-full select-none object-cover"
-    />
+    <div className="pointer-events-none absolute inset-0" aria-hidden>
+      <img
+        src={src}
+        alt=""
+        draggable={false}
+        className="size-full select-none object-cover"
+      />
+      {/* 用户图片亮度不可控（浅色木纹/纯白图上白字与玻璃卡直接糊掉）：
+          图片壁纸统一压暗一档，文字与玻璃卡保持可读；渐变壁纸不渲染本层、不受影响 */}
+      <div className="absolute inset-0 bg-black/30" />
+    </div>
   );
 }

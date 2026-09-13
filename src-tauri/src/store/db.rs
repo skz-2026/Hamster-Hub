@@ -23,6 +23,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0005_focus_session",
         include_str!("../../migrations/0005_focus_session.sql"),
     ),
+    (
+        "0006_vault",
+        include_str!("../../migrations/0006_vault.sql"),
+    ),
 ];
 
 /// 打开指定路径的库并迁移（后台线程各自开连接时复用）
@@ -33,7 +37,8 @@ pub fn open_at(path: &std::path::Path) -> Result<Connection, AppError> {
     Ok(conn)
 }
 
-fn migrate(conn: &Connection) -> Result<(), AppError> {
+/// 迁移到最新版本（open_at 与测试复用）
+pub(crate) fn migrate(conn: &Connection) -> Result<(), AppError> {
     let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
     for (i, (name, sql)) in MIGRATIONS.iter().enumerate() {
         let target = (i + 1) as i64;

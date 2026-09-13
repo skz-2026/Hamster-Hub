@@ -5,4 +5,5 @@ pub mod focus;
 pub mod pinyin;
 pub mod recur;
 pub mod reminder;
+pub mod vault;
 pub mod weather;

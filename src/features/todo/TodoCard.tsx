@@ -6,7 +6,7 @@ import { parseQuickAdd } from './nlp';
 import { dueLabel } from './due';
 import TodoItem from './TodoItem';
 
-/** 待办卡（工作台）：自然语言快速添加（"明天下午3点交房租"）/ 勾选完成 / 截止+提醒 / 悬停删除 */
+/** 待办卡内容（壳与栅格由 DashboardTile 提供）：自然语言快速添加（"明天下午3点交房租"）/ 勾选完成 / 截止+提醒 / 悬停删除 */
 export default function TodoCard() {
   const { t } = useI18n();
   const { query, create, toggle, setDue, setRecur, remove } = useTodos();
@@ -26,13 +26,13 @@ export default function TodoCard() {
   };
 
   return (
-    <section className="card col-span-12 flex h-full min-h-[220px] flex-col p-5 md:col-span-4">
+    <div className="flex h-full min-h-[180px] flex-col">
       <header className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
+        <div className="flex items-center gap-2 text-sm font-medium text-white/90">
           <ListTodo size={16} className="text-[var(--accent)]" />
           {t('home.todo.title')}
         </div>
-        <span className="text-[11px] text-[var(--text-muted)]">
+        <span className="text-[11px] text-white/50">
           {undone > 0 ? t('home.todo.undone', { n: undone }) : t('home.todo.allDone')}
         </span>
       </header>
@@ -44,7 +44,7 @@ export default function TodoCard() {
           onKeyDown={(e) => e.key === 'Enter' && submit()}
           placeholder={t('home.todo.addPlaceholder')}
           maxLength={200}
-          className="h-9 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-transparent px-3 text-[13px] text-[var(--text)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)]"
+          className="h-9 min-w-0 flex-1 rounded-lg border border-white/15 bg-white/10 px-3 text-[13px] text-white placeholder:text-white/45 outline-none focus:border-[var(--accent)]"
         />
         <button
           onClick={submit}
@@ -61,7 +61,7 @@ export default function TodoCard() {
       </div>
 
       {draft.trim() && parsed.dueAt != null && (
-        <p className="mb-2 flex items-center gap-1.5 px-1 text-[11px] text-[var(--text-muted)]">
+        <p className="mb-2 flex items-center gap-1.5 px-1 text-[11px] text-white/55">
           <CalendarClock size={11} className="text-[var(--accent)]" />
           {dueLabel(parsed.dueAt)}
           <BellRing size={10} className="text-[var(--accent)]" />
@@ -72,10 +72,10 @@ export default function TodoCard() {
       <div className="-mx-1 flex-1 space-y-0.5 overflow-y-auto px-1">
         {query.isLoading ? (
           <div className="grid place-items-center py-6">
-            <Loader2 size={16} className="animate-spin text-[var(--text-muted)]" />
+            <Loader2 size={16} className="animate-spin text-white/45" />
           </div>
         ) : todos.length === 0 ? (
-          <p className="py-6 text-center text-xs text-[var(--text-muted)]">
+          <p className="py-6 text-center text-xs text-white/45">
             {t('home.todo.empty')}
           </p>
         ) : (
@@ -91,6 +91,6 @@ export default function TodoCard() {
           ))
         )}
       </div>
-    </section>
+    </div>
   );
 }

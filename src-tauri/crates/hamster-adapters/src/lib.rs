@@ -194,12 +194,17 @@ fn probe_cli_version(path: &std::path::Path) -> Option<String> {
     use std::time::{Duration, Instant};
 
     const DEADLINE: Duration = Duration::from_secs(4);
-    let mut child = Command::new(path)
-        .arg("--version")
+    let mut cmd = Command::new(path);
+    cmd.arg("--version")
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .ok()?;
+        .stderr(std::process::Stdio::piped());
+    // CLI 是控制台程序：GUI 主进程探测时会闪黑框，CREATE_NO_WINDOW 压住
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    let mut child = cmd.spawn().ok()?;
     let deadline = Instant::now() + DEADLINE;
     let status = loop {
         match child.try_wait() {

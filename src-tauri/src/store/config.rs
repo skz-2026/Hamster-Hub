@@ -147,7 +147,7 @@ pub struct Behavior {
     pub language: String,
     /// 桌面模式切换热键（tauri global-shortcut 格式，重启生效）
     pub desktop_mode_hotkey: String,
-    /// 启动即进入桌面模式（对齐水豚hub：打开应用直接全屏工作台 + 底部 Dock）
+    /// 启动即进入桌面模式（打开应用直接全屏工作台 + 底部 Dock）
     pub desktop_mode_on_launch: bool,
 }
 

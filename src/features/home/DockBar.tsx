@@ -4,7 +4,7 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import { emitTo, emit } from '@tauri-apps/api/event';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { LayoutGrid, LogOut, Bot, MonitorSmartphone, Plus, Search, Settings } from 'lucide-react';
+import { House, LayoutGrid, LogOut, Bot, MonitorSmartphone, Plus, Search, Settings } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { commands, isTauri, type AppEntry } from '@/shared/lib/ipc';
 import { useI18n } from '@/shared/i18n/provider';
@@ -33,13 +33,15 @@ type SystemEntry = {
   onClick?: () => void;
 };
 
-/** 系统入口（任务栏左端 / 胶囊右段）：应用内路由 */
+/** 系统入口（任务栏左端 / 胶囊右段）：应用内路由（设置单独挂右端，见 SETTINGS_ENTRY） */
 const SYSTEM_ICONS: SystemEntry[] = [
   { labelKey: 'chrome.nav.agent', to: '/bench', Icon: Bot },
   { labelKey: 'chrome.nav.home', to: '/home', Icon: LayoutGrid },
   { labelKey: 'chrome.nav.search', to: '/search', Icon: Search },
-  { labelKey: 'chrome.nav.settings', to: '/settings', Icon: Settings },
 ];
+
+/** 设置入口：桌面任务栏挪到右端（退出/托盘一侧），胶囊里仍是系统组末位 */
+const SETTINGS_ENTRY: SystemEntry = { labelKey: 'chrome.nav.settings', to: '/settings', Icon: Settings };
 
 /**
  * 底部常驻 Dock（应用壳布局底部的独立区域，内容不被遮挡）。
@@ -80,11 +82,14 @@ export function DockBar({ desktop }: DockBarProps) {
   // 窗口化胶囊里「主屏」不可达（主屏仅在接管态开放，点了会被弹回），同一位换「桌面模式」快捷进入
   const systemEntries: SystemEntry[] = desktop
     ? SYSTEM_ICONS
-    : SYSTEM_ICONS.map((e) =>
-        e.to === '/home'
-          ? { labelKey: 'chrome.nav.desktopMode', Icon: MonitorSmartphone, onClick: enterDesktop }
-          : e,
-      );
+    : [
+        ...SYSTEM_ICONS.map((e): SystemEntry =>
+          e.to === '/home'
+            ? { labelKey: 'chrome.nav.desktopMode', Icon: MonitorSmartphone, onClick: enterDesktop }
+            : e,
+        ),
+        SETTINGS_ENTRY,
+      ];
   /** 系统入口组（两形态共用渲染；桌面任务栏只吃原生 tooltip） */
   const renderSystem = (nativeTipOnly: boolean) =>
     systemEntries.map(({ labelKey, to, Icon, onClick }) => (
@@ -145,6 +150,16 @@ export function DockBar({ desktop }: DockBarProps) {
             <StartLogo size={size} />
           </DockItem>
           {renderSystem(true)}
+          {/* 快速回到桌面主页：主窗口常被其他应用盖住，任务栏是唯一常驻入口
+              （真任务栏窗走 emitTo 让主窗口导航 + 前置） */}
+          <DockItem label={t('chrome.shell.backToDesktop')} nativeTipOnly={desktop} onClick={() => goRoute('/')}>
+            <span
+              className="squircle grid place-items-center bg-orange-500/45 text-white ring-1 ring-white/25"
+              style={{ width: size, height: size }}
+            >
+              <House size={Math.round(size * 0.55)} strokeWidth={1.8} />
+            </span>
+          </DockItem>
           {layout.dock.length > 0 && <Divider />}
           {layout.dock.map((key, idx) => {
             const a = appByKey.get(key);
@@ -180,6 +195,16 @@ export function DockBar({ desktop }: DockBarProps) {
             <AppDockItem key={a.app_key} app={a} size={size} nativeTipOnly={desktop} onLaunch={launchApp} />
           ))}
           <div className="ml-auto flex items-end gap-2 pl-3">
+            {/* 设置入口（右端）：与胶囊系统组末位同一渲染 */}
+            <DockItem
+              label={t('chrome.nav.settings')}
+              active={pathname === '/settings'}
+              nativeTipOnly={desktop}
+              onClick={() => goRoute('/settings')}
+            >
+              <SystemTile Icon={Settings} size={size} />
+            </DockItem>
+            <Divider />
             <DockItem label={t('chrome.action.exitDesktop')} nativeTipOnly={desktop} onClick={exitDesktop}>
               <span
                 className="squircle grid place-items-center bg-red-500/45 text-white ring-1 ring-white/25"

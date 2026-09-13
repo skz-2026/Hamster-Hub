@@ -7,7 +7,7 @@ import { pluginIdOf } from './layout';
 import PluginWidgetHost from '@/features/plugins/PluginWidgetHost';
 
 const glass =
-  'h-full w-full overflow-hidden rounded-[20px] bg-white/[0.13] p-3.5 ring-1 ring-white/15 backdrop-blur-2xl transition-colors hover:bg-white/[0.17]';
+  'h-full w-full overflow-hidden rounded-[20px] bg-black/25 p-3.5 ring-1 ring-white/10 backdrop-blur-2xl transition-colors hover:bg-black/35';
 
 /** 主屏小组件（2 列宽玻璃卡）：按类型渲染，数据全部来自真实 hooks。
  *  type 为 `widget:plugin:<id>` 时渲染插件小组件（M4 插件域）。 */

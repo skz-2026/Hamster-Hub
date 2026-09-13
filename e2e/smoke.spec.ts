@@ -1,22 +1,64 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('仓鼠Hub 冒烟（浏览器预览 + IPC mock）', () => {
-  test('工作台：仪表盘六卡渲染 + 添加待办', async ({ page }) => {
+  test('首页：玻璃卡渲染 + Hero 时钟 + 添加待办', async ({ page }) => {
     await page.goto('/#/');
     await page.waitForTimeout(1200);
 
-    // 六张卡标题都在
+    // 五张卡标题都在（时钟收进 Hero，不再单独成卡）
     for (const title of ['天气', '待办', '倒数日', '最近文件', '常用应用']) {
-      await expect(page.locator('.card').filter({ hasText: title }).first()).toBeVisible();
+      await expect(page.locator('section').filter({ hasText: title }).first()).toBeVisible();
     }
-    // 时钟在走（格式 HH:MM:SS）
-    await expect(page.getByText(/^\d{2}:\d{2}:\d{2}$/).first()).toBeVisible();
+    // Hero 时钟在走（格式 HH:MM）
+    await expect(page.getByText(/^\d{2}:\d{2}$/).first()).toBeVisible();
 
     // 添加待办（输入框支持自然语言解析，纯文本无时间表述则原样入库）
     const input = page.getByPlaceholder('添加待办，试试');
     await input.fill('E2E 测试待办');
     await input.press('Enter');
     await expect(page.getByText('E2E 测试待办')).toBeVisible();
+  });
+
+  test('首页编排：编辑模式调宽/移除/添加卡片 + 拖拽重排 + 持久化', async ({ page }) => {
+    await page.goto('/#/');
+    await page.waitForTimeout(1000);
+
+    // 进编辑（右上角「编辑」）：卡片抖动 + 操作钮出现
+    await page.getByRole('button', { name: '编辑', exact: true }).click();
+    await expect(page.getByTitle('移除卡片').first()).toBeVisible();
+
+    // ⤢ 调宽「待办」卡：4 列 → 8 列
+    const todoCard = page.locator('section').filter({ hasText: '待办' }).first();
+    await todoCard.locator('[title="切换卡片宽度"]').click();
+    await expect(todoCard).toHaveClass(/md:col-span-8/);
+
+    // 拖拽重排：把「倒数日」拖到「天气」上（移到其位置）
+    const srcBox = await page.locator('section').filter({ hasText: '倒数日' }).first().boundingBox();
+    const dstBox = await page.locator('section').filter({ hasText: '天气' }).first().boundingBox();
+    await page.mouse.move(srcBox!.x + 30, srcBox!.y + 30);
+    await page.mouse.down();
+    await page.mouse.move(dstBox!.x + 30, dstBox!.y + 30, { steps: 10 });
+    await page.mouse.up();
+    // 松手后 commit 异步渲染，用可重试断言等 DOM 更新（倒数日排到首位）
+    await expect(page.locator('main section').first()).toHaveText(/倒数日/, { timeout: 5000 });
+
+    // ✕ 移除「天气」卡
+    await page.locator('section').filter({ hasText: '天气' }).first().locator('[title="移除卡片"]').click();
+    await expect(page.locator('section').filter({ hasText: '天气' })).toHaveCount(0);
+
+    // + 添加「电脑状态」卡
+    await page.getByTitle('添加卡片').click();
+    await page.getByRole('button', { name: '电脑状态' }).click();
+    await expect(page.locator('section').filter({ hasText: '电脑状态' })).toBeVisible();
+
+    // 完成 → 防抖落库后 reload，布局保持（一份 tiles 两态共用）
+    await page.getByRole('button', { name: '完成', exact: true }).click();
+    await page.waitForTimeout(900);
+    await page.reload();
+    await page.waitForTimeout(1000);
+    await expect(page.locator('section').filter({ hasText: '电脑状态' })).toBeVisible();
+    await expect(page.locator('section').filter({ hasText: '天气' })).toHaveCount(0);
+    await expect(page.locator('main section').first()).toHaveText(/倒数日/);
   });
 
   test('应用页：分类筛选', async ({ page }) => {
@@ -102,10 +144,11 @@ test.describe('仓鼠Hub 冒烟（浏览器预览 + IPC mock）', () => {
     await page.goto('/#/');
     await page.waitForTimeout(800);
 
-    // 进入桌面模式 → 全屏桌面主页（壁纸 + 问候 + 搜索 + 小组件），贴边通栏任务栏
+    // 进入桌面模式 → 首页接管形态（壁纸 + 问候 + 搜索 + 小组件），贴边通栏任务栏；
+    // 路由不变（同一首页双形态，原地变形）
     await page.getByRole('button', { name: '进入桌面模式' }).click();
     await page.waitForTimeout(600);
-    await expect(page).toHaveURL(/#\/desktop$/);
+    await expect(page).toHaveURL(/#\/$/);
     await expect(page.locator('.ios-dock')).toBeVisible();
     await expect(page.getByText(/(早上好|上午好|中午好|下午好|晚上好|夜深了)，欢迎回来/)).toBeVisible();
     // 限定任务栏：WebDebugBar 的按钮文字也是「退出桌面模式」，会重名
@@ -116,12 +159,12 @@ test.describe('仓鼠Hub 冒烟（浏览器预览 + IPC mock）', () => {
     await page.getByRole('button', { name: '主屏' }).click();
     await expect(page.getByPlaceholder('搜索应用')).toBeVisible({ timeout: 10_000 });
 
-    // 主屏「返回桌面」→ 回桌面主页
+    // 主屏「返回桌面」→ 回首页（接管形态）
     await page.getByTitle('返回桌面').click();
     await page.waitForTimeout(500);
-    await expect(page).toHaveURL(/#\/desktop$/);
+    await expect(page).toHaveURL(/#\/$/);
 
-    // 退出 → 回窗口化工作台；Dock 常驻（居中胶囊形态）
+    // 退出 → 回窗口化首页；Dock 常驻（居中胶囊形态）
     await page.locator('.ios-dock [aria-label="退出桌面模式"]').click();
     await page.waitForTimeout(600);
     await expect(page).toHaveURL(/#\/$/);
@@ -132,10 +175,10 @@ test.describe('仓鼠Hub 冒烟（浏览器预览 + IPC mock）', () => {
     await page.goto('/#/');
     await page.waitForTimeout(800);
 
-    // 侧栏「桌面」一键进入桌面模式（不再绕设置页）
+    // 侧栏「桌面」一键进入桌面模式（不再绕设置页）；首页原地变形，路由不变
     await page.getByRole('button', { name: '桌面', exact: true }).click();
     await page.waitForTimeout(600);
-    await expect(page).toHaveURL(/#\/desktop$/);
+    await expect(page).toHaveURL(/#\/$/);
 
     // 桌面快捷链接进设置：返回胶囊可见；设置页按钮已切成「返回桌面主页」
     await page.locator('main').getByRole('button', { name: '设置' }).click();
@@ -144,14 +187,14 @@ test.describe('仓鼠Hub 冒烟（浏览器预览 + IPC mock）', () => {
     await expect(page.getByRole('button', { name: '返回桌面主页' })).toBeVisible();
     await page.getByTitle('返回桌面主页（Esc）').click();
     await page.waitForTimeout(500);
-    await expect(page).toHaveURL(/#\/desktop$/);
+    await expect(page).toHaveURL(/#\/$/);
 
-    // 桌面 → 日程，Esc 直接回桌面主页
+    // 桌面 → 日程，Esc 直接回首页（接管形态）
     await page.getByRole('button', { name: '日程' }).click();
     await page.waitForTimeout(500);
     await page.keyboard.press('Escape');
     await page.waitForTimeout(500);
-    await expect(page).toHaveURL(/#\/desktop$/);
+    await expect(page).toHaveURL(/#\/$/);
   });
 
   test('窗口化侧栏「主屏」：自动进入接管并直接落到主屏（不再被弹回工作台）', async ({ page }) => {
@@ -172,7 +215,7 @@ test.describe('代理工作台（bench，上游域层整合 MVP）', () => {
 
     // 首页（ZCode 风欢迎态）：问候语 + 内嵌 composer，代理/项目已预选
     await expect(page.getByText(/有什么想让我帮忙的吗/)).toBeVisible();
-    await page.locator('textarea[placeholder*="向代理提问"]').fill('E2E：帮我梳理仓库');
+    await page.locator('textarea[placeholder*="提问"]').fill('E2E：帮我梳理仓库');
     await page.getByTitle('发送并创建会话').click();
 
     // 首条消息上屏（限定聊天正文，避免命中侧栏同名会话标题）+ 假代理流式输出（思考卡/工具卡/markdown）
@@ -188,7 +231,7 @@ test.describe('代理工作台（bench，上游域层整合 MVP）', () => {
     await page.waitForTimeout(1000);
 
     await page.getByTitle('Recall 全文搜索').click();
-    await page.locator('input[placeholder*="搜索所有代理"]').fill('拼音');
+    await page.locator('input[placeholder*="搜索所有"]').fill('拼音');
     await page.keyboard.press('Enter');
     await expect(page.getByText('修复 Spotlight 拼音首字母搜索的回退').first()).toBeVisible();
     // 命中卡片 → 上下文消息回看
@@ -259,5 +302,45 @@ test.describe('UI 插件（M4 阶段四：用户可扩展小组件）', () => {
     await page.locator('.ios-dock [aria-label="退出桌面模式"]').click();
     await page.waitForTimeout(600);
     await expect(page.getByText(/未完成 2/)).toBeVisible({ timeout: 10_000 });
+  });
+});
+
+test.describe('密码箱（字段级加密，浏览器走明文 mock）', () => {
+  test('初始化 → 生成器新建 → 搜索 → 锁定/解锁', async ({ page }) => {
+    await page.goto('/#/vault');
+    await page.waitForTimeout(800);
+
+    // 未初始化：创建主密码（≥8 字符 + 确认一致）
+    await page.getByPlaceholder('至少 8 个字符').fill('e2e-master-pw');
+    await page.getByPlaceholder('再输入一次').fill('e2e-master-pw');
+    await page.getByRole('button', { name: '创建密码库' }).click();
+    await page.waitForTimeout(600);
+    await expect(page.getByText(/0 条/)).toBeVisible();
+
+    // 新建条目：生成器造密码后保存
+    await page.getByRole('button', { name: '新建', exact: true }).click();
+    await page.getByPlaceholder('例如：GitHub').fill('E2E 银行');
+    await page.getByPlaceholder('邮箱 / 手机号 / 用户名').fill('me@bank.cn');
+    await page.getByRole('button', { name: '生成密码' }).click();
+    await page.getByRole('button', { name: '使用', exact: true }).click();
+    await page.getByRole('button', { name: '保存', exact: true }).click();
+    await page.waitForTimeout(500);
+    await expect(page.locator('main').getByText('E2E 银行')).toBeVisible();
+    await expect(page.getByText(/1 条/)).toBeVisible();
+
+    // 搜索命中（标题 LIKE）
+    await page.getByPlaceholder('搜索标题 / 用户名 / 网址').fill('银行');
+    await page.waitForTimeout(600);
+    await expect(page.locator('main').getByText('E2E 银行')).toBeVisible();
+    await expect(page.locator('main').getByText('me@bank.cn')).toBeVisible();
+
+    // 手动锁定 → 锁屏 → 主密码解锁回来
+    await page.getByTitle('锁定').click();
+    await page.waitForTimeout(400);
+    await expect(page.getByText('密码箱已锁定')).toBeVisible();
+    await page.getByPlaceholder('主密码').fill('e2e-master-pw');
+    await page.getByRole('button', { name: '解锁', exact: true }).click();
+    await page.waitForTimeout(800);
+    await expect(page.locator('main').getByText('E2E 银行')).toBeVisible();
   });
 });

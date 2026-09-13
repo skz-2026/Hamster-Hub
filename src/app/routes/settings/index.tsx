@@ -29,6 +29,9 @@ import AgentAvatar from '@/features/bench/AgentAvatar';
 import McpSyncCard from '@/features/agent/McpSyncCard';
 import PluginManageCard from '@/features/plugins/PluginManageCard';
 import { WallpaperPicker } from '@/features/settings/WallpaperPicker';
+import UpdaterRow from '@/features/settings/UpdaterRow';
+
+const FEEDBACK_URL = 'https://github.com/skz-2026/Hamster-Hub/issues';
 
 const ACCENTS = ['#ff8a3d', '#f0563b', '#4ea1ff', '#40b881', '#a06bff', '#e8b23c'];
 
@@ -157,7 +160,7 @@ export default function SettingsPage() {
             <Row title={t('settings.desktopMode.label')} desc={t('settings.desktopMode.desc')}>
               {desktopActive ? (
                 <button
-                  onClick={() => navigate('/desktop')}
+                  onClick={() => navigate('/')}
                   className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3.5 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
                 >
                   <MonitorSmartphone size={13} />
@@ -220,15 +223,14 @@ export default function SettingsPage() {
             <Row title={t('settings.autostart.label')} desc={t('settings.autostart.desc')}>
               <Switch checked={autostart ?? false} onChange={() => toggleAutostart()} />
             </Row>
+            <UpdaterRow />
             <Row title={t('settings.about.label')} desc={t('settings.about.desc', { version: version ? `v${version}` : '' })}>
-              <a
+              <button
                 className="text-xs text-[var(--text-muted)] underline-offset-2 hover:underline"
-                href="https://github.com/"
-                target="_blank"
-                rel="noreferrer"
+                onClick={() => void commands.openUrl(FEEDBACK_URL).catch(() => {})}
               >
                 {t('settings.about.feedback')}
-              </a>
+              </button>
             </Row>
           </Group>
         </Section>

@@ -23,6 +23,19 @@ export const home: Record<keyof typeof homeZh, string> = {
   'home.nav.exit': 'Exit',
   'home.action.remove': 'Remove',
   'home.action.deleteFolder': 'Delete folder',
+  'home.action.renameFolder': 'Rename folder',
+
+  // ===== Home: AI organizer floating ball =====
+  'home.ball.title': 'AI organizer',
+  'home.ball.placeholder': 'Give an instruction, e.g. "Group icons into folders by purpose"',
+  'home.ball.send': 'Send',
+  'home.ball.stop': 'Stop',
+  'home.ball.collapse': 'Collapse',
+  'home.ball.done': 'Done — home refreshed with the new layout',
+  'home.ball.again': 'New instruction',
+  'home.ball.goConfig': 'Set up an agent',
+  'home.ball.newChat': 'Reset chat',
+  'home.ball.restored': 'Reconnected to your last chat — keep asking',
 
   // ===== Home: widget type labels (explicit mapping, never build keys) =====
   'home.widget.clock': 'Clock',
@@ -80,7 +93,7 @@ export const home: Record<keyof typeof homeZh, string> = {
   'home.cc.settings': 'Settings',
   'home.cc.exitTakeover': 'Exit takeover',
 
-  // ===== To-do: due / repeat / reminder (TodoItem / DueEditor / ReminderToast / due.ts) =====
+  // ===== To-do: due / repeat / reminder (TodoItem / DueEditor / ReminderDialog / due.ts) =====
   'home.todo.recur.daily': 'Daily',
   'home.todo.recur.weekly': 'Weekly',
   'home.todo.recur.monthly': 'Monthly',
@@ -99,6 +112,8 @@ export const home: Record<keyof typeof homeZh, string> = {
   'home.todo.save': 'Save',
   'home.reminder.title': 'To-do reminder',
   'home.reminder.ok': 'Got it',
+  'home.reminder.done': 'Mark done',
+  'home.reminder.more': '{n} more due',
   'home.due.today': 'Today',
   'home.due.tomorrow': 'Tomorrow',
   'home.due.yesterday': 'Yesterday',

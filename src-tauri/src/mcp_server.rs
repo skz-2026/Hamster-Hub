@@ -1,8 +1,9 @@
 //! 桌面 MCP server 的内嵌 HTTP 承载（M4「Agent 原生桌面」，用户决策 2026-09-12）。
 //!
-//! server 随主进程常驻：`127.0.0.1:<随机端口>/mcp` + 每会话 Bearer 令牌，
-//! claude 走 `--mcp-config` 的 `{"type":"http"}` 注入（零进程、零侵入用户配置）。
-//! 相比独立进程的红利：急停 = 吊销令牌、computer use 档位即时生效（设置页联动）、
+//! server 随主进程常驻：`127.0.0.1:<固定端口>/mcp`，无鉴权（纯本地，用户决策
+//! 2026-09-13；Origin 检查挡网页 drive-by），claude/codex 等 HTTP MCP 宿主
+//! 零配置直连。急停 = bench_stream_kill 杀会话进程（进程死了工具调用自然停）。
+//! 相比独立进程的红利：computer use 档位即时生效（设置页联动）、
 //! 审计直写助手目录、直接复用主库连接（无跨进程 WAL 争用）。
 //! 协议：MCP Streamable HTTP——POST JSON-RPC 单帧回（application/json），
 //! 通知回 202，GET 流（SSE）按规范返回 405。ACP/codex 兜底走 stdio 子命令
@@ -22,12 +23,12 @@ use crate::error::AppError;
 
 pub const MCP_PATH: &str = "/mcp";
 
-/// 线程间共享：工具状态 + 会话令牌表（accept 线程与命令层各持一份 Arc）
+/// 线程间共享：工具状态 + 会话登记（accept 线程与命令层各持一份 Arc）
 struct Inner {
     state: Arc<AsyncMutex<ServerState>>,
     /// 主进程句柄（home_layout_set 写入后广播 hamster:layout-updated；stdio/测试为 None）
     app: Option<tauri::AppHandle>,
-    /// 活跃助手会话：sessionId → Bearer 令牌（会话被 kill 时吊销 = 急停）
+    /// 会话登记（鉴权移除后不再用于拦截；保留供审计与后续策略扩展）
     sessions: Mutex<HashMap<String, String>>,
     tokens: Mutex<HashSet<String>>,
 }
@@ -212,7 +213,8 @@ fn handle_conn(mut stream: TcpStream, inner: Arc<Inner>) {
 struct Req {
     method: String,
     path: String,
-    authorization: Option<String>,
+    /// 浏览器跨域请求必带（drive-by 防线的判定依据）；MCP 宿主不会带
+    origin: Option<String>,
     body: String,
 }
 
@@ -240,7 +242,7 @@ fn read_request(stream: &mut TcpStream) -> Result<Req, ()> {
     let method = parts.next().ok_or(())?.to_string();
     let path = parts.next().ok_or(())?.to_string();
     let mut content_length = 0usize;
-    let mut authorization = None;
+    let mut origin = None;
     for line in lines {
         let Some((name, value)) = line.split_once(':') else {
             continue;
@@ -249,8 +251,8 @@ fn read_request(stream: &mut TcpStream) -> Result<Req, ()> {
         let value = value.trim();
         if name == "content-length" {
             content_length = value.parse().map_err(|_| ())?;
-        } else if name == "authorization" {
-            authorization = Some(value.to_string());
+        } else if name == "origin" {
+            origin = Some(value.to_string());
         }
     }
     if content_length > 8 << 20 {
@@ -268,7 +270,7 @@ fn read_request(stream: &mut TcpStream) -> Result<Req, ()> {
     Ok(Req {
         method,
         path,
-        authorization,
+        origin,
         body: String::from_utf8_lossy(&body).into_owned(),
     })
 }
@@ -277,39 +279,46 @@ fn find_header_end(buf: &[u8]) -> Option<usize> {
     buf.windows(4).position(|w| w == b"\r\n\r\n")
 }
 
-/// 请求路由（独立成函数便于测试）：鉴权 → 方法 → JSON-RPC 分发。
-/// 令牌双通道：`Authorization: Bearer <t>` 头，或 `?token=<t>` 查询参数
-///（兼容无法设置自定义头的 MCP 客户端）。
+/// 请求路由（独立成函数便于测试）：来源检查 → 方法 → JSON-RPC 分发。
+/// 无鉴权（纯本地服务，用户决策 2026-09-13）：CLI 类 MCP 宿主免配 token/头。
+/// 唯一保留的防线是 Origin 检查——浏览器跨域 POST 必带 Origin 头而 MCP 宿主
+/// 不会带，挡掉恶意网页对 localhost 的 drive-by 调用（launch/todo 等是可写工具）。
 fn route(inner: &Inner, req: &Req) -> (u16, String) {
-    let (path, query) = match req.path.split_once('?') {
+    let (status, body) = route_inner(inner, req);
+    // 临时访问日志（排查宿主连通性；量小落 %TEMP%，排查完可删）
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(std::env::temp_dir().join("hamster-mcp-access.log"))
+    {
+        use std::io::Write as _;
+        let _ = writeln!(
+            f,
+            "{} {} origin={:?} body_len={} -> {}",
+            req.method,
+            req.path,
+            req.origin,
+            req.body.len(),
+            status
+        );
+    }
+    (status, body)
+}
+
+fn route_inner(inner: &Inner, req: &Req) -> (u16, String) {
+    let (path, _query) = match req.path.split_once('?') {
         Some((p, q)) => (p, Some(q)),
         None => (req.path.as_str(), None),
     };
     if path != MCP_PATH {
         return not_found();
     }
-    let token = req
-        .authorization
-        .as_deref()
-        .and_then(|a| a.strip_prefix("Bearer "))
-        .map(str::to_string)
-        .or_else(|| {
-            query.and_then(|q| {
-                q.split('&')
-                    .find_map(|kv| kv.strip_prefix("token=").map(str::to_string))
-            })
-        });
-    let token_ok = token
-        .map(|t| {
-            inner
-                .tokens
-                .lock()
-                .map(|set| set.contains(&t))
-                .unwrap_or(false)
-        })
-        .unwrap_or(false);
-    if !token_ok {
-        return (401, json_body(&json!({ "error": "unauthorized" })));
+    if let Some(origin) = &req.origin {
+        let local =
+            origin.starts_with("http://localhost") || origin.starts_with("http://127.0.0.1");
+        if !local {
+            return (403, json_body(&json!({ "error": "cross-origin blocked" })));
+        }
     }
     if req.method != "POST" {
         // GET（SSE 服务器流）未提供：规范允许 405
@@ -366,72 +375,61 @@ mod tests {
         McpHub::start(conn, false, None, None, None).expect("启动内嵌 server")
     }
 
-    fn post(hub: &McpHub, token: Option<&str>, body: &str) -> (u16, String) {
+    fn post(hub: &McpHub, body: &str) -> (u16, String) {
         route(
             &hub.inner,
             &Req {
                 method: "POST".into(),
                 path: MCP_PATH.into(),
-                authorization: token.map(|t| format!("Bearer {t}")),
+                origin: None,
                 body: body.into(),
             },
         )
     }
 
     #[test]
-    fn mint_authorizes_and_revoke_kills() {
+    fn open_endpoint_accepts_initialize_without_auth() {
         let hub = hub_with_mem_db();
-        let token = hub.mint();
-        hub.bind_session("s1", &token);
         let init = json_body(&serde_json::json!({
             "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}
         }));
-        // 有效令牌：initialize 正常回包
-        let (status, body) = post(&hub, Some(&token), &init);
+        // 无鉴权：不带任何令牌/头即可 initialize（纯本地，用户决策 2026-09-13）
+        let (status, body) = post(&hub, &init);
         assert_eq!(status, 200, "{body}");
         assert!(body.contains("protocolVersion"), "{body}");
-        // 未知令牌 / 缺失令牌：401
-        assert_eq!(post(&hub, Some("bogus"), &init).0, 401);
-        assert_eq!(post(&hub, None, &init).0, 401);
-        // 急停：吊销后原令牌立即失效
-        hub.revoke_session("s1");
-        assert_eq!(post(&hub, Some(&token), &init).0, 401);
     }
 
     #[test]
-    fn token_via_query_param_is_accepted() {
+    fn cross_origin_browser_posts_are_blocked() {
         let hub = hub_with_mem_db();
-        let token = hub.mint();
+        let init = json_body(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}
+        }));
+        // 浏览器跨域 drive-by（Origin 非本地）→ 403
         let req = Req {
             method: "POST".into(),
-            path: format!("{MCP_PATH}?token={token}"),
-            authorization: None,
-            body: json_body(&serde_json::json!({
-                "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}
-            })),
+            path: MCP_PATH.into(),
+            origin: Some("https://evil.example".into()),
+            body: init,
         };
         let (status, body) = route(&hub.inner, &req);
-        assert_eq!(
-            status, 200,
-            "查询参数令牌应可用（无 header 客户端兜底）：{body}"
-        );
-        // 令牌错误仍是 401
+        assert_eq!(status, 403, "{body}");
+        // 本机来源（同机页面）放行
         let req = Req {
-            path: format!("{MCP_PATH}?token=wrong"),
+            origin: Some("http://localhost:5173".into()),
             ..req
         };
-        assert_eq!(route(&hub.inner, &req).0, 401);
+        assert_eq!(route(&hub.inner, &req).0, 200);
     }
 
     #[test]
     fn computer_tool_denied_then_allowed_via_set_cu_allowed() {
         let hub = hub_with_mem_db();
-        let token = hub.mint();
         let click = json_body(&serde_json::json!({
             "jsonrpc": "2.0", "id": 2, "method": "tools/call",
             "params": { "name": "computer_click", "arguments": { "x": 1, "y": 1 } }
         }));
-        let (status, body) = post(&hub, Some(&token), &click);
+        let (status, body) = post(&hub, &click);
         assert_eq!(
             status, 200,
             "安全门拒绝是 JSON-RPC 错误帧不是 HTTP 错误：{body}"
@@ -439,7 +437,7 @@ mod tests {
         assert!(body.contains("-32001"), "应被安全门拒绝：{body}");
         // 设置页联动（内嵌模式的红利）：立即放行，无需重建会话
         hub.set_cu_allowed(true);
-        let (status, body) = post(&hub, Some(&token), &click);
+        let (status, body) = post(&hub, &click);
         assert_eq!(status, 200);
         assert!(!body.contains("-32001"), "开启后不应再被安全门拦截：{body}");
     }
@@ -447,32 +445,30 @@ mod tests {
     #[test]
     fn desktop_todo_roundtrip_over_http() {
         let hub = hub_with_mem_db();
-        let token = hub.mint();
         let create = json_body(&serde_json::json!({
             "jsonrpc": "2.0", "id": 3, "method": "tools/call",
             "params": { "name": "todo_create", "arguments": { "content": "给仓鼠添粮" } }
         }));
-        let (status, body) = post(&hub, Some(&token), &create);
+        let (status, body) = post(&hub, &create);
         assert_eq!(status, 200, "{body}");
         let list = json_body(&serde_json::json!({
             "jsonrpc": "2.0", "id": 4, "method": "tools/call",
             "params": { "name": "todo_list", "arguments": {} }
         }));
-        let (_, body) = post(&hub, Some(&token), &list);
+        let (_, body) = post(&hub, &list);
         assert!(body.contains("给仓鼠添粮"), "{body}");
     }
 
     #[test]
     fn wrong_path_method_and_bad_json() {
         let hub = hub_with_mem_db();
-        let token = hub.mint();
         let req = |method: &str, path: &str, body: &str| {
             route(
                 &hub.inner,
                 &Req {
                     method: method.into(),
                     path: path.into(),
-                    authorization: Some(format!("Bearer {token}")),
+                    origin: None,
                     body: body.into(),
                 },
             )
@@ -486,10 +482,8 @@ mod tests {
     #[test]
     fn notifications_get_202() {
         let hub = hub_with_mem_db();
-        let token = hub.mint();
         let (status, body) = post(
             &hub,
-            Some(&token),
             &json_body(
                 &serde_json::json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }),
             ),

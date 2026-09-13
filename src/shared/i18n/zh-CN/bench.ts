@@ -33,14 +33,14 @@ export const bench = {
 
   // 欢迎页：composer 与错误
   'bench.welcome.promptProjectPath': '输入项目目录路径（浏览器预览层无原生选择器）',
-  'bench.welcome.error.noStreamableAgent': '没有支持 GUI 对话的代理（需已安装且支持流式通道）',
+  'bench.welcome.error.noStreamableAgent': '没有支持 GUI 对话的 AI Agent（需已安装且支持流式通道）',
   'bench.welcome.error.selectProjectDir': '请先选择项目目录',
   'bench.welcome.selectProjectDir': '选择项目目录',
   'bench.welcome.browseFolders': '浏览文件夹…',
-  'bench.welcome.composerPlaceholder': '向代理提问，描述你的任务…（Enter 发送，Shift+Enter 换行）',
+  'bench.welcome.composerPlaceholder': '向 AI Agent 提问，描述你的任务…（Enter 发送，Shift+Enter 换行）',
   'bench.welcome.addAttachment': '添加附件（即将支持）',
-  'bench.welcome.selectAgent': '选择代理',
-  'bench.welcome.agentTitle': '代理（需支持 GUI 流式对话）',
+  'bench.welcome.selectAgent': '选择 AI Agent',
+  'bench.welcome.agentTitle': 'AI Agent（需支持 GUI 流式对话）',
   'bench.welcome.selectModel': '选择模型',
   'bench.welcome.effort': '推理强度',
   'bench.welcome.send': '发送并创建会话',
@@ -63,9 +63,9 @@ export const bench = {
   'bench.newSession.notInstalled': '未安装',
   'bench.newSession.guiStreamingVersioned': 'v{ver} · GUI 流式',
   'bench.newSession.guiStreaming': 'GUI 流式',
-  'bench.newSession.title': '新建代理会话',
-  'bench.newSession.agentsLabel': '代理（支持 GUI 流式）',
-  'bench.newSession.scanning': '扫描已安装代理…',
+  'bench.newSession.title': '新建 AI Agent 会话',
+  'bench.newSession.agentsLabel': 'AI Agent（支持 GUI 流式）',
+  'bench.newSession.scanning': '扫描已安装 AI Agent…',
   'bench.newSession.projectDir': '项目目录',
   'bench.newSession.modelEffort': '模型 / 推理强度',
   'bench.newSession.firstMessage': '首条消息（可选）',
@@ -74,7 +74,7 @@ export const bench = {
 
   // 消息角色徽标
   'bench.role.user': '用户',
-  'bench.role.assistant': '代理',
+  'bench.role.assistant': 'AI Agent',
   'bench.role.thinking': '思考',
   'bench.role.tool': '工具',
   'bench.role.system': '系统',
@@ -85,11 +85,11 @@ export const bench = {
   'bench.recall.indexStatus': '{sessions} 会话 · {messages} 消息 · {kb} KB',
   'bench.recall.reindexTitle': '重建索引',
   'bench.recall.reindex': '重建',
-  'bench.recall.searchPlaceholder': '搜索所有代理的历史会话…',
+  'bench.recall.searchPlaceholder': '搜索所有 AI Agent 的历史会话…',
   'bench.recall.searching': '搜索中…',
   'bench.recall.noHits': '没有关于「{query}」的命中',
   'bench.recall.backToResults': '返回结果',
-  'bench.recall.hint': '输入关键词，搜索 Claude / Codex 等代理的全部历史会话',
+  'bench.recall.hint': '输入关键词，搜索 Claude / Codex 等 AI Agent 的全部历史会话',
 
   // 对话视图
   'bench.chat.thinking': '思考中…',
@@ -97,9 +97,9 @@ export const bench = {
   'bench.chat.running': '运行中',
   'bench.chat.endSessionTitle': '结束会话',
   'bench.chat.end': '结束',
-  'bench.chat.emptyTitle': '开始与编码代理对话',
-  'bench.chat.emptyHint': '选择代理与项目目录后，发送第一条消息',
-  'bench.chat.composerPlaceholder': '给代理发消息…（Enter 发送，Shift+Enter 换行）',
+  'bench.chat.emptyTitle': '开始与编码 AI Agent 对话',
+  'bench.chat.emptyHint': '选择 AI Agent 与项目目录后，发送第一条消息',
+  'bench.chat.composerPlaceholder': '给 AI Agent 发消息…（Enter 发送，Shift+Enter 换行）',
 
   // 终端（PTY）
   'bench.terminal.createFailed': '会话创建失败：{msg}',

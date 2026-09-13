@@ -11,3 +11,5 @@ pub mod sysinfo;
 pub mod system;
 pub mod todo;
 pub mod tray;
+pub mod updater;
+pub mod vault;

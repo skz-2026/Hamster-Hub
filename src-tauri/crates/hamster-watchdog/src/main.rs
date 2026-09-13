@@ -1,3 +1,7 @@
+// 后台看门狗不需要控制台：release 转 GUI 子系统（日志走 watchdog.log），
+// 即使被用户手动双击也不弹黑框；debug 保留控制台便于本地排查
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 //! 仓鼠Hub 看门狗
 //!
 //! 由主进程在进入桌面模式时拉起：

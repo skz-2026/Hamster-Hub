@@ -50,7 +50,13 @@ pub fn app_launch(state: State<'_, AppState>, app_key: String) -> Result<(), App
     let Some(target) = target else {
         return Err(AppError::validate(format!("应用不在索引中: {app_key}")));
     };
-    if !hamster_platform::shell::shell_open(Path::new(&target)) {
+    let target_path = Path::new(&target);
+    // 已运行则激活现有窗口（浏览器等单进程多窗应用，重复 shell_open 会再开新窗）
+    if hamster_platform::shell::activate_running(target_path) {
+        appindex::log_usage(&conn, &app_key);
+        return Ok(());
+    }
+    if !hamster_platform::shell::shell_open(target_path) {
         return Err(AppError::io(format!("启动失败: {target}")));
     }
     appindex::log_usage(&conn, &app_key);

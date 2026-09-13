@@ -10,7 +10,12 @@ serde_json = "1"
 thiserror = "2"
 base64 = "0.22"
 winreg = "0.55"
+lnk = "0.5"
 image = { version = "0.25", default-features = false, features = ["png"] }
+
+[dev-dependencies]
+# 仅 ignored 测试用：扫真实开始菜单 .lnk 样本
+walkdir = "2"
 
 [dependencies.windows]
 version = "0.61"

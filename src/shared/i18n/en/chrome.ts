@@ -6,6 +6,7 @@ export const chrome: Record<keyof typeof chromeZh, string> = {
   'chrome.nav.schedule': 'Schedule',
   'chrome.nav.apps': 'Apps',
   'chrome.nav.files': 'Files',
+  'chrome.nav.vault': 'Vault',
   'chrome.nav.agent': 'Agent',
   'chrome.nav.settings': 'Settings',
   'chrome.nav.home': 'Home',

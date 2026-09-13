@@ -165,6 +165,13 @@ pub fn layout_set(conn: &Connection, layout_json: &str) -> Result<(), HamsterErr
         }
     }
 
+    // Agent 写入 = 一次明确的整理动作：强制置 customized。否则前端
+    // normalizeLayout 会把它当「未定制的默认布局」按常用度整体重排，
+    // agent 刚写入的文件夹分组会被立即抹掉。
+    let mut v = v;
+    if let Some(obj) = v.as_object_mut() {
+        obj.insert("customized".to_string(), serde_json::Value::Bool(true));
+    }
     let canonical = v.to_string();
     conn.execute(
         "INSERT INTO settings(key, value, updated_at) VALUES(?1, ?2, unixepoch())
@@ -218,6 +225,8 @@ mod tests {
         layout_set(&c, GOOD_LAYOUT).unwrap();
         let stored = layout_get(&c).unwrap().unwrap();
         assert!(stored.contains("midnight"));
+        // 写入即视为已定制：强制置 customized，前端不再按常用度自动重排
+        assert!(stored.contains(r#""customized":true"#));
         // 幂等覆盖
         layout_set(&c, GOOD_LAYOUT).unwrap();
         assert_eq!(layout_get(&c).unwrap().unwrap(), stored);

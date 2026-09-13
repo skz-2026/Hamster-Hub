@@ -8,30 +8,35 @@ import { ChevronLeft } from 'lucide-react';
 import { WebDebugBar } from '@/shared/components/WebDebugBar';
 import { DockBar } from '@/features/home/DockBar';
 import { DockPickerModal } from '@/features/home/DockPickerModal';
+import { useWallpaper } from '@/features/home/hooks';
+import { wallpaperSrcOf } from '@/features/home/WallpaperLayer';
 import { commands, events, isTauri } from '@/shared/lib/ipc';
 import { useI18n } from '@/shared/i18n/provider';
+import ReminderDialog from '@/features/todo/ReminderDialog';
 
 const appWindow = isTauri ? getCurrentWindow() : null;
 
 /**
- * 应用骨架（对齐水豚hub 全屏接管形态）。
- * 桌面模式：完全沉浸的全屏桌面——无标题栏/无侧栏，默认页 /desktop
+ * 应用骨架（全屏接管形态）。
+ * 桌面模式：完全沉浸的全屏桌面——无标题栏/无侧栏，默认页 /（首页，接管形态）
  * （壁纸 + 问候大时钟 + 搜索 + 小组件），底部贴边通栏任务栏完全替代系统任务栏。
  * 窗口化模式：红绿灯标题栏 + 侧栏 + 页面 + 居中胶囊 Dock。
  * /home 为「主屏」页（iOS 图标网格，自身已含交互 Dock 与顶栏）。
  */
 export function AppShell() {
   const { t } = useI18n();
+  const wallpaper = useWallpaper();
   const [coreVersion, setCoreVersion] = useState<string | null>(null);
   const [desktop, setDesktop] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const isHome = location.pathname === '/home';
-  const isDesktopHome = location.pathname === '/desktop';
+  // 首页（工作台 × 桌面主页合一）接管形态全屏铺壁纸
+  const isHomePage = location.pathname === '/';
   // 桌面接管下的子页（设置/代理/日程…）：真机里侧栏与任务栏都不在主窗口，
   // 悬浮返回胶囊 + Esc 是这些页面唯一的「回桌面」入口，避免进去出不来
-  const showDesktopBack = desktop && !isDesktopHome && !isHome;
+  const showDesktopBack = desktop && !isHomePage && !isHome;
 
   // Esc 快捷返回桌面（输入框聚焦时不劫持）
   useEffect(() => {
@@ -42,7 +47,7 @@ export function AppShell() {
       if (el instanceof HTMLElement && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) {
         return;
       }
-      navigate('/desktop');
+      navigate('/');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -57,8 +62,8 @@ export function AppShell() {
     return () => unlisten?.();
   }, []);
 
-  // 桌面模式事件跟随：进入 → /desktop 桌面主页（已停在 /home 主屏则不劫持），
-  // 退出 → 窗口化工作台。
+  // 桌面模式事件跟随：进入/退出 → 首页（/ 自身双形态，无需换页）。
+  // 已停在 /home 主屏则不劫持（HomeScreen 自理退出回落）。
   // navigate 随 location 变化（标识不稳定），重挂监听无害；alive 标志避免
   // StrictMode/快速卸载时「注销函数晚于卸载 resolve」导致的重复监听。
   useEffect(() => {
@@ -67,9 +72,7 @@ export function AppShell() {
     events.desktopModeChanged
       .listen((e) => {
         setDesktop(e.payload.active);
-        navigate(
-          e.payload.active ? (location.pathname === '/home' ? '/home' : '/desktop') : '/',
-        );
+        if (location.pathname !== '/home') navigate('/');
       })
       .then((fn) => (alive ? (unlisten = fn) : fn()));
     return () => {
@@ -78,19 +81,13 @@ export function AppShell() {
     };
   }, [navigate, location.pathname]);
 
-  // 初始对齐（仅挂载时执行一次）：启动即桌面模式 → 桌面主页。
-  // 注意不能依赖 [navigate]——它随路由变化，会把任意导航都 replace 弹回 /desktop。
-  // 启动时 hash 可能是 ''（Tauri 初始 URL 无 hash）或 '#/'，两者都视为默认页。
+  // 初始对齐（仅挂载时执行一次）：只同步模式态；首页 / 自身侦听模式切换形态，
+  // 子页路由保持原样（此前「启动即桌面模式 → 跳 /desktop」已不需要）。
   useEffect(() => {
     commands
       .desktopModeIsActive()
-      .then((active) => {
-        setDesktop(active);
-        const h = window.location.hash;
-        if (active && (h === '' || h === '#/')) navigate('/desktop', { replace: true });
-      })
+      .then((active) => setDesktop(active))
       .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 任务栏独立窗口的路由图标 → 跨窗口事件驱动主窗口导航（tauri 专属路径）。
@@ -149,6 +146,8 @@ export function AppShell() {
       <>
         <Outlet />
         {pickerOpen && <DockPickerModal onClose={() => setPickerOpen(false)} />}
+        {/* 待办到点提醒弹框（全局：所有路由/双形态都要能弹） */}
+        <ReminderDialog />
         <WebDebugBar />
       </>
     );
@@ -156,16 +155,37 @@ export function AppShell() {
 
   return (
     <div
-      className={`flex h-screen flex-col ${desktop ? 'overflow-hidden' : ''}`}
+      className={`relative flex h-screen flex-col ${desktop ? 'overflow-hidden' : ''}`}
       style={{ background: 'var(--bg, #17151b)' }}
       data-tauri-drag-region={false}
     >
+      {/* 接管子页的壁纸 backdrop：模糊壁纸 + 主题纱罩。子页不再是一块实色 --bg
+          （桌面沉浸感在进子页就断了），也不裸铺壁纸（浅色壁纸上 --text 深色字
+          会没对比）；换壁纸即时同步（跟随主屏布局） */}
+      {showDesktopBack && (
+        <div className="desktop-backdrop absolute inset-0 overflow-hidden" aria-hidden>
+          <div className="absolute inset-0" style={{ background: wallpaper.css }} />
+          {wallpaperSrcOf(wallpaper) && (
+            <div className="absolute -inset-12">
+              <img
+                src={wallpaperSrcOf(wallpaper)}
+                alt=""
+                draggable={false}
+                className="size-full select-none object-cover"
+              />
+            </div>
+          )}
+          <div className="desktop-backdrop-veil absolute inset-0" />
+        </div>
+      )}
       {/* 桌面接管子页的返回胶囊（与桌面主页控制中心钮同一视觉语言） */}
+      {/* 桌面接管子页的返回胶囊。子页底下是实色 --bg 而非壁纸，
+          玻璃底必须走主题 token（写死 black/30 + 白字在 light 下糊成脏灰胶囊） */}
       {showDesktopBack && (
         <button
-          onClick={() => navigate('/desktop')}
+          onClick={() => navigate('/')}
           title={t('chrome.shell.backToDesktopTitle')}
-          className="fixed left-4 top-4 z-40 flex items-center gap-1 rounded-full bg-black/30 px-4 py-2 text-[12.5px] font-medium text-white/85 ring-1 ring-white/15 backdrop-blur-xl transition-all hover:bg-black/45 hover:text-white"
+          className="fixed left-4 top-4 z-40 flex items-center gap-1 rounded-full bg-[var(--panel-strong)] px-4 py-2 text-[12.5px] font-medium text-[var(--text)] ring-1 ring-[var(--border)] backdrop-blur-xl transition-colors hover:bg-[var(--hover-strong)] hover:text-[var(--text)]"
         >
           <ChevronLeft size={15} />
           {t('chrome.shell.backToDesktop')}
@@ -188,9 +208,9 @@ export function AppShell() {
             顶部同理：悬浮返回胶囊（left-4 top-4）压在内容上层，子页须预留
             pt-[60px]，否则左上角内容（bench 侧栏「新会话」、各页标题）被胶囊盖住 */}
         <main
-          className={`min-w-0 flex-1 ${
+          className={`relative min-w-0 flex-1 ${
             desktop
-              ? isDesktopHome
+              ? isHomePage
                 ? 'overflow-hidden'
                 : `overflow-y-auto px-4 py-4 ${isTauri ? 'pb-[80px]' : ''} ${
                     showDesktopBack ? 'pt-[60px]' : ''
@@ -206,6 +226,8 @@ export function AppShell() {
       {(!desktop || !isTauri) && <DockBar desktop={desktop} />}
       {/* 任务栏「+」唤起的应用选择器（主窗口弹层） */}
       {pickerOpen && <DockPickerModal onClose={() => setPickerOpen(false)} />}
+      {/* 待办到点提醒弹框（全局：所有路由/双形态都要能弹） */}
+      <ReminderDialog />
       <WebDebugBar />
     </div>
   );

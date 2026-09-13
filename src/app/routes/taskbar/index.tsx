@@ -11,7 +11,7 @@ export default function TaskbarPage() {
     <div
       className="flex h-screen w-full flex-col justify-end overflow-hidden"
       style={{
-        // 近实心深色条（对齐水豚hub）：桌面上读作任务栏，app 最大化后内容
+        // 近实心深色条：桌面上读作任务栏，app 最大化后内容
         // 不透过 dock 搅局；顶部 1px 高光标出条的边界
         background:
           'linear-gradient(to bottom, rgba(24,22,30,.88) 0%, rgba(17,15,21,.93) 55%, rgba(13,11,16,.96) 100%)',

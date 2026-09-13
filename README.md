@@ -1,53 +1,92 @@
-# 仓鼠Hub（HamsterHub）
+<div align="center">
 
-> 把桌面，囤进一个窝。—— Windows 上的 iOS 风格桌面
+# 🐹 HamsterHub
 
-对标水豚hub（macOS 风）的桌面管理工具，走 **iOS 风格**差异化：主屏幕（图标网格/分页/文件夹/长按编辑）+ Dock + Spotlight 搜索 + 控制中心，底层是完整的本地优先桌面助手（应用/文件索引/待办/AI），无广告。
+**Hoard your desktop into one cozy nest — an iOS-style home screen for Windows,
+with a local-first assistant and AI agents built in.**
 
-## 文档索引
+English · [简体中文](./README.zh-CN.md)
 
-| 文档 | 内容 |
+<img src="./docs/images/home-desktop.png" width="860" alt="HamsterHub desktop mode" />
+
+</div>
+
+## 1. Introduction
+
+HamsterHub (仓鼠Hub) is a Windows desktop app that takes over your desktop the way iOS
+takes over a phone: a widget dashboard with a greeting clock, Spotlight search, a custom
+bottom taskbar, and an app grid — all backed by a complete local-first assistant
+(apps / files / to-dos / notes / vault). Free, no ads. Windows 10 (1809+) and Windows 11.
+
+| | |
 |---|---|
-| [产品规划](./docs/01-product-plan.md) | 定位、竞品、用户画像、功能优先级、MVP 范围、版本路线图、指标与风险 |
-| [软件设计文档 SDD](./docs/02-sdd.md) | 系统架构、窗口模型、模块设计、数据库 Schema、IPC 契约、UI 规范、非功能设计 |
-| [技术路线](./docs/03-tech-roadmap.md) | Tauri 2 选型论证、技术栈清单、关键技术方案、阶段路线、风险登记册、工程规范 |
-| [代码架构](./docs/04-architecture.md) | 仓库结构、前端/Rust 分层、IPC 设计、数据流、代码规范、测试架构 |
+| <img src="./docs/images/home-windowed.png" width="100%" alt="Windowed mode" /><br><sub>**Two forms, one home** — windowed workbench with title bar, side nav and a floating dock.</sub> | <img src="./docs/images/spotlight.png" width="100%" alt="Spotlight search" /><br><sub>**Spotlight** (`Alt+Space`) — apps, local files, the web and Ask-AI in one bar, with pinyin/initials matching.</sub> |
+| <img src="./docs/images/bench.png" width="100%" alt="Agent workbench" /><br><sub>**Agent workbench** — hosts coding agents (Claude Code / Codex / ZCode / Gemini) in a streaming chat UI.</sub> | <img src="./docs/images/vault.png" width="100%" alt="Vault" /><br><sub>**Vault** — a local password manager with field-level encryption and auto-lock.</sub> |
+| <img src="./docs/images/files.png" width="100%" alt="Files" /><br><sub>**Files** — a indexed, categorized view of your recent documents, searchable by name or pinyin.</sub> | <img src="./docs/images/settings.png" width="100%" alt="Settings" /><br><sub>**Settings** — themes, wallpapers, languages (EN / 简体中文 / 繁體中文), desktop-mode options.</sub> |
 
-## 快速开始
+### Highlights
 
-环境要求：Node ≥ 20 + pnpm 11 + Rust stable（MSVC）+ VS Build Tools。
+- **Desktop takeover** — enters a fullscreen desktop mode that replaces the system
+  taskbar with a custom always-on-top bar and hides desktop icons. State is snapshotted
+  and fully restored on exit, and a companion watchdog process (`hamster-watchdog.exe`)
+  restores your desktop within seconds even if the app crashes or is killed.
+- **iOS-style home** — widget dashboard (weather / to-do / countdowns / recent files /
+  top apps / focus timer), long-press-editable app grid with pages and folders, and
+  theming (dark / light / retro-pixel), wallpapers and accent colors.
+- **Spotlight search** — one hotkey for apps, indexed local files (FTS5, pinyin and
+  first-letter matching), web search and Ask-AI routing.
+- **Everyday assistant** — to-dos, notes, countdowns, schedule and weather, available
+  as widgets and as full pages.
+- **Agent workbench** — a GUI home for coding agent CLIs: streaming conversations with
+  thinking/tool cards and diff rendering, plus Recall, a full-text search across all
+  agent sessions.
+- **Local-first & private** — everything is stored in a local SQLite database; the
+  network is only touched by weather, web search and AI features. The optional vault
+  encrypts every field with AES-256-GCM under an Argon2id-derived key.
 
-**开发工作流（浏览器优先，详见 [Agent.md](./Agent.md)）**：
+## 2. Development
+
+Tauri 2 (Rust core) + React 18 + TypeScript + Tailwind 4 + Zustand / TanStack Query +
+SQLite (rusqlite, FTS5). IPC types are generated one-way from Rust with
+[tauri-specta](https://github.com/oscartbeaumont/tauri-specta) — the frontend never
+hand-writes them.
+
+**Requirements:** Node ≥ 22.13 · pnpm 11 · Rust stable (MSVC) · VS Build Tools.
 
 ```bash
-pnpm dev           # ① 纯浏览器开发：localhost:5173，IPC 自动走 mock，右下角 WebDebugBar 可模拟桌面模式
-pnpm dev:web       #    同上但用 5174 端口（tauri dev 占用 5173 时用这个）
-pnpm test          # vitest 单测（layout 纯函数）
-pnpm tauri dev     # ② 桌面壳集成测试：系统接管/托盘/看门狗（浏览器验证通过后才进这层）
-pnpm codegen:ipc   # Rust 命令变更后重新生成 IPC TypeScript 类型
-pnpm tauri build   # 打 NSIS 安装包（产物在 src-tauri/target/release）
+pnpm install
+
+pnpm dev           # ① browser-first development at localhost:5173 — IPC runs on a
+                   #    mock, and the WebDebugBar (bottom-left) can simulate desktop mode
+pnpm dev:web       #    same on port 5174 (when tauri dev occupies 5173)
+pnpm test          # vitest unit tests
+pnpm e2e           # Playwright end-to-end tests
+pnpm tauri dev     # ② real desktop shell: takeover / tray / watchdog
+pnpm codegen:ipc   # regenerate IPC TypeScript types after changing Rust commands
+pnpm tauri build   # build the NSIS installer (output in src-tauri/target/release)
 ```
 
-其它脚本：`pnpm icon`（重生成占位图标）、`scripts/check.ps1`（本地全量检查，同 CI 门禁）。
+Other scripts: `pnpm icon` (regenerate the placeholder icon), `scripts/check.ps1`
+(full local check, same gates as CI).
 
-## 技术栈
+The workflow is browser-first: verify everything in `pnpm dev` with mocked IPC, then
+move to `pnpm tauri dev` for the system-level integration layer.
 
-Tauri 2（Rust 核心）+ React 18 + TypeScript + Tailwind 4 + Zustand/TanStack Query + SQLite(rusqlite, FTS5)。IPC 类型由 tauri-specta 从 Rust 单向生成，前后端不手写重复类型。
+### Documentation
 
-## 当前状态
+| Doc | Contents |
+|---|---|
+| [User manual (简体中文)](./docs/06-user-manual.zh-CN.md) | end-user guide for every feature, with screenshots |
+| [Product plan](./docs/01-product-plan.md) | positioning, competitors, personas, priorities, roadmap, metrics, risks |
+| [Software design (SDD)](./docs/02-sdd.md) | architecture, window model, modules, DB schema, IPC contract, UI spec |
+| [Tech roadmap](./docs/03-tech-roadmap.md) | Tauri 2 rationale, stack list, key technical designs, engineering standards |
+| [Code architecture](./docs/04-architecture.md) | repo layout, frontend/Rust layering, data flow, testing |
+| [Pitfalls](./docs/05-pitfalls.md) | hard-won lessons, updated as we go |
 
-**M1 桌面接管 + M2 桌面助手已完成（2026-09-12）**：
+## 3. License
 
-- 工程：Tauri 2 + React 18 + TS + Tailwind，IPC 类型由 tauri-specta 从 Rust 单向生成
-- 桌面接管三件套：任务栏/图标隐藏 + 状态快照恢复 + `hamster-watchdog.exe` 看门狗（崩溃 ≤4s 还原）
-- iOS 主屏：图标网格/分页/文件夹/长按编辑 + 小组件（时钟/天气/待办/倒数日/系统状态）
-- 桌面模式 = **全屏接管整个桌面（对齐水豚hub）**：默认页为水豚式桌面主页（壁纸 + 问候大时钟 +
-  搜索 + 小组件），**底部贴边通栏任务栏完全替代系统任务栏**（左端主屏/搜索/设置 + 定制/常用
-  分组，右端退出 + 时钟）；退出后为窗口化模式（红绿灯标题栏 + 侧栏 + 居中胶囊 Dock）
-- Spotlight 搜索（热键 + 拼音/首字母/文件/网页）、待办/便签/倒数日/天气、NSIS 打包
-- **代理工作台（/bench，Molto 整合 MVP）**：GUI 流式对话托管 Claude Code / Codex 等编码代理
-  （assistant-ui 消息流：思考卡/工具卡/diff/markdown 高亮）+ Recall 跨代理会话全文搜索；
-  Rust 域层 vendor 自 Molto（`D:\ksa\Molto`，molto-core/adapters/runtime/index 四个零 Tauri
-  依赖 crate），PTY 终端模式与交付看板留待后续
+Released under the MIT License.
 
-下一步：代码签名（发布前必须）· 通知中心/灵动岛（M3+）。详见 [Agent.md](./Agent.md) 状态滚动更新。
+<div align="center">
+<sub>把桌面，囤进一个窝。· Hoard your desktop into one cozy nest.</sub>
+</div>

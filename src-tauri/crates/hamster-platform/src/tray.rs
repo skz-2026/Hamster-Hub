@@ -70,8 +70,11 @@ unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
     BOOL(1)
 }
 
-unsafe fn inspect(hwnd: HWND, self_pid: u32) -> Option<TrayApp> {
-    // 不可见窗口直接排除；最小化窗口保留（面板里标「已最小化」）
+/// 用户可感知窗口的基础过滤：可见、有标题、非工具窗、未被 cloak、
+/// 非自身进程、非系统壳窗口；通过则返回窗口进程 pid。
+/// 托盘列表（inspect）在此之上还会限制带边框、无属主。
+unsafe fn user_visible_pid(hwnd: HWND, self_pid: u32) -> Option<u32> {
+    // 不可见窗口直接排除；最小化窗口仍算可见（Win32 语义下保持 WS_VISIBLE）
     if !IsWindowVisible(hwnd).as_bool() {
         return None;
     }
@@ -81,18 +84,6 @@ unsafe fn inspect(hwnd: HWND, self_pid: u32) -> Option<TrayApp> {
     // 工具窗（提示条/浮窗）不算应用窗口
     let exstyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
     if exstyle & WS_EX_TOOLWINDOW.0 as isize != 0 {
-        return None;
-    }
-    // 无边框窗（暂存通知/隐藏面板）不算应用窗口
-    let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
-    if style & WS_CAPTION.0 as isize != WS_CAPTION.0 as isize {
-        return None;
-    }
-    // 有属主的窗口（对话框等）跟随主窗口，不单列
-    if GetWindow(hwnd, GW_OWNER)
-        .map(|owner| !owner.0.is_null())
-        .unwrap_or(false)
-    {
         return None;
     }
     // UWP 挂起/幽灵窗口被 cloak，用户看不见，跳过
@@ -113,9 +104,26 @@ unsafe fn inspect(hwnd: HWND, self_pid: u32) -> Option<TrayApp> {
     if pid == 0 || pid == self_pid {
         return None;
     }
-    // 系统壳窗口（桌面/任务栏载体）不进托盘列表
+    // 系统壳窗口（桌面/任务栏载体）不算应用窗口
     let cls = class_name(hwnd);
     if matches!(cls.as_str(), "Progman" | "WorkerW" | "Shell_TrayWnd") {
+        return None;
+    }
+    Some(pid)
+}
+
+unsafe fn inspect(hwnd: HWND, self_pid: u32) -> Option<TrayApp> {
+    user_visible_pid(hwnd, self_pid)?;
+    // 无边框窗（暂存通知/隐藏面板）不算应用窗口
+    let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+    if style & WS_CAPTION.0 as isize != WS_CAPTION.0 as isize {
+        return None;
+    }
+    // 有属主的窗口（对话框等）跟随主窗口，不单列
+    if GetWindow(hwnd, GW_OWNER)
+        .map(|owner| !owner.0.is_null())
+        .unwrap_or(false)
+    {
         return None;
     }
 
@@ -238,6 +246,39 @@ pub fn activate(id: u64) -> Result<()> {
         let _ = SetForegroundWindow(hwnd);
     }
     Ok(())
+}
+
+struct FindCtx {
+    self_pid: u32,
+    /// 目标 exe 文件名（小写）
+    exe: String,
+    out: *mut Option<u64>,
+}
+
+/// 按 exe 文件名（大小写不敏感）找一个已运行的可见顶层窗口。
+/// EnumWindows 按 z 序枚举，首个命中即当前最上层的那扇。
+pub fn find_by_process(self_pid: u32, exe: &str) -> Option<u64> {
+    let mut found: Option<u64> = None;
+    let mut ctx = FindCtx {
+        self_pid,
+        exe: exe.to_ascii_lowercase(),
+        out: &mut found,
+    };
+    unsafe {
+        let _ = EnumWindows(Some(find_proc), LPARAM(&mut ctx as *mut FindCtx as isize));
+    }
+    found
+}
+
+unsafe extern "system" fn find_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
+    let ctx = &*(lparam.0 as *const FindCtx);
+    if user_visible_pid(hwnd, ctx.self_pid).is_some()
+        && process_name(hwnd).to_ascii_lowercase() == ctx.exe
+    {
+        unsafe { *ctx.out = Some(hwnd.0 as u64) };
+        return BOOL(0); // 停止枚举
+    }
+    BOOL(1)
 }
 
 const CHEVRON_NAME: &str = "显示隐藏的图标";

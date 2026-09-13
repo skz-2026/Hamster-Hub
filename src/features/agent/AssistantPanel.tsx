@@ -76,6 +76,7 @@ const AssistantPanel = forwardRef<AssistantPanelHandle, {
           model: null,
           effort: null,
           agentId: null,
+          resumeKey: null,
         });
         setSession(info);
       } catch (e) {

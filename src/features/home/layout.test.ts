@@ -4,12 +4,14 @@ import {
   buildDefaultLayout,
   compactPages,
   DOCK_CAPACITY,
+  mergeDrop,
   mergeIntoFolder,
   moveAcrossPages,
   moveToDock,
   normalizeLayout,
   removeFromDock,
   removeFromPage,
+  renameFolder,
   reorder,
   resolveWallpaper,
   nextWallpaperId,
@@ -181,6 +183,79 @@ describe('文件夹合并与删除', () => {
     const flat = next.pages.flat().sort();
     expect(flat).toEqual(['app:a', 'app:b', 'app:c']);
     expect(Object.keys(next.folders)).toHaveLength(0);
+  });
+
+  it('renameFolder：改名生效，空白名/同名保持不变', () => {
+    let l = mergeIntoFolder(base(), 0, 1, 0);
+    const id = l.pages[0].find((i) => i.startsWith('folder:'))!.slice('folder:'.length);
+    const renamed = renameFolder(l, id, ' 工具箱 ');
+    expect(renamed.folders[id].name).toBe('工具箱');
+    expect(renamed).not.toBe(l);
+    expect(renameFolder(renamed, id, '  ')).toBe(renamed); // 空白名视为取消
+    expect(renameFolder(renamed, id, '工具箱')).toBe(renamed); // 同名不产生新布局
+    expect(renameFolder(renamed, 'nope', 'x')).toBe(renamed); // 未知 id
+  });
+});
+
+describe('mergeDrop（松手合并）', () => {
+  const base = (): HomeLayout => ({
+    version: 1,
+    wallpaper: 'hamster',
+    pages: [
+      ['app:a', 'app:b', 'app:c'],
+      ['app:x', 'app:y'],
+    ],
+    dock: ['d1', 'd2'],
+    folders: {},
+  });
+  const folderIdOf = (ref: string) => ref.slice('folder:'.length);
+
+  it('同页拖到应用上 → 新建文件夹（与悬停合并同规则）', () => {
+    const next = mergeDrop(base(), { kind: 'page', page: 0, idx: 2 }, 0, 0)!;
+    const ref = next.pages[0][0];
+    expect(ref.startsWith('folder:')).toBe(true);
+    expect(next.folders[folderIdOf(ref)].apps).toEqual(['a', 'c']);
+    expect(next.pages[0]).toHaveLength(2);
+  });
+
+  it('同页拖到已有文件夹 → 追加成员', () => {
+    let l = mergeDrop(base(), { kind: 'page', page: 0, idx: 1 }, 0, 0)!;
+    const ref = l.pages[0].find((i) => i.startsWith('folder:'))!;
+    const next = mergeDrop(l, { kind: 'page', page: 0, idx: l.pages[0].indexOf('app:c') }, 0, l.pages[0].indexOf(ref))!;
+    expect(next.folders[folderIdOf(ref)].apps).toEqual(['a', 'b', 'c']);
+  });
+
+  it('跨页拖到应用上 → 目标原位换成文件夹，源页收紧', () => {
+    const next = mergeDrop(base(), { kind: 'page', page: 0, idx: 2 }, 1, 1)!;
+    const ref = next.pages[1][1];
+    expect(ref.startsWith('folder:')).toBe(true);
+    expect(next.folders[folderIdOf(ref)].apps).toEqual(['y', 'c']);
+    expect(next.pages[0]).toEqual(['app:a', 'app:b']);
+  });
+
+  it('跨页拖入已有文件夹 → 成员追加、源项移除', () => {
+    const l = mergeDrop(base(), { kind: 'page', page: 0, idx: 1 }, 0, 0)!;
+    const ref = l.pages[0][0];
+    const next = mergeDrop(l, { kind: 'page', page: 1, idx: 0 }, 0, 0)!;
+    expect(next.folders[folderIdOf(ref)].apps).toEqual(['a', 'b', 'x']);
+    expect(next.pages[1]).toEqual(['app:y']);
+  });
+
+  it('Dock 应用拖到页面应用上 → 建夹并移出 Dock', () => {
+    const next = mergeDrop(base(), { kind: 'dock', page: 0, idx: 0 }, 1, 0)!;
+    const ref = next.pages[1][0];
+    expect(ref.startsWith('folder:')).toBe(true);
+    expect(next.folders[folderIdOf(ref)].apps).toEqual(['x', 'd1']);
+    expect(next.dock).toEqual(['d2']);
+  });
+
+  it('不可合并返回 null：自己落自己/目标是小组件/拖的是文件夹', () => {
+    expect(mergeDrop(base(), { kind: 'page', page: 0, idx: 1 }, 0, 1)).toBeNull();
+    const withWidget: HomeLayout = { ...base(), pages: [['widget:clock', 'app:b']] };
+    expect(mergeDrop(withWidget, { kind: 'page', page: 0, idx: 1 }, 0, 0)).toBeNull();
+    const withFolder = mergeDrop(base(), { kind: 'page', page: 0, idx: 1 }, 0, 0)!;
+    const fIdx = withFolder.pages[0].findIndex((i) => i.startsWith('folder:'));
+    expect(mergeDrop(withFolder, { kind: 'page', page: 0, idx: fIdx }, 0, 1)).toBeNull();
   });
 });
 

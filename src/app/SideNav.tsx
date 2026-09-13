@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   Bot,
+  KeyRound,
   LayoutDashboard,
   MonitorSmartphone,
   Search,
@@ -22,6 +23,7 @@ const NAV_REST = [
   { to: '/schedule', labelKey: 'chrome.nav.schedule', icon: CalendarDays },
   { to: '/apps', labelKey: 'chrome.nav.apps', icon: LayoutGrid },
   { to: '/files', labelKey: 'chrome.nav.files', icon: FolderOpen },
+  { to: '/vault', labelKey: 'chrome.nav.vault', icon: KeyRound },
 ] as const;
 
 /** 左下角常驻入口（Dock 位）：桌面快捷进入 + 代理工作台 + 设置 */
@@ -99,7 +101,7 @@ function HomeScreenBtn() {
   );
 }
 
-/** 桌面模式快捷进入（不用绕设置页；点击后整屏切到 /desktop，本按钮随之消失） */
+/** 桌面模式快捷进入（不用绕设置页；进入后事件驱动切到首页接管形态，本按钮随之消失） */
 function DesktopEnterBtn() {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
