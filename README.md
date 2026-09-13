@@ -11,6 +11,15 @@ English · [简体中文](./README.zh-CN.md)
 
 </div>
 
+## 🎬 Demo videos
+
+<p align="center">
+  <video src="https://raw.githubusercontent.com/skz-2026/Hamster-Hub/main/docs/hamster-hub-manual-en.mp4" controls muted playsinline width="48%">English demo video</video>
+  <video src="https://raw.githubusercontent.com/skz-2026/Hamster-Hub/main/docs/hamster-hub-manual.mp4" controls muted playsinline width="48%">中文演示视频</video>
+</p>
+
+▶ [English walkthrough (.mp4)](./docs/hamster-hub-manual-en.mp4) · [中文版演示 (.mp4)](./docs/hamster-hub-manual.mp4)
+
 ## 1. Introduction
 
 HamsterHub (仓鼠Hub) is a Windows desktop app that takes over your desktop the way iOS

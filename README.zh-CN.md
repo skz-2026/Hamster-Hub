@@ -10,6 +10,15 @@
 
 </div>
 
+## 🎬 演示视频
+
+<p align="center">
+  <video src="https://raw.githubusercontent.com/skz-2026/Hamster-Hub/main/docs/hamster-hub-manual.mp4" controls muted playsinline width="48%">中文演示视频</video>
+  <video src="https://raw.githubusercontent.com/skz-2026/Hamster-Hub/main/docs/hamster-hub-manual-en.mp4" controls muted playsinline width="48%">English demo video</video>
+</p>
+
+▶ [中文版演示 (.mp4)](./docs/hamster-hub-manual.mp4) · [English walkthrough (.mp4)](./docs/hamster-hub-manual-en.mp4)
+
 ## 1. 产品简介
 
 仓鼠Hub 是一款让桌面像 iPhone 一样好用的 Windows 应用：问候大时钟 + 小组件仪表盘、

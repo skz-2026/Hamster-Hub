@@ -7,6 +7,15 @@
 
 ![仓鼠Hub 桌面模式](./images/manual/20-home-desktop.png)
 
+## 🎬 视频教程
+
+<p align="center">
+  <video src="https://raw.githubusercontent.com/skz-2026/Hamster-Hub/main/docs/hamster-hub-manual.mp4" controls muted playsinline width="48%">中文演示视频</video>
+  <video src="https://raw.githubusercontent.com/skz-2026/Hamster-Hub/main/docs/hamster-hub-manual-en.mp4" controls muted playsinline width="48%">English demo video</video>
+</p>
+
+▶ [中文版演示 (.mp4)](./hamster-hub-manual.mp4) · [English walkthrough (.mp4)](./hamster-hub-manual-en.mp4)（网页上点开可直接播放）
+
 ## 目录
 
 1. [认识仓鼠Hub：三种形态](#1-认识仓鼠hub三种形态)
