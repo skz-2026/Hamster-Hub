@@ -11,8 +11,8 @@ Write-Host '== pnpm build ==' -ForegroundColor Cyan
 pnpm -C $root build
 if ($LASTEXITCODE -ne 0) { exit 1 }
 
-Write-Host '== cargo fmt --check ==' -ForegroundColor Cyan
-cargo fmt --manifest-path "$root\src-tauri\Cargo.toml" --check
+Write-Host '== cargo fmt --all --check ==' -ForegroundColor Cyan
+cargo fmt --all --manifest-path "$root\src-tauri\Cargo.toml" --check
 if ($LASTEXITCODE -ne 0) { exit 1 }
 
 Write-Host '== cargo clippy ==' -ForegroundColor Cyan

@@ -175,8 +175,8 @@ test.describe('代理工作台（bench，上游域层整合 MVP）', () => {
     await page.locator('textarea[placeholder*="向代理提问"]').fill('E2E：帮我梳理仓库');
     await page.getByTitle('发送并创建会话').click();
 
-    // 首条消息上屏 + 假代理流式输出（思考卡/工具卡/markdown）
-    await expect(page.getByText('E2E：帮我梳理仓库')).toBeVisible();
+    // 首条消息上屏（限定聊天正文，避免命中侧栏同名会话标题）+ 假代理流式输出（思考卡/工具卡/markdown）
+    await expect(page.locator('div.whitespace-pre-wrap', { hasText: 'E2E：帮我梳理仓库' })).toBeVisible();
     await expect(page.getByText('思考中…').or(page.getByText('已思考'))).toBeVisible();
     await expect(page.getByText('示例代码：')).toBeVisible({ timeout: 15_000 });
     // 运行徽章随轮次结束消失

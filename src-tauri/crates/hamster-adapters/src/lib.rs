@@ -102,7 +102,9 @@ pub(crate) fn find_programs(name: &str) -> Vec<std::path::PathBuf> {
 const BEST_TTL: std::time::Duration = std::time::Duration::from_secs(600);
 
 /// 探测缓存：路径 → (探测时刻, 结果)
-type BestCache = std::sync::Mutex<std::collections::HashMap<String, (std::time::Instant, Option<std::path::PathBuf>)>>;
+type BestCache = std::sync::Mutex<
+    std::collections::HashMap<String, (std::time::Instant, Option<std::path::PathBuf>)>,
+>;
 
 fn best_cache() -> &'static BestCache {
     static CACHE: std::sync::OnceLock<BestCache> = std::sync::OnceLock::new();
