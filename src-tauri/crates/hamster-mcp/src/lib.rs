@@ -1,7 +1,7 @@
 //! hamster-mcp：Hamster 桌面 MCP server（desktop + browser-use + computer-use）。
 //!
 //! 定位：宿主 Agent 经 MCP stdio 使用这里的工具操作桌面（应用/文件/待办/音量 +
-//! 浏览器 + 截图点击键入）。vendor 自上游项目（Apache-2.0，整合时更名），扩展 desktop 工具组、
+//! 浏览器 + 截图点击键入）。源自自家上游 Molto（整合时更名），扩展 desktop 工具组、
 //! computer use 安全门与调用审计。
 
 pub mod browser;

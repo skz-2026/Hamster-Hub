@@ -2,6 +2,7 @@
 name = "hamster-platform"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
 description = "仓鼠Hub Win32 平台层：任务栏/桌面图标接管、状态快照、图标提取（主程序与看门狗共享）"
 
 [dependencies]

@@ -5,7 +5,7 @@ check-revoke = false
 [net]
 retry = 3
 
-# bench（源自上游（Apache-2.0，整合时更名）的 crate）：ts-rs 类型导出目录。
+# bench（源自自家上游 Molto，整合时更名的 crate）：ts-rs 类型导出目录。
 # 相对各 crate 的 manifest（crates/<pkg>）计算，../../ 即 src-tauri/，target 已 gitignore
 [env]
 TS_RS_EXPORT_DIR = "../../target/ts-rs-bindings"

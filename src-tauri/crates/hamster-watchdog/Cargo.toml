@@ -2,6 +2,7 @@
 name = "hamster-watchdog"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
 description = "仓鼠Hub 看门狗：主进程异常退出时按快照还原任务栏/桌面图标"
 
 [[bin]]

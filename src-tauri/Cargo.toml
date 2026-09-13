@@ -3,6 +3,7 @@ name = "hamster-hub"
 version = "0.1.1"
 description = "仓鼠Hub —— 把桌面，囤进一个窝。Windows 上的 iOS 风格桌面"
 authors = ["hamster-hub"]
+license = "MIT"
 edition = "2021"
 rust-version = "1.77"
 
@@ -10,7 +11,7 @@ rust-version = "1.77"
 members = [
     "crates/hamster-platform",
     "crates/hamster-watchdog",
-    # bench（代理工作台）：源自上游（Apache-2.0，整合时更名）的域层 crate，零 Tauri 依赖
+    # bench（代理工作台）：源自自家上游 Molto（整合时更名）的域层 crate，零 Tauri 依赖
     "crates/hamster-core",
     "crates/hamster-adapters",
     "crates/hamster-runtime",
@@ -23,7 +24,7 @@ members = [
 [workspace.package]
 version = "0.2.0"
 edition = "2021"
-license = "Apache-2.0"
+license = "MIT"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -86,7 +87,7 @@ hamster-mcp = { path = "crates/hamster-mcp" }
 # 平台层（任务栏/图标接管、快照、图标提取、Shell 启动）
 hamster-platform = { path = "crates/hamster-platform" }
 
-# bench（代理工作台）：源自上游（Apache-2.0，整合时更名）的域层
+# bench（代理工作台）：源自自家上游 Molto（整合时更名）的域层
 hamster-core = { path = "crates/hamster-core" }
 hamster-adapters = { path = "crates/hamster-adapters" }
 hamster-runtime = { path = "crates/hamster-runtime" }
