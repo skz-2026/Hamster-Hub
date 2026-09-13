@@ -38,6 +38,16 @@ pub struct DockMenuPayload {
 /// 当前弹窗载荷（dock-menu 窗口挂载时拉取；打开/换目标时更新）
 static PAYLOAD: Mutex<Option<DockMenuPayload>> = Mutex::new(None);
 
+/// 弹窗状态广播（hamster:dock-popup-state）：任务栏据此抑制悬停探测——
+/// 右键菜单开着时，悬停卡片不得把它顶掉
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockPopupState {
+    /// "menu" / "hover" / null（已收起）
+    pub kind: Option<String>,
+    pub app_key: Option<String>,
+}
+
 /// 菜单宽度（逻辑 px，与 DockAppMenu 的 w-44 对齐）
 const MENU_W: f64 = 176.0;
 /// 悬停卡片宽度（逻辑 px，窗口标题需要更多横向空间）
@@ -89,6 +99,7 @@ pub fn dock_menu_open(app: AppHandle, payload: DockMenuPayload) -> Result<(), Ap
     let y = pos.y - h - (8.0 * scale).round() as i32;
 
     let is_menu = payload.kind != "hover";
+    let app_key = payload.app_key.clone();
     *PAYLOAD
         .lock()
         .map_err(|e| AppError::poison(e.to_string()))? = Some(payload.clone());
@@ -102,6 +113,14 @@ pub fn dock_menu_open(app: AppHandle, payload: DockMenuPayload) -> Result<(), Ap
     }
     // 弹窗 webview 启动即挂载常驻，监听器已就绪；重开换目标靠事件推送
     let _ = app.emit_to("dock-menu", "hamster:dock-menu-payload", payload);
+    // 状态广播给任务栏：抑制悬停探测（菜单开着时卡片不得顶掉菜单）
+    let _ = app.emit(
+        "hamster:dock-popup-state",
+        DockPopupState {
+            kind: Some(if is_menu { "menu" } else { "hover" }.into()),
+            app_key: Some(app_key),
+        },
+    );
     Ok(())
 }
 
@@ -125,5 +144,12 @@ pub fn dock_menu_hide(app: AppHandle) -> Result<(), AppError> {
     if let Ok(mut g) = PAYLOAD.lock() {
         *g = None;
     }
+    let _ = app.emit(
+        "hamster:dock-popup-state",
+        DockPopupState {
+            kind: None,
+            app_key: None,
+        },
+    );
     Ok(())
 }

@@ -12,6 +12,10 @@ import DockWindowsCard from './DockWindowsCard';
 
 export default function DockMenuWindow() {
   const [payload, setPayload] = useState<DockMenuPayload | null>(null);
+  // kind 的 ref 镜像：hover-leave 监听器挂载一次，回调里需读最新 kind——
+  // 右键菜单打开时鼠标离开图标的事件不得把菜单当悬停卡片收掉
+  const kindRef = useRef<string | null>(null);
+  kindRef.current = payload?.kind ?? null;
   // hover 卡片待收计时（图标离开/卡片离开触发；进卡/换目标取消）
   const hoverClose = useRef<number | undefined>(undefined);
   const cancelHoverClose = () => window.clearTimeout(hoverClose.current);
@@ -49,7 +53,9 @@ export default function DockMenuWindow() {
     window.addEventListener('keydown', esc);
     // 任务栏图标鼠标离开：鼠标若没进卡片，短暂宽限后收回
     let unLeave: (() => void) | undefined;
-    listen('hamster:dock-hover-leave', () => armHoverClose(350))
+    listen('hamster:dock-hover-leave', () => {
+      if (kindRef.current === 'hover') armHoverClose(350);
+    })
       .then((fn) => (unLeave = fn))
       .catch(console.error);
     return () => {

@@ -63,6 +63,12 @@ export function DockBar({ desktop }: DockBarProps) {
   const [menu, setMenu] = useState<{ key: string; x: number; removable: boolean } | null>(null);
   // 悬停窗口卡片（本地渲染形态；任务栏窗口走独立弹窗）：目标 + 锚点 + 窗口清单
   const [peek, setPeek] = useState<{ key: string; x: number; windows: AppWindowInfo[] } | null>(null);
+  // menu 的 ref 镜像：右键与悬停互斥——定时器/查询回调里读不到新鲜 state，
+  // 用 ref 判断「菜单已开」则不再弹卡
+  const menuKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    menuKeyRef.current = menu?.key ?? null;
+  }, [menu]);
 
   // 任务栏独立窗口内不能本地 navigate（会把 /home 载入 72px 窗口条），
   // 改为发事件让主窗口导航并前置
@@ -156,13 +162,16 @@ export function DockBar({ desktop }: DockBarProps) {
     window.clearTimeout(peekTimer.current);
     window.clearTimeout(peekClose.current);
     peekTimer.current = window.setTimeout(() => {
+      if (menuKeyRef.current || popupKindRef.current === 'menu') return; // 右键菜单已开：不弹卡
       qc.fetchQuery({
         queryKey: ['apps', 'windows', key],
         queryFn: () => commands.appWindows(key),
         staleTime: 1500,
       })
         .then((windows) => {
-          if (windows.length < 2) return;
+          // 查询在途期间用户可能已右键：菜单优先，放弃弹卡
+          if (menuKeyRef.current || popupKindRef.current === 'menu' || windows.length < 2)
+            return;
           if (inTaskbarWindow) {
             commands
               .dockMenuOpen({
@@ -197,6 +206,10 @@ export function DockBar({ desktop }: DockBarProps) {
   /** 右键呼出应用菜单：任务栏独立窗口一条高放不下纵向菜单，弹独立置顶
    *  小窗（载荷 + 定位后端算）；主窗口/胶囊内空间充足，本地渲染 */
   const openContextMenu = (key: string, x: number, removable: boolean) => {
+    // 右键优先：掐掉悬停探测与宽限收卡，已开的悬停卡片立即让位
+    window.clearTimeout(peekTimer.current);
+    window.clearTimeout(peekClose.current);
+    setPeek(null);
     if (inTaskbarWindow) {
       commands
         .dockMenuOpen({
@@ -245,6 +258,19 @@ export function DockBar({ desktop }: DockBarProps) {
     const hide = () => commands.dockMenuHide().catch(console.error);
     window.addEventListener('pointerdown', hide);
     return () => window.removeEventListener('pointerdown', hide);
+  }, [inTaskbarWindow]);
+  // 任务栏窗口的右键菜单走独立弹窗（本地 menu state 不参与），
+  // 弹窗状态由 Rust 广播到这里：菜单开着 = 悬停探测全部抑制
+  const popupKindRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!inTaskbarWindow) return;
+    let un: (() => void) | undefined;
+    listen<{ kind: string | null }>('hamster:dock-popup-state', (e) => {
+      popupKindRef.current = e.payload.kind ?? null;
+    })
+      .then((fn) => (un = fn))
+      .catch(console.error);
+    return () => un?.();
   }, [inTaskbarWindow]);
 
   // 弹窗菜单动作回传：渲染了 DockBar 的窗口执行（remove 需要 layout commit；
