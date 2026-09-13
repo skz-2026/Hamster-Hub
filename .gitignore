@@ -3,6 +3,7 @@ node_modules/
 
 # build
 dist/
+dist-docs/
 src-tauri/target/
 src-tauri/target-live-test/
 src-tauri/gen/

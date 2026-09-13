@@ -1,0 +1,46 @@
+# 手册站点发布到 GitHub Pages（https://skz-2026.github.io/Hamster-Hub/）
+# 前置一次性配置：仓库 Settings → Pages → Build and deployment → Source 选「GitHub Actions」
+name: Deploy Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'scripts/build-docs.mjs'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # 仅装构建脚本所需两包，不碰 pnpm 锁文件
+      - run: npm install --no-save markdown-it@^15.0.0
+      - run: node scripts/build-docs.mjs
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist-docs
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
