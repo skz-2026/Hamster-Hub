@@ -173,10 +173,7 @@ ${topbar([`<strong>首页</strong>`, { href: 'manual.zh-CN.html', label: '用户
   <p><a class="btn" href="manual.zh-CN.html">📖 用户手册</a><a class="btn ghost" href="https://github.com/skz-2026/Hamster-Hub">⭐ GitHub</a></p>
   <img src="images/home-desktop.png" alt="仓鼠Hub 桌面模式" width="760">
   <h2 style="border:none">🎬 演示视频</h2>
-  <div class="videos">
-    <video src="hamster-hub-manual.mp4" controls muted playsinline></video>
-    <video src="hamster-hub-manual-en.mp4" controls muted playsinline></video>
-  </div>
+  <div class="videos"><video src="hamster-hub-manual.mp4" controls muted playsinline></video></div>
 </div>`;
 fs.writeFileSync(path.join(outDir, 'index.html'), page('zh-CN', 'Windows 本地优先的智能桌面助手',
   '仓鼠Hub —— Windows 本地优先的智能桌面助手。iOS 风格桌面、AI 助手、密码箱，数据不出本机。', zhBody));
@@ -192,11 +189,8 @@ ${topbar([`<strong>Home</strong>`, { href: 'manual.en.html', label: 'Manual' }],
   <p>iOS-style desktop takeover · AI assistant &amp; Agent workbench · Password vault · Todo reminders · Spotlight search</p>
   <p><a class="btn" href="manual.en.html">📖 User Manual</a><a class="btn ghost" href="https://github.com/skz-2026/Hamster-Hub">⭐ GitHub</a></p>
   <img src="images/home-desktop.png" alt="Hamster Hub desktop mode" width="760">
-  <h2 style="border:none">🎬 Demo Videos</h2>
-  <div class="videos">
-    <video src="hamster-hub-manual-en.mp4" controls muted playsinline></video>
-    <video src="hamster-hub-manual.mp4" controls muted playsinline></video>
-  </div>
+  <h2 style="border:none">🎬 Demo Video</h2>
+  <div class="videos"><video src="hamster-hub-manual-en.mp4" controls muted playsinline></video></div>
 </div>`;
 fs.writeFileSync(path.join(outDir, 'index.en.html'), page('en', 'Local-first AI desktop assistant for Windows',
   'Hamster Hub — a local-first AI desktop assistant for Windows. iOS-style desktop, AI assistant, vault; data never leaves your PC.', enBody));
