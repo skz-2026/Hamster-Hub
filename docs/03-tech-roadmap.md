@@ -73,7 +73,7 @@
 | 层 | 方案 | 现状 |
 |---|---|---|
 | 大脑 | 集成 agent（Claude Code/ZCode/Codex/Gemini），hamster-runtime 会话宿主 + `BenchStreamEvent` 强类型流式事件通道 | ✅ bench 已就绪（23 条 bench_* 命令、GUI 流式对话、PTY、Recall） |
-| 手脚 | **桌面 MCP server = vendor `hamster-mcp` 扩展**，三组工具：① desktop——app_launch / app_search / file_search / file_open（白名单）/ todo CRUD / volume；② browser——CDP（chromiumoxide），快照带 `[ref]` 元素编号，SPA 友好；③ computer——xcap 截图（image content 直供视觉模型）+ enigo 鼠标键盘（覆盖原生弹窗/第三方应用）。**承载：HTTP 内嵌**——主进程 127.0.0.1 随机端口监听 + 每会话 Bearer 令牌（Streamable HTTP 单帧回），注入 = claude `--mcp-config` 内联 JSON（`type:"http"`）与 ACP `session/new` mcpServers（统一规范形态，用户决策：HTTP 与具体 agent 无关）；`hamster-hub.exe mcp serve`（stdio 子命令）留作调试/兜底 | M4 已落地（HTTP 内嵌 + 21 工具） |
+| 手脚 | **桌面 MCP server = vendor `hamster-mcp` 扩展**，四组工具：① desktop——app_search / app_launch / file_search / file_open（白名单）/ todo 三件 / volume 两件（9 个）；② browser——CDP（chromiumoxide），快照带 `[ref]` 元素编号，SPA 友好（8 个）；③ computer——xcap 截图（image content 直供视觉模型）+ enigo 鼠标键盘，覆盖原生弹窗/第三方应用（4 个）；④ home——主屏布局读写与已索引应用清单（3 个）。**承载：HTTP 内嵌**——主进程 127.0.0.1 随机端口监听 + 每会话 Bearer 令牌（Streamable HTTP 单帧回），注入 = claude `--mcp-config` 内联 JSON（`type:"http"`）与 ACP `session/new` mcpServers（统一规范形态，用户决策：HTTP 与具体 agent 无关）；`hamster-hub.exe mcp serve`（stdio 子命令）留作调试/兜底 | M4 阶段一已落地（HTTP 内嵌 + 24 工具，2026-09-14 校准） |
 | 入口 | Spotlight「问 AI」与 /agent 页路由到 bench 桌面助手会话（hamster-adapters 加轻量预设：persona system prompt、不绑定项目目录、快速拉起） | M4 接线 |
 | 兜底 | `ai_chat`（OpenAI 兼容单次调用）保留并降级：未装 agent 的用户 + 微任务分层路由——「加个待办」级别请求不拉起 coding agent，省冷启动与 token | ✅ 已有（非流式，保持简单） |
 
@@ -129,7 +129,7 @@
 - Tauri+React+Tailwind+CI 跑通；无边框亚克力主窗口 + 自定义标题栏；tauri-specta 类型流水线；托盘/自启/单实例。
 - 验收全绿：`pnpm tauri dev` 一键起、NSIS 打包（2.27MB）、cargo test / clippy -D / tsc+vite build 全过。
 
-### M1 桌面接管（4 周）
+### M1 桌面接管（4 周）✅ 已完成
 - W1：**系统接管三件套**——状态快照/任务栏隐藏/图标隐藏/还原 + `hamster-watchdog.exe`（workspace 独立 bin）+ 还原测试矩阵（正常退出/杀进程/断电/explorer 重启）。
 - W1-2：appindex（lnk + UWP + 图标 squircle 化缓存）。
 - W2-3：主屏幕 Home 全屏窗（壁纸 + 图标网格 + 分页 scroll-snap + 页码点 + 长按编辑/拖拽/抖动 + iOS 文件夹缩放打开）。
@@ -144,18 +144,19 @@
 - 代码签名未做 → 移入 M3（发布硬门槛）。
 
 ### M3 接管收尾 & 公开发布（2-3 周，v0.2.0 首个公开版）
-- 任务栏托盘区收尾：右键转发（当前仅左键 Invoke 语义）、消除每次枚举 ~1s 的任务栏闪烁（tray.rs 权宜实现优化）。
-- 通知中心 v1：顶部下拉、应用通知聚合、统一事件源——为 M4 agent 后台任务通知预留通道（前置项）。
-- /search、/files 路由页补齐（后端命令已就绪，纯前端）。
-- 代码签名证书 + `tauri-plugin-updater` 灰度；性能与还原测试矩阵复验；公开渠道发布。
+- 任务栏托盘区：✅ 消除枚举期任务栏闪烁（`tray.rs` `OpaqueDockGuard` 闪现期切不透明 + `open_overflow` 置顶压制）；⬜ 托盘区右键转发（当前仅左键 Invoke 语义）。
+- ✅ 通知中心 v1（2026-09-14，commit `4fdedff`）：按日分组的通知面板（待办/番茄钟/AI Agent 会话/更新就绪四事件源）、未读角标、已读/移除/跳转，为 M4 agent 后台任务通知预留通道。
+- ✅ /search、/files 路由页已补齐（非 Stub；`shared/components/StubRoute.tsx` 现已无引用，可删）。
+- ⬜ 代码签名证书（发布硬门槛，`tauri.conf.json` 尚无 `certificate*`；与 updater 的 minisign 互不影响）+ 自更新灰度；性能与还原测试矩阵复验；公开渠道发布。
 
 ### M4 Agent 原生桌面（4-6 周，v0.3.0）—— 阶段一已落地（2026-09-12）
-- ✅ vendor `hamster-mcp`（第 5 个 上游 crate）：browser-use（CDP 8 工具）+ computer-use（xcap/enigo 4 工具）+ 扩展 desktop 工具组（app_search/app_launch/file_search/file_open 白名单/todo 三件/volume 两件，共 21 工具）+ 最小 MCP 协议。
+- ✅ vendor `hamster-mcp`（第 5 个 上游 crate）：browser-use（CDP 8 工具）+ computer-use（xcap/enigo 4 工具）+ 扩展 desktop 工具组（app_search/app_launch/file_search/file_open 白名单/todo 三件/volume 两件 = 9 工具）+ home 工具组（布局读写/应用清单 3 工具，2026-09-14 补记）+ 最小 MCP 协议，**共 24 工具**。
 - ✅ HTTP 内嵌承载（`src/mcp_server.rs` McpHub）：127.0.0.1 随机端口 + 每会话 Bearer 令牌（Authorization 头 / `?token=` 双通道）+ Streamable HTTP 单帧回；急停 = 吊销令牌；CU 档位即时生效。stdio 子命令 `hamster-hub.exe mcp serve` 留作调试/兜底（argv 在 Tauri 前分发）。
 - ✅ 统一 HTTP 注入：claude `--mcp-config` 内联 JSON + `--allowedTools mcp__hamster-desktop`（Bash/Edit 等宿主工具 headless 自动拒绝）；ACP `session/new` mcpServers 透传（runtime 扩展）。
 - ✅ **按 agent 分发（hamster-core 同步引擎接线）**：设置页按 agent 开关 → hamster-desktop 的 HTTP IR（url + 用户长效令牌）upsert 进 Store 源 → `SyncEngine.plan/apply` 写入该 agent 配置文件（备份 + 历史 + 摘除语义：源临时 disabled 渲染省略）；Drift 统一 Overwrite（render 合并保留既有条目）。接入三要素：固定默认端口 47613（可配，占用回退随机并在设置页提示）+ 用户级长效令牌（首启生成、可轮换、旧令牌即时失效）+ `agent_mcp_status/access_info/set_enabled` 三命令。
 - ✅ `bench_assistant_create`：桌面助手预设（仓鼠 persona 可配 + 不绑项目目录 + 默认代理解析 claude→zcode→首个）+ 前端 /agent 双模式（桌面助手默认 / 快问兜底）+ Spotlight「问 AI」路由；settings.agent（computer_use_enabled + assistant_persona）。
-- 待办：agent 后台任务 + 通知中心联动；主屏 agent 状态小组件；确认档位（每步/仅高危）；codex 持久化注册（hamster-core 同步引擎）。
+- 待办：agent 后台任务 + 通知中心联动（通知中心 v1 已就绪，缺任务/进度实体与通知带 session 定位）；主屏 agent 状态小组件；CU 确认档位（每步/仅高危，当前只有布尔总开关）；codex 持久化注册（hamster-core 同步引擎）。
+- 现成能力盘点与下一步排期见 [07-roadmap-2026-09.md](07-roadmap-2026-09.md)。
 
 ### M5 生态（持续）
 - 灵动岛、锁屏、多任务视图。
