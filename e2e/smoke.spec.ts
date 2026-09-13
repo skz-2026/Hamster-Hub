@@ -175,12 +175,14 @@ test.describe('仓鼠Hub 冒烟（浏览器预览 + IPC mock）', () => {
     await page.goto('/#/');
     await page.waitForTimeout(800);
 
-    // 侧栏「桌面」一键进入桌面模式（不再绕设置页）；首页原地变形，路由不变
-    await page.getByRole('button', { name: '桌面', exact: true }).click();
+    // 侧栏「主屏」一键进入桌面接管并落到主屏（原「桌面」快捷钮已并入主屏入口）
+    await page.getByRole('button', { name: '主屏', exact: true }).click();
     await page.waitForTimeout(600);
-    await expect(page).toHaveURL(/#\/$/);
+    await expect(page).toHaveURL(/#\/home$/);
 
-    // 桌面快捷链接进设置：返回胶囊可见；设置页按钮已切成「返回桌面主页」
+    // 主屏顶栏「桌面」切回桌面双形态首页（仍处接管），再经侧栏快捷链接进设置
+    await page.getByRole('button', { name: '桌面', exact: true }).click();
+    await page.waitForTimeout(500);
     await page.locator('main').getByRole('button', { name: '设置' }).click();
     await page.waitForTimeout(500);
     await expect(page.getByTitle('返回桌面主页（Esc）')).toBeVisible();
