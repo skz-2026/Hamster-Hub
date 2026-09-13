@@ -4,7 +4,6 @@ import {
   Bot,
   KeyRound,
   LayoutDashboard,
-  MonitorSmartphone,
   Search,
   CalendarDays,
   LayoutGrid,
@@ -26,7 +25,7 @@ const NAV_REST = [
   { to: '/vault', labelKey: 'chrome.nav.vault', icon: KeyRound },
 ] as const;
 
-/** 左下角常驻入口（Dock 位）：桌面快捷进入 + 代理工作台 + 设置 */
+/** 左下角常驻入口（Dock 位）：代理工作台 + 设置 */
 const BOTTOM_NAV = [{ to: '/bench', labelKey: 'chrome.nav.agent', icon: Bot }] as const;
 
 const NAV_BTN_CLS = (isActive: boolean) =>
@@ -56,7 +55,6 @@ export function SideNav() {
       ))}
 
       <div className="mt-auto flex flex-col items-center gap-1">
-        <DesktopEnterBtn />
         {BOTTOM_NAV.map(({ to, labelKey, icon: Icon }) => (
           <NavLink key={to} to={to} title={t(labelKey)} className={({ isActive }) => NAV_BTN_CLS(isActive)}>
             <Icon size={20} strokeWidth={1.8} />
@@ -97,31 +95,6 @@ function HomeScreenBtn() {
     <button onClick={go} title={t('chrome.nav.home')} className={NAV_BTN_CLS(false)} disabled={busy}>
       <Smartphone size={20} strokeWidth={1.8} />
       {t('chrome.nav.home')}
-    </button>
-  );
-}
-
-/** 桌面模式快捷进入（不用绕设置页；进入后事件驱动切到首页接管形态，本按钮随之消失） */
-function DesktopEnterBtn() {
-  const { t } = useI18n();
-  const [busy, setBusy] = useState(false);
-  const enter = () => {
-    if (busy) return;
-    setBusy(true);
-    commands
-      .desktopModeEnter()
-      .catch(console.error)
-      .finally(() => setBusy(false));
-  };
-  return (
-    <button
-      onClick={enter}
-      title={t('chrome.action.enterDesktop')}
-      className="flex w-[60px] flex-col items-center gap-1 rounded-xl bg-[var(--accent-weak)] px-1 py-2 text-[11px] text-[var(--accent)] transition-colors hover:brightness-110 disabled:opacity-60"
-      disabled={busy}
-    >
-      <MonitorSmartphone size={20} strokeWidth={1.8} />
-      {t('chrome.nav.desktop')}
     </button>
   );
 }

@@ -98,13 +98,16 @@ export default function FloatingAgent({ hidden }: { hidden?: boolean }) {
           if (alive && getStreamRows(hit.sessionId).length === 0) {
             seedStreamRows(
               hit.sessionId,
-              page.messages.map((m) => ({
-                seq: m.seq,
-                role: m.role,
-                text: m.text,
-                toolName: m.toolName,
-                at: m.at,
-              })),
+              // 注入的人设/环境上下文不进对话视图
+              page.messages
+                .filter((m) => m.role !== 'system')
+                .map((m) => ({
+                  seq: m.seq,
+                  role: m.role,
+                  text: m.text,
+                  toolName: m.toolName,
+                  at: m.at,
+                })),
             );
           }
         }
@@ -129,7 +132,7 @@ export default function FloatingAgent({ hidden }: { hidden?: boolean }) {
       try {
         await benchCommands.benchStreamSend(session.session.sessionId, text, null, null);
       } catch (e) {
-        setError(String(e));
+        setError(errText(e));
         setPhase('error');
       }
       return;
@@ -148,16 +151,19 @@ export default function FloatingAgent({ hidden }: { hidden?: boolean }) {
       setRestored(!!kv?.resumeKey);
       awaitingTurn.current = true;
       setPhase('running');
-      await commands.kvSet(
-        SESSION_KV,
-        JSON.stringify({
-          sessionId: info.session.sessionId,
-          resumeKey: info.session.resumeKey ?? null,
-          agentId: info.agentId,
-        } satisfies PersistedSession),
-      );
+      // 持久化失败不影响本轮会话（下次发送会重试写入）
+      commands
+        .kvSet(
+          SESSION_KV,
+          JSON.stringify({
+            sessionId: info.session.sessionId,
+            resumeKey: info.session.resumeKey ?? null,
+            agentId: info.agentId,
+          } satisfies PersistedSession),
+        )
+        .catch((e) => console.error('[ball] 会话持久化失败', e));
     } catch (e) {
-      setError(String(e));
+      setError(errText(e));
       setPhase('error');
     }
   };
@@ -167,6 +173,10 @@ export default function FloatingAgent({ hidden }: { hidden?: boolean }) {
     void commands.benchStreamKill(sid).catch(() => {});
     setPhase('done');
   };
+
+  /** 错误信息提取：tauri invoke 可能抛对象/非 Error，统一转可读字符串 */
+  const errText = (e: unknown): string =>
+    e instanceof Error ? e.message : typeof e === 'string' ? e : JSON.stringify(e);
 
   const reset = () => {
     if (sid) {

@@ -4,6 +4,7 @@ node_modules/
 # build
 dist/
 src-tauri/target/
+src-tauri/target-live-test/
 src-tauri/gen/
 
 # generated（可重新生成，提交以方便纯前端改动）

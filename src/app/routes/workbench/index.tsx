@@ -367,7 +367,7 @@ function WindowHome({ dash, edit, setEdit }: { dash: Dash; edit: boolean; setEdi
 const QUICK_LINKS: { labelKey: TKey; to: string; Icon: LucideIcon }[] = [
   { labelKey: 'chrome.nav.agent', to: '/bench', Icon: Bot },
   { labelKey: 'chrome.nav.schedule', to: '/schedule', Icon: CalendarDays },
-  { labelKey: 'chrome.nav.apps', to: '/apps', Icon: LayoutGrid },
+  { labelKey: 'chrome.nav.desktop', to: '/home', Icon: LayoutGrid },
   { labelKey: 'chrome.nav.files', to: '/files', Icon: FolderOpen },
   { labelKey: 'chrome.nav.settings', to: '/settings', Icon: Settings },
 ];

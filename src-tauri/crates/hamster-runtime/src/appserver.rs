@@ -216,125 +216,141 @@ impl StreamSession {
         }
 
         // —— ACP 握手（runtime-design §11.5）：initialize → session/new|session/load ——
+        // 握手失败必须回收已 spawn 的协议进程：鉴权失败（kimi 实测）等场景下
+        // 进程已活着，不 kill 会留下孤儿 server 驻留占资源
         if session.dialect == hamster_core::ProtocolDialect::Acp {
-            let init = session.request(
+            let handshake: Result<()> = (|| {
+                let init = session.request(
                 "initialize",
                 serde_json::json!({
                     "protocolVersion": 1,
                     "clientCapabilities": { "fs": { "readTextFile": false, "writeTextFile": false } }
                 }),
             )?;
-            let load_session = init
-                .get("agentCapabilities")
-                .and_then(|a| a.get("loadSession"))
-                .and_then(|b| b.as_bool())
-                .unwrap_or(false);
-            lock_ok(&session.state).load_session = load_session;
+                let load_session = init
+                    .get("agentCapabilities")
+                    .and_then(|a| a.get("loadSession"))
+                    .and_then(|b| b.as_bool())
+                    .unwrap_or(false);
+                lock_ok(&session.state).load_session = load_session;
 
-            if opts.fork {
-                return Err(HamsterError::Unsupported(
-                    "ACP 协议无 fork：请直接开新会话".into(),
-                ));
+                if opts.fork {
+                    return Err(HamsterError::Unsupported(
+                        "ACP 协议无 fork：请直接开新会话".into(),
+                    ));
+                }
+                let (thread_id, config_options) = match opts
+                    .resume_key
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|k| !k.is_empty())
+                {
+                    Some(key) => {
+                        if !load_session {
+                            return Err(HamsterError::Unsupported(
+                                "该 Agent 的 ACP 不支持续聊（loadSession=false）".into(),
+                            ));
+                        }
+                        let resp = session.request(
+                        "session/load",
+                        serde_json::json!({ "sessionId": key, "cwd": cwd, "mcpServers": opts.mcp_servers }),
+                    )?;
+                        let tid = resp
+                            .get("sessionId")
+                            .and_then(|i| i.as_str())
+                            .unwrap_or(key)
+                            .to_string();
+                        (tid, parse_acp_config_options(&resp))
+                    }
+                    None => {
+                        let resp = session.request(
+                            "session/new",
+                            serde_json::json!({ "cwd": cwd, "mcpServers": opts.mcp_servers }),
+                        )?;
+                        let tid = resp
+                            .get("sessionId")
+                            .and_then(|i| i.as_str())
+                            .unwrap_or_default()
+                            .to_string();
+                        (tid, parse_acp_config_options(&resp))
+                    }
+                };
+                if thread_id.is_empty() {
+                    return Err(HamsterError::Launch {
+                        program: program_name,
+                        message: format!("session/new 未返回 sessionId：{init}"),
+                    });
+                }
+                {
+                    let mut st = lock_ok(&session.state);
+                    st.thread_id = thread_id;
+                    st.config_options = config_options;
+                }
+                // GUI 流式的模型覆盖（§11.6）：会话就绪后、首轮 prompt 前经
+                // session/set_config_option 应用；agent 校验失败即启动失败
+                if let Some(m) = opts
+                    .model
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|m| !m.is_empty())
+                {
+                    session.apply_model_override(m)?;
+                }
+                Ok(())
+            })();
+            if let Err(e) = handshake {
+                let _ = session.kill();
+                return Err(e);
             }
-            let (thread_id, config_options) = match opts
+            return Ok(session);
+        }
+
+        // —— codex 方言握手 ——（失败即回收进程，理由同 ACP）
+        // 握手：initialize（clientInfo 为协议要求的最小字段）
+        let handshake: Result<()> = (|| {
+            let init = session.request(
+                "initialize",
+                serde_json::json!({ "clientInfo": { "name": "上游", "version": "0.1.0" } }),
+            )?;
+            let _ = init; // serverInfo/codexHome，暂不消费
+            session.notify("initialized", serde_json::json!({}))?;
+
+            // thread/start（新会话）/ thread/resume{threadId}（续聊）/
+            // thread/fork{threadId}（派生新会话，协议实测 0.144.5）
+            let resp = match opts
                 .resume_key
                 .as_deref()
                 .map(str::trim)
                 .filter(|k| !k.is_empty())
             {
-                Some(key) => {
-                    if !load_session {
-                        return Err(HamsterError::Unsupported(
-                            "该 Agent 的 ACP 不支持续聊（loadSession=false）".into(),
-                        ));
-                    }
-                    let resp = session.request(
-                        "session/load",
-                        serde_json::json!({ "sessionId": key, "cwd": cwd, "mcpServers": opts.mcp_servers }),
-                    )?;
-                    let tid = resp
-                        .get("sessionId")
-                        .and_then(|i| i.as_str())
-                        .unwrap_or(key)
-                        .to_string();
-                    (tid, parse_acp_config_options(&resp))
+                Some(thread_id) if opts.fork => {
+                    session.request("thread/fork", serde_json::json!({ "threadId": thread_id }))?
                 }
-                None => {
-                    let resp = session.request(
-                        "session/new",
-                        serde_json::json!({ "cwd": cwd, "mcpServers": opts.mcp_servers }),
-                    )?;
-                    let tid = resp
-                        .get("sessionId")
-                        .and_then(|i| i.as_str())
-                        .unwrap_or_default()
-                        .to_string();
-                    (tid, parse_acp_config_options(&resp))
-                }
+                Some(thread_id) => session.request(
+                    "thread/resume",
+                    serde_json::json!({ "threadId": thread_id }),
+                )?,
+                None => session.request("thread/start", serde_json::json!({ "cwd": cwd }))?,
             };
+            let thread_id = resp
+                .get("thread")
+                .and_then(|t| t.get("id"))
+                .and_then(|i| i.as_str())
+                .unwrap_or_default()
+                .to_string();
             if thread_id.is_empty() {
                 return Err(HamsterError::Launch {
                     program: program_name,
-                    message: format!("session/new 未返回 sessionId：{init}"),
+                    message: format!("thread/start 未返回 thread.id：{resp}"),
                 });
             }
-            {
-                let mut st = lock_ok(&session.state);
-                st.thread_id = thread_id;
-                st.config_options = config_options;
-            }
-            // GUI 流式的模型覆盖（§11.6）：会话就绪后、首轮 prompt 前经
-            // session/set_config_option 应用；agent 校验失败即启动失败
-            if let Some(m) = opts
-                .model
-                .as_deref()
-                .map(str::trim)
-                .filter(|m| !m.is_empty())
-            {
-                session.apply_model_override(m)?;
-            }
-            return Ok(session);
+            lock_ok(&session.state).thread_id = thread_id;
+            Ok(())
+        })();
+        if let Err(e) = handshake {
+            let _ = session.kill();
+            return Err(e);
         }
-
-        // —— codex 方言握手 ——
-        // 握手：initialize（clientInfo 为协议要求的最小字段）
-        let init = session.request(
-            "initialize",
-            serde_json::json!({ "clientInfo": { "name": "上游", "version": "0.1.0" } }),
-        )?;
-        let _ = init; // serverInfo/codexHome，暂不消费
-        session.notify("initialized", serde_json::json!({}))?;
-
-        // thread/start（新会话）/ thread/resume{threadId}（续聊）/
-        // thread/fork{threadId}（派生新会话，协议实测 0.144.5）
-        let resp = match opts
-            .resume_key
-            .as_deref()
-            .map(str::trim)
-            .filter(|k| !k.is_empty())
-        {
-            Some(thread_id) if opts.fork => {
-                session.request("thread/fork", serde_json::json!({ "threadId": thread_id }))?
-            }
-            Some(thread_id) => session.request(
-                "thread/resume",
-                serde_json::json!({ "threadId": thread_id }),
-            )?,
-            None => session.request("thread/start", serde_json::json!({ "cwd": cwd }))?,
-        };
-        let thread_id = resp
-            .get("thread")
-            .and_then(|t| t.get("id"))
-            .and_then(|i| i.as_str())
-            .unwrap_or_default()
-            .to_string();
-        if thread_id.is_empty() {
-            return Err(HamsterError::Launch {
-                program: program_name,
-                message: format!("thread/start 未返回 thread.id：{resp}"),
-            });
-        }
-        lock_ok(&session.state).thread_id = thread_id;
         Ok(session)
     }
 
@@ -543,7 +559,9 @@ impl StreamSession {
         Ok(())
     }
 
-    /// 发请求并等待响应（读线程回填 pending 通道）。冷启动可达数秒——由调用方超时控制。
+    /// 发请求并等待响应（读线程回填 pending 通道）。握手期 agent 可能做联网
+    /// 校验（opencode session/new 实测会校 provider，弱网下 30s 不够），放宽
+    /// 到 90s——仅影响等待上限，正常应答仍即时返回。
     fn request(&self, method: &str, params: serde_json::Value) -> Result<serde_json::Value> {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let (tx, rx) = std::sync::mpsc::channel::<String>();
@@ -551,7 +569,7 @@ impl StreamSession {
         self.write_json(&serde_json::json!({
             "jsonrpc": "2.0", "id": id, "method": method, "params": params
         }))?;
-        match rx.recv_timeout(std::time::Duration::from_secs(30)) {
+        match rx.recv_timeout(std::time::Duration::from_secs(90)) {
             Ok(raw) => {
                 let v: serde_json::Value = serde_json::from_str(&raw)
                     .map_err(|e| HamsterError::Other(format!("协议响应解析失败：{e}")))?;
@@ -566,7 +584,7 @@ impl StreamSession {
             }
             Err(_) => {
                 lock_ok(&self.pending).remove(&id);
-                Err(HamsterError::Other(format!("{method} 响应超时（30s）")))
+                Err(HamsterError::Other(format!("{method} 响应超时（90s）")))
             }
         }
     }

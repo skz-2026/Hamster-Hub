@@ -251,6 +251,8 @@ export default function HomeScreen() {
     const sc = scrollerRef.current;
     if (!sc) return;
     const onWheel = (e: WheelEvent) => {
+      // 内部滚动区（文件夹悬停卡片等）：滚轮留给它自己滚，不劫持翻页
+      if (e.target instanceof HTMLElement && e.target.closest('[data-inner-scroll]')) return;
       if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
       e.preventDefault();
       const max = layout.pages.length - 1;
@@ -524,14 +526,18 @@ export default function HomeScreen() {
                     <div key={key} ref={(el) => registerCell(el, key)}>
                       <FolderIcon
                         name={f.name}
-                        names={f.apps.map((k) => appByKey.get(k)?.display_name ?? k)}
-                        iconPaths={f.apps.map((k) => appByKey.get(k)?.icon_path)}
+                        apps={f.apps.map((k) => ({
+                          key: k,
+                          name: appByKey.get(k)?.display_name ?? k,
+                          iconPath: appByKey.get(k)?.icon_path,
+                        }))}
                         jiggle={edit}
                         mergeHint={mergeHint || mergeFlash === key}
                         dragging={isDragSource}
                         onRemove={edit ? () => removeSlot(pi, idx) : undefined}
                         onPointerDown={iconPointerDown('page', pi, idx)}
                         onClick={() => !edit && openFolderById(id)}
+                        onAppOpen={launch}
                       />
                     </div>
                   );

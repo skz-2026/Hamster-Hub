@@ -66,7 +66,7 @@ pub const SPECS: &[AcpAgentSpec] = &[
         config_dirs: &[".opencode", ".config/opencode"],
         registry_id: Some("opencode"),
         verified: true,
-        note: "本机实测 1.18.x：initialize → session/new 返回 sessionId",
+        note: "本机实测 1.18.29（2026-09-13）：工具调用/续聊/编辑全链路；write 工具不带 diff 块（schema 允许）；session/new 有联网校验，弱网握手需容忍慢应答",
     },
     AcpAgentSpec {
         id: "kimi",
