@@ -92,6 +92,12 @@ async appWindowActivate(id: number) : Promise<null> {
     return await TAURI_INVOKE("app_window_activate", { id });
 },
 /**
+ * 关闭单扇窗口（dock 悬停卡片行 X）：对该 hwnd 投递 WM_CLOSE 温和关闭
+ */
+async appWindowClose(id: number) : Promise<null> {
+    return await TAURI_INVOKE("app_window_close", { id });
+},
+/**
  * 关闭应用：对其 exe 名下全部可见窗口投递 WM_CLOSE（温和关闭，应用可弹
  * 保存确认）。解析不出 exe（UWP/文件夹）或没有可见窗口时报错。
  */

@@ -169,8 +169,9 @@ export function DockBar({ desktop }: DockBarProps) {
         staleTime: 1500,
       })
         .then((windows) => {
-          // 查询在途期间用户可能已右键：菜单优先，放弃弹卡
-          if (menuKeyRef.current || popupKindRef.current === 'menu' || windows.length < 2)
+          // 查询在途期间用户可能已右键：菜单优先，放弃弹卡；
+          // ≥1 扇窗口就出卡——单窗口应用也提供前置 + 行尾 X 快捷关闭
+          if (menuKeyRef.current || popupKindRef.current === 'menu' || windows.length < 1)
             return;
           if (inTaskbarWindow) {
             commands
@@ -202,6 +203,21 @@ export function DockBar({ desktop }: DockBarProps) {
     }
   };
   const keepPeek = () => window.clearTimeout(peekClose.current);
+  /** 卡片行 X：关单扇窗口 → 稍候重取（WM_CLOSE 异步，应用可能弹确认）→
+   *  更新卡片，窗口关光就收卡 */
+  const closePeekWindow = (key: string, x: number, id: number) => {
+    commands.appWindowClose(id).catch(console.error);
+    qc.invalidateQueries({ queryKey: ['apps', 'running'] });
+    window.setTimeout(() => {
+      qc.fetchQuery({
+        queryKey: ['apps', 'windows', key],
+        queryFn: () => commands.appWindows(key),
+        staleTime: 0,
+      })
+        .then((ws) => setPeek(ws.length ? { key, x, windows: ws } : null))
+        .catch(console.error);
+    }, 450);
+  };
 
   /** 右键呼出应用菜单：任务栏独立窗口一条高放不下纵向菜单，弹独立置顶
    *  小窗（载荷 + 定位后端算）；主窗口/胶囊内空间充足，本地渲染 */
@@ -431,6 +447,7 @@ export function DockBar({ desktop }: DockBarProps) {
             windows={peek.windows}
             onMouseEnter={keepPeek}
             onMouseLeave={() => setPeek(null)}
+            onCloseWindow={(id) => closePeekWindow(peek.key, peek.x, id)}
             onActivate={(id) => {
               commands.appWindowActivate(id).catch(console.error);
               setPeek(null);
@@ -506,6 +523,7 @@ export function DockBar({ desktop }: DockBarProps) {
           windows={peek.windows}
           onMouseEnter={keepPeek}
           onMouseLeave={() => setPeek(null)}
+          onCloseWindow={(id) => closePeekWindow(peek.key, peek.x, id)}
           onActivate={(id) => {
             commands.appWindowActivate(id).catch(console.error);
             setPeek(null);

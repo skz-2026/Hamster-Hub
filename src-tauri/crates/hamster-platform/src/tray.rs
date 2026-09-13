@@ -405,6 +405,17 @@ unsafe extern "system" fn close_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
     BOOL(1)
 }
 
+/// 关闭单扇窗口（dock 悬停卡片行 X）：对该 hwnd 投递 WM_CLOSE 温和关闭，
+/// 应用可弹保存确认/拦截。hwnd 失效（已关）返回 false。
+pub fn close_window(id: u64) -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_CLOSE};
+    let hwnd = HWND(id as *mut core::ffi::c_void);
+    if hwnd.is_invalid() {
+        return false;
+    }
+    unsafe { PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0)).is_ok() }
+}
+
 const CHEVRON_NAME: &str = "显示隐藏的图标";
 
 /// 按 exe 文件名（大小写不敏感）数可见顶层窗口数。

@@ -261,6 +261,17 @@ pub fn app_window_activate(id: u64) -> Result<(), AppError> {
     hamster_platform::tray::activate(id).map_err(|e| AppError::io(format!("窗口前置失败: {e}")))
 }
 
+/// 关闭单扇窗口（dock 悬停卡片行 X）：对该 hwnd 投递 WM_CLOSE 温和关闭
+#[tauri::command]
+#[specta::specta]
+pub fn app_window_close(id: u64) -> Result<(), AppError> {
+    if hamster_platform::tray::close_window(id) {
+        Ok(())
+    } else {
+        Err(AppError::io(format!("窗口关闭失败（可能已关）: hwnd={id}")))
+    }
+}
+
 /// dock 运行态轮询：返回 keys 中当前有可见窗口的应用 app_key。
 /// DB 查询留在调用线程（毫秒级）；lnk 解析 + EnumWindows 放线程池，不占主线程。
 #[tauri::command]

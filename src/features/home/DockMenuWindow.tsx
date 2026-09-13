@@ -86,6 +86,22 @@ export default function DockMenuWindow() {
             commands.appWindowActivate(id).catch(console.error);
             commands.dockMenuHide().catch(console.error);
           }}
+          onCloseWindow={(id) => {
+            commands.appWindowClose(id).catch(console.error);
+            // WM_CLOSE 异步（应用可能弹确认），稍候重取；关光就收弹窗
+            window.setTimeout(() => {
+              commands
+                .appWindows(payload.appKey)
+                .then((ws) => {
+                  if (ws.length === 0) {
+                    commands.dockMenuHide().catch(console.error);
+                  } else {
+                    setPayload((p) => (p ? { ...p, windows: ws } : p));
+                  }
+                })
+                .catch(console.error);
+            }, 450);
+          }}
         />
       </div>
     );

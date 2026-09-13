@@ -95,6 +95,26 @@ const MOCK_RUNNING = new Set<string>(
   ),
 );
 
+// 悬停卡片假窗口清单（Chrome 3 扇、其余种子运行中应用各 1 扇）；
+// 行 X 关窗，应用窗口关光即从运行态移除（与真机 EnumWindows 语义一致）
+const MOCK_WINDOWS: { appKey: string; id: number; title: string; minimized: boolean }[] = [];
+{
+  const chromeKey = APPS[7]?.app_key;
+  if (chromeKey) {
+    MOCK_WINDOWS.push(
+      { appKey: chromeKey, id: 101, title: L('Chrome — 仓鼠Hub 开发中', 'Chrome — HamsterHub dev'), minimized: false },
+      { appKey: chromeKey, id: 102, title: L('GitHub Pull Request #42', 'GitHub Pull Request #42'), minimized: false },
+      { appKey: chromeKey, id: 103, title: L('狗狗视频 - 摸鱼中', 'Dog videos - slacking'), minimized: true },
+    );
+  }
+  let seq = 500;
+  for (const k of MOCK_RUNNING) {
+    if (k !== chromeKey) {
+      MOCK_WINDOWS.push({ appKey: k, id: seq++, title: L('主窗口', 'Main window'), minimized: false });
+    }
+  }
+}
+
 // 已知单实例应用种子（APPS[0]=微信、APPS[1]=QQ；key 跟语言走）
 const MOCK_SINGLE = new Set<string>(
   [APPS[0]?.app_key, APPS[1]?.app_key].filter((k): k is string => typeof k === 'string'),
@@ -667,16 +687,21 @@ export const mockCommands = {
   async appLaunch(appKey: string): Promise<null> {
     console.log('[mock] 启动应用', appKey);
     MOCK_RUNNING.add(appKey);
+    MOCK_WINDOWS.push({ appKey, id: Date.now(), title: L('主窗口', 'Main window'), minimized: false });
     return null;
   },
   async appLaunchNew(appKey: string): Promise<null> {
     console.log('[mock] 多开应用', appKey);
     MOCK_RUNNING.add(appKey);
+    MOCK_WINDOWS.push({ appKey, id: Date.now(), title: L('新窗口', 'New window'), minimized: false });
     return null;
   },
   async appClose(appKey: string): Promise<null> {
     console.log('[mock] 关闭应用', appKey);
     MOCK_RUNNING.delete(appKey);
+    for (let i = MOCK_WINDOWS.length - 1; i >= 0; i--) {
+      if (MOCK_WINDOWS[i].appKey === appKey) MOCK_WINDOWS.splice(i, 1);
+    }
     return null;
   },
   async appsRunning(keys: string[]): Promise<string[]> {
@@ -686,22 +711,28 @@ export const mockCommands = {
   async appMultiFlags(keys: string[]): Promise<string[]> {
     return keys.filter((k) => MOCK_SINGLE.has(k));
   },
-  // 悬停窗口卡片：Chrome 给 3 扇假窗口（1 最小化），其余运行中应用 1 扇
+  // 悬停窗口卡片：窗口清单即数据源（出卡条件 ≥1，单窗口应用也能快捷关闭）
   async appWindows(appKey: string): Promise<AppWindowInfo[]> {
-    if (appKey === (APPS[7]?.app_key ?? 'mock:chrome')) {
-      return [
-        { id: 101, title: L('Chrome — 仓鼠Hub 开发中', 'Chrome — HamsterHub dev'), minimized: false, png: '' },
-        { id: 102, title: L('GitHub Pull Request #42', 'GitHub Pull Request #42'), minimized: false, png: '' },
-        { id: 103, title: L('狗狗视频 - 摸鱼中', 'Dog videos - slacking'), minimized: true, png: '' },
-      ];
-    }
-    if (MOCK_RUNNING.has(appKey)) {
-      return [{ id: 100, title: L('主窗口', 'Main window'), minimized: false, png: '' }];
-    }
-    return [];
+    return MOCK_WINDOWS.filter((w) => w.appKey === appKey).map(({ id, title, minimized }) => ({
+      id,
+      title,
+      minimized,
+      png: '',
+    }));
   },
   async appWindowActivate(id: number): Promise<null> {
     console.log('[mock] 前置窗口', id);
+    return null;
+  },
+  async appWindowClose(id: number): Promise<null> {
+    console.log('[mock] 关闭窗口', id);
+    const idx = MOCK_WINDOWS.findIndex((w) => w.id === id);
+    if (idx >= 0) {
+      const [rm] = MOCK_WINDOWS.splice(idx, 1);
+      if (!MOCK_WINDOWS.some((w) => w.appKey === rm.appKey)) {
+        MOCK_RUNNING.delete(rm.appKey);
+      }
+    }
     return null;
   },
   // dock 右键菜单弹窗（真机是独立置顶小窗；浏览器内仅 /dock-menu 路由预览用，

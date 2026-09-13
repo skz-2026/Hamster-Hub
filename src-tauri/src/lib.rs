@@ -76,6 +76,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::apps::app_multi_flags,
             commands::apps::app_windows,
             commands::apps::app_window_activate,
+            commands::apps::app_window_close,
             commands::apps::app_close,
             commands::apps::apps_running,
             commands::apps::app_search,
