@@ -1,19 +1,20 @@
 import type { ReactNode } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { emitTo, emit, listen } from '@tauri-apps/api/event';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { House, LayoutGrid, LogOut, Bot, MonitorSmartphone, Plus, Search, Settings } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { commands, isTauri, type AppEntry } from '@/shared/lib/ipc';
+import { commands, isTauri, type AppEntry, type AppWindowInfo } from '@/shared/lib/ipc';
 import { useI18n } from '@/shared/i18n/provider';
 import { getLang } from '@/shared/i18n/core';
 import type { TKey } from '@/shared/i18n/core';
 import { useTopApps } from '@/features/dashboard/hooks';
 import TrayButton from './TrayArea';
-import { useApps, useHomeLayout, useRunningAppKeys } from './hooks';
+import { useApps, useHomeLayout, useRunningAppKeys, useSingleInstanceApps } from './hooks';
 import DockAppMenu from './DockAppMenu';
+import DockWindowsCard from './DockWindowsCard';
 import { Monogram } from './AppIcon';
 import { DOCK_CAPACITY, removeFromDock } from './layout';
 
@@ -60,6 +61,8 @@ export function DockBar({ desktop }: DockBarProps) {
   const now = useClockMinute();
   // 右键菜单：目标应用 + 锚点坐标 + 是否定制组（可移除）
   const [menu, setMenu] = useState<{ key: string; x: number; removable: boolean } | null>(null);
+  // 悬停窗口卡片（本地渲染形态；任务栏窗口走独立弹窗）：目标 + 锚点 + 窗口清单
+  const [peek, setPeek] = useState<{ key: string; x: number; windows: AppWindowInfo[] } | null>(null);
 
   // 任务栏独立窗口内不能本地 navigate（会把 /home 载入 72px 窗口条），
   // 改为发事件让主窗口导航并前置
@@ -84,6 +87,8 @@ export function DockBar({ desktop }: DockBarProps) {
     [layout.dock, frequent],
   );
   const runningKeys = useRunningAppKeys(dockAppKeys);
+  // 已知单实例应用（内置名单 + 自学习）：菜单隐藏「多开应用」
+  const singleApps = useSingleInstanceApps(dockAppKeys);
   const exitDesktop = () => commands.desktopModeExit().catch(console.error);
   const enterDesktop = () => commands.desktopModeEnter().catch(console.error);
   /** 开始：注入 Ctrl+Esc 召出系统真实开始菜单（全局键注入，任务栏窗口内调用同样有效） */
@@ -125,6 +130,8 @@ export function DockBar({ desktop }: DockBarProps) {
     commands.appLaunchNew(key).catch(console.error);
     qc.invalidateQueries({ queryKey: ['apps', 'top'] });
     qc.invalidateQueries({ queryKey: ['apps', 'running'] });
+    // 多开能力自学习在启动后 ~1.5s 出结论，延迟失效让菜单条件项即时跟上
+    window.setTimeout(() => qc.invalidateQueries({ queryKey: ['apps', 'single'] }), 2200);
     setMenu(null);
   };
   /** 关闭应用：温和关掉其全部可见窗口（WM_CLOSE，应用可弹保存确认） */
@@ -141,12 +148,66 @@ export function DockBar({ desktop }: DockBarProps) {
     setMenu(null);
     syncLayout();
   };
+  /** 悬停窗口卡片：停 350ms 拉窗口清单，≥2 扇才出卡（扫过图标不弹）。
+   *  任务栏窗口一条高 → 独立置顶弹窗承载；主窗口/胶囊 → 本地渲染 */
+  const peekTimer = useRef<number | undefined>(undefined);
+  const peekClose = useRef<number | undefined>(undefined);
+  const beginPeek = (key: string, x: number) => {
+    window.clearTimeout(peekTimer.current);
+    window.clearTimeout(peekClose.current);
+    peekTimer.current = window.setTimeout(() => {
+      qc.fetchQuery({
+        queryKey: ['apps', 'windows', key],
+        queryFn: () => commands.appWindows(key),
+        staleTime: 1500,
+      })
+        .then((windows) => {
+          if (windows.length < 2) return;
+          if (inTaskbarWindow) {
+            commands
+              .dockMenuOpen({
+                kind: 'hover',
+                appKey: key,
+                x,
+                removable: false,
+                running: true,
+                multi: true,
+                windows,
+              })
+              .catch(console.error);
+          } else {
+            setPeek({ key, x, windows });
+          }
+        })
+        .catch(() => {/* 索引外 key 等错误：静默不出卡 */});
+    }, 350);
+  };
+  const endPeek = () => {
+    window.clearTimeout(peekTimer.current);
+    if (inTaskbarWindow) {
+      // 卡片自己监听该事件：鼠标没进卡片时宽限后收回
+      emit('hamster:dock-hover-leave', {}).catch(console.error);
+    } else {
+      // 宽限 250ms：鼠标从图标移进卡片不打断
+      peekClose.current = window.setTimeout(() => setPeek(null), 250);
+    }
+  };
+  const keepPeek = () => window.clearTimeout(peekClose.current);
+
   /** 右键呼出应用菜单：任务栏独立窗口一条高放不下纵向菜单，弹独立置顶
    *  小窗（载荷 + 定位后端算）；主窗口/胶囊内空间充足，本地渲染 */
   const openContextMenu = (key: string, x: number, removable: boolean) => {
     if (inTaskbarWindow) {
       commands
-        .dockMenuOpen({ appKey: key, x, removable, running: runningKeys.has(key) })
+        .dockMenuOpen({
+          kind: 'menu',
+          appKey: key,
+          x,
+          removable,
+          running: runningKeys.has(key),
+          multi: !singleApps.has(key),
+          windows: [],
+        })
         .catch(console.error);
     } else {
       setMenu({ key, x, removable });
@@ -186,22 +247,44 @@ export function DockBar({ desktop }: DockBarProps) {
     return () => window.removeEventListener('pointerdown', hide);
   }, [inTaskbarWindow]);
 
-  // 弹窗菜单动作回传：主窗口执行（remove 需要 layout commit；close/new
-  // 顺带失效主窗口查询，运行指示点即时变化）。弹窗自身只广播不执行。
+  // 弹窗菜单动作回传：渲染了 DockBar 的窗口执行（remove 需要 layout commit；
+  // close/new 顺带失效本窗口查询，运行指示点即时变化）。弹窗自身只广播不执行。
+  // 桌面接管 = 任务栏窗执行（主窗口不渲染 DockBar）；窗口化 = 主窗口执行
+  // ——两形态互斥不会双执行，任务栏窗反而不能排除（否则桌面模式下动作没人接）。
+  // 监听器必须挂载一次：top 每 30s 轮询 + 每次启动都失效重取，若依赖
+  // [layout, top] 反复重挂，退订又是 listen() 异步赋值——竞态漏退订会让
+  // 监听器叠加，一次「多开」被放大成 N 个窗口。handler 走 ref 取最新。
+  const actionHandlers = useRef({ closeApp, launchNew, removeDockItem });
+  actionHandlers.current = { closeApp, launchNew, removeDockItem };
   useEffect(() => {
-    if (!isTauri || inTaskbarWindow) return;
+    if (!isTauri) return;
     let un: (() => void) | undefined;
+    let disposed = false;
+    let lastKey = '';
+    let lastAt = 0;
     listen<{ action: string; key: string }>('hamster:dock-menu-action', (e) => {
       const { action, key } = e.payload;
-      if (action === 'close') closeApp(key);
-      else if (action === 'new') launchNew(key);
-      else if (action === 'remove') removeDockItem(key);
+      // 同一应用 400ms 内的重复事件只执行一次（监听器叠加的兜底保险）
+      const now = Date.now();
+      if (key === lastKey && now - lastAt < 400) return;
+      lastKey = key;
+      lastAt = now;
+      const h = actionHandlers.current;
+      if (action === 'close') h.closeApp(key);
+      else if (action === 'new') h.launchNew(key);
+      else if (action === 'remove') h.removeDockItem(key);
     })
-      .then((fn) => (un = fn))
+      .then((fn) => {
+        // cleanup 先于 promise 到达：立即退订，杜绝泄漏
+        if (disposed) fn();
+        else un = fn;
+      })
       .catch(console.error);
-    return () => un?.();
-    // removeDockItem 闭包依赖 layout；布局/常用排名变更时重挂监听
-  }, [layout, top]);
+    return () => {
+      disposed = true;
+      un?.();
+    };
+  }, []);
 
   if (desktop) {
     // 贴边通栏任务栏（完全替代系统任务栏）：左端入口 + 定制（可增删）…… 右端退出 + 时钟
@@ -240,6 +323,8 @@ export function DockBar({ desktop }: DockBarProps) {
                 nativeTipOnly={desktop}
                 running={runningKeys.has(key)}
                 onLaunch={launchApp}
+                onPeek={beginPeek}
+                onPeekEnd={endPeek}
                 onContextMenu={(x) => openContextMenu(key, x, true)}
               />
             );
@@ -264,6 +349,8 @@ export function DockBar({ desktop }: DockBarProps) {
               nativeTipOnly={desktop}
               running={runningKeys.has(a.app_key)}
               onLaunch={launchApp}
+              onPeek={beginPeek}
+              onPeekEnd={endPeek}
               onContextMenu={(x) => openContextMenu(a.app_key, x, false)}
             />
           ))}
@@ -305,9 +392,23 @@ export function DockBar({ desktop }: DockBarProps) {
             x={menu.x}
             running={runningKeys.has(menu.key)}
             removable={menu.removable}
+            multiCapable={!singleApps.has(menu.key)}
             onCloseApp={() => closeApp(menu.key)}
             onNewInstance={() => launchNew(menu.key)}
             onRemove={() => removeDockItem(menu.key)}
+          />
+        )}
+        {/* 悬停窗口卡片（浏览器预览/主窗口内嵌形态；真任务栏窗走独立弹窗） */}
+        {peek && (
+          <DockWindowsCard
+            x={peek.x}
+            windows={peek.windows}
+            onMouseEnter={keepPeek}
+            onMouseLeave={() => setPeek(null)}
+            onActivate={(id) => {
+              commands.appWindowActivate(id).catch(console.error);
+              setPeek(null);
+            }}
           />
         )}
       </div>
@@ -324,6 +425,8 @@ export function DockBar({ desktop }: DockBarProps) {
         size={size}
         running={runningKeys.has(key)}
         onLaunch={launchApp}
+        onPeek={beginPeek}
+        onPeekEnd={endPeek}
         onContextMenu={(x) => openContextMenu(key, x, true)}
       />
     ) : null;
@@ -336,6 +439,8 @@ export function DockBar({ desktop }: DockBarProps) {
         size={size}
         running={runningKeys.has(a.app_key)}
         onLaunch={launchApp}
+        onPeek={beginPeek}
+        onPeekEnd={endPeek}
         onContextMenu={(x) => openContextMenu(a.app_key, x, false)}
       />
     ),
@@ -362,9 +467,23 @@ export function DockBar({ desktop }: DockBarProps) {
           x={menu.x}
           running={runningKeys.has(menu.key)}
           removable={menu.removable}
+          multiCapable={!singleApps.has(menu.key)}
           onCloseApp={() => closeApp(menu.key)}
           onNewInstance={() => launchNew(menu.key)}
           onRemove={() => removeDockItem(menu.key)}
+        />
+      )}
+      {/* 悬停窗口卡片：胶囊空间充足，本地渲染弹在图标上方 */}
+      {peek && (
+        <DockWindowsCard
+          x={peek.x}
+          windows={peek.windows}
+          onMouseEnter={keepPeek}
+          onMouseLeave={() => setPeek(null)}
+          onActivate={(id) => {
+            commands.appWindowActivate(id).catch(console.error);
+            setPeek(null);
+          }}
         />
       )}
     </div>
@@ -372,12 +491,15 @@ export function DockBar({ desktop }: DockBarProps) {
 }
 
 /** 应用图标 Dock 项：真图标 PNG / 字母占位，单击启动（顺手刷新常用组），
- * 运行中点亮底部指示点；右键呼出应用菜单（关闭/多开/移除） */
+ * 运行中点亮底部指示点；右键呼出应用菜单（关闭/多开/移除）；
+ * 悬停（仅运行中）触发窗口卡片探测（≥2 扇窗口才出卡） */
 function AppDockItem({
   app,
   size,
   running = false,
   onLaunch,
+  onPeek,
+  onPeekEnd,
   onContextMenu,
   nativeTipOnly = false,
 }: {
@@ -385,6 +507,10 @@ function AppDockItem({
   size: number;
   running?: boolean;
   onLaunch: (key: string) => void;
+  /** 悬停窗口卡片：进入图标（运行中才调，传图标中心 x） */
+  onPeek?: (key: string, x: number) => void;
+  /** 鼠标离开图标 */
+  onPeekEnd?: () => void;
   /** 右键呼出应用菜单（传窗口内 clientX） */
   onContextMenu?: (x: number) => void;
   nativeTipOnly?: boolean;
@@ -395,6 +521,15 @@ function AppDockItem({
       running={running}
       nativeTipOnly={nativeTipOnly}
       onClick={() => onLaunch(app.app_key)}
+      onMouseEnter={
+        onPeek && running
+          ? (e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              onPeek(app.app_key, (r.left + r.right) / 2);
+            }
+          : undefined
+      }
+      onMouseLeave={onPeekEnd}
       onContextMenu={
         onContextMenu
           ? (e) => {
@@ -459,6 +594,8 @@ function DockItem({
   active,
   running = false,
   onContextMenu,
+  onMouseEnter,
+  onMouseLeave,
   nativeTipOnly = false,
   children,
 }: {
@@ -467,11 +604,18 @@ function DockItem({
   active?: boolean;
   running?: boolean;
   onContextMenu?: (e: React.MouseEvent) => void;
+  onMouseEnter?: (e: React.MouseEvent) => void;
+  onMouseLeave?: () => void;
   nativeTipOnly?: boolean;
   children: ReactNode;
 }) {
   return (
-    <div className="group relative flex flex-col items-center" onContextMenu={onContextMenu}>
+    <div
+      className="group relative flex flex-col items-center"
+      onContextMenu={onContextMenu}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
       {!nativeTipOnly && (
         <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-neutral-900/85 px-2.5 py-1 text-[11px] text-white opacity-0 ring-1 ring-white/15 transition-opacity group-hover:opacity-100">
           {label}

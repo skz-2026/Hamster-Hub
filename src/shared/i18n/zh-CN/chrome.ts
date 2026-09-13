@@ -41,6 +41,8 @@ export const chrome = {
   'chrome.dock.customZone': '定制区',
   'chrome.dock.closeWindow': '关闭窗口',
   'chrome.dock.newInstance': '多开应用',
+  'chrome.dock.pickWindow': '选择要前置的窗口',
+  'chrome.dock.minimized': '已最小化',
 
   // 应用选择器弹层
   'chrome.picker.searchApps': '搜索应用',

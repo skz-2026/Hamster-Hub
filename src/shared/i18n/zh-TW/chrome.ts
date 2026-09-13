@@ -38,6 +38,8 @@ export const chrome: Record<keyof typeof chromeZh, string> = {
   'chrome.dock.customZone': '自訂區',
   'chrome.dock.closeWindow': '關閉視窗',
   'chrome.dock.newInstance': '開新視窗',
+  'chrome.dock.pickWindow': '選擇要帶到最前的視窗',
+  'chrome.dock.minimized': '已最小化',
 
   'chrome.picker.searchApps': '搜尋應用程式',
   'chrome.picker.dockFull': '工作列自訂區已滿（{n} 個）——右鍵圖示可移除後再新增',

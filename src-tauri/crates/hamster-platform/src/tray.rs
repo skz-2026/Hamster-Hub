@@ -281,6 +281,60 @@ unsafe extern "system" fn find_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
     BOOL(1)
 }
 
+/// 一扇命中窗口（dock 悬停卡片行）
+pub struct WindowHit {
+    /// 窗口句柄数值（activate 目标）
+    pub id: u64,
+    pub title: String,
+    pub minimized: bool,
+    /// 窗口图标 PNG 的 data URL（提取失败为空串）
+    pub png: String,
+}
+
+/// 按 exe 文件名枚举其全部可见顶层窗口（z 序，最上层在前）。
+/// dock 悬停卡片用：多开的应用列出所有窗口供用户挑一扇前置。
+pub fn list_by_process(self_pid: u32, exe: &str) -> Vec<WindowHit> {
+    let mut ctx = ListCtx {
+        self_pid,
+        exe: exe.to_ascii_lowercase(),
+        out: Vec::new(),
+    };
+    unsafe {
+        let _ = EnumWindows(Some(list_proc), LPARAM(&mut ctx as *mut ListCtx as isize));
+    }
+    ctx.out
+}
+
+struct ListCtx {
+    self_pid: u32,
+    exe: String,
+    out: Vec<WindowHit>,
+}
+
+unsafe extern "system" fn list_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
+    let ctx = &mut *(lparam.0 as *mut ListCtx);
+    if user_visible_pid(hwnd, ctx.self_pid).is_some()
+        && process_name(hwnd).to_ascii_lowercase() == ctx.exe
+    {
+        // 与托盘列表同规格：无边框、无属主的独立用户窗口
+        let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+        if style & WS_CAPTION.0 as isize == WS_CAPTION.0 as isize {
+            let owned = GetWindow(hwnd, GW_OWNER)
+                .map(|owner| !owner.0.is_null())
+                .unwrap_or(false);
+            if !owned {
+                ctx.out.push(WindowHit {
+                    id: hwnd.0 as u64,
+                    title: window_title(hwnd),
+                    minimized: IsIconic(hwnd).as_bool(),
+                    png: window_icon_png(hwnd),
+                });
+            }
+        }
+    }
+    BOOL(1)
+}
+
 /// 当前存在用户可见窗口的进程 exe 名集合（小写，不含路径）。
 /// dock 运行态判定用：一次枚举得到全集，再对每个应用做集合匹配，
 /// 避免 N 个应用各自 EnumWindows + OpenProcess。
@@ -352,6 +406,37 @@ unsafe extern "system" fn close_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
 }
 
 const CHEVRON_NAME: &str = "显示隐藏的图标";
+
+/// 按 exe 文件名（大小写不敏感）数可见顶层窗口数。
+/// 「多开」能力自学习用：多开前后各数一次，没涨 = 单实例应用。
+pub fn count_visible_by_process(self_pid: u32, exe: &str) -> usize {
+    let mut ctx = CountCtx {
+        self_pid,
+        exe: exe.to_ascii_lowercase(),
+        count: 0,
+    };
+    unsafe {
+        let _ = EnumWindows(Some(count_proc), LPARAM(&mut ctx as *mut CountCtx as isize));
+    }
+    ctx.count
+}
+
+struct CountCtx {
+    self_pid: u32,
+    exe: String,
+    count: usize,
+}
+
+unsafe extern "system" fn count_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
+    let ctx = &mut *(lparam.0 as *mut CountCtx);
+    if user_visible_pid(hwnd, ctx.self_pid).is_some()
+        && process_name(hwnd).to_ascii_lowercase() == ctx.exe
+    {
+        ctx.count += 1;
+    }
+    BOOL(1)
+}
+
 /// chevron Invoke 后等弹层弹出
 const FLYOUT_WAIT_MS: u64 = 600;
 /// 任务栏显示后等 XAML 合成填充

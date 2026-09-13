@@ -65,9 +65,31 @@ async appLaunch(appKey: string) : Promise<null> {
 /**
  * 多开：绕过「已运行激活现有窗口」，直接 shell_open 再开一个。
  * 文件夹/记事本/浏览器得到新窗口；单实例应用由其自身去重（等效激活）。
+ * 顺带自学习多开能力：已存在窗口时再开、1.5s 后窗数没涨 → 记为单实例，
+ * 菜单不再提供「多开」；涨了 → 移出名单重新放行（见 app_multi_flags）。
  */
 async appLaunchNew(appKey: string) : Promise<null> {
     return await TAURI_INVOKE("app_launch_new", { appKey });
+},
+/**
+ * 查询 keys 中已知不支持多开的应用（内置名单 + 运行时自学习并集），
+ * 菜单据此隐藏「多开应用」项。
+ */
+async appMultiFlags(keys: string[]) : Promise<string[]> {
+    return await TAURI_INVOKE("app_multi_flags", { keys });
+},
+/**
+ * 枚举应用的全部可见顶层窗口（z 序，最上层在前）——dock 悬停卡片用。
+ * 解析不出 exe（UWP/文件夹）返回空表。
+ */
+async appWindows(appKey: string) : Promise<AppWindowInfo[]> {
+    return await TAURI_INVOKE("app_windows", { appKey });
+},
+/**
+ * 前置（必要时还原）指定窗口——dock 悬停卡片点选目标窗口
+ */
+async appWindowActivate(id: number) : Promise<null> {
+    return await TAURI_INVOKE("app_window_activate", { id });
 },
 /**
  * 关闭应用：对其 exe 名下全部可见窗口投递 WM_CLOSE（温和关闭，应用可弹
@@ -90,8 +112,8 @@ async appSearch(query: string, limit: number | null) : Promise<AppEntry[]> {
     return await TAURI_INVOKE("app_search", { query, limit });
 },
 /**
- * 打开（或换目标重开）dock 右键菜单弹窗：水平钳进任务栏范围，
- * 垂直落在任务栏条上沿上方 8px。
+ * 打开（或换目标重开）dock 弹窗：水平钳进任务栏范围，垂直落在任务栏条
+ * 上沿上方 8px。menu 抢焦点（失焦即收）；hover 不抢焦点（跟随悬停）。
  */
 async dockMenuOpen(payload: DockMenuPayload) : Promise<null> {
     return await TAURI_INVOKE("dock_menu_open", { payload });
@@ -103,7 +125,7 @@ async dockMenuPayload() : Promise<DockMenuPayload | null> {
     return await TAURI_INVOKE("dock_menu_payload");
 },
 /**
- * 收回弹窗（失焦/Esc/动作完成/退出桌面模式）
+ * 收回弹窗（失焦/Esc/动作完成/退出桌面模式/悬停离开）
  */
 async dockMenuHide() : Promise<null> {
     return await TAURI_INVOKE("dock_menu_hide");
@@ -622,6 +644,18 @@ icon_path: string | null }
 export type AppError = { code: string; message: string }
 export type AppHealth = { name: string; version: string }
 export type AppIndexUpdated = { count: number }
+/**
+ * 一扇应用窗口（dock 悬停卡片行）
+ */
+export type AppWindowInfo = { 
+/**
+ * 窗口句柄数值（app_window_activate 目标）
+ */
+id: number; title: string; minimized: boolean; 
+/**
+ * 窗口图标 PNG 的 data URL（空串时前端回退应用图标/首字占位）
+ */
+png: string }
 export type Appearance = { theme: string; accent: string; glass: string; font_scale: number }
 /**
  * bench_assistant_create 参数包
@@ -713,21 +747,33 @@ export type DiskStat = {
  */
 mount: string; total_gb: number; used_gb: number; percent: number }
 /**
- * 菜单载荷（dock-menu 弹窗渲染 + 定位所需；文案在弹窗内用 i18n 现算）
+ * 弹窗载荷（dock-menu 窗口渲染 + 定位所需；文案在弹窗内用 i18n 现算）
  */
-export type DockMenuPayload = { appKey: string; 
+export type DockMenuPayload = { 
 /**
- * 右键锚点 x（任务栏窗口内逻辑 px，用于水平居中弹窗）
+ * "menu" = 右键菜单；"hover" = 悬停窗口卡片
+ */
+kind: string; appKey: string; 
+/**
+ * 锚点 x（任务栏窗口内逻辑 px，用于水平居中弹窗）
  */
 x: number; 
 /**
- * 定制组项才显示「移除」
+ * 定制组项才显示「移除」（menu）
  */
 removable: boolean; 
 /**
- * 运行中才显示「关闭窗口」
+ * 运行中才显示「关闭窗口」（menu）
  */
-running: boolean }
+running: boolean; 
+/**
+ * 支持多开才显示「多开应用」（menu；单实例应用点了只会收敛回已有窗口）
+ */
+multi: boolean; 
+/**
+ * 悬停卡片窗口清单（hover；menu 为空）
+ */
+windows: AppWindowInfo[] }
 export type FileHit = { path: string; name: string; ext: string | null; kind: string; size: number; mtime: number }
 export type FileIndex = { roots: string[]; max_files: number }
 export type FileIndexUpdated = { count: number }

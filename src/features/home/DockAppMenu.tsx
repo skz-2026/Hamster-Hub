@@ -20,6 +20,8 @@ export interface DockAppMenuProps {
   running: boolean;
   /** 定制组项才可移除；常用组是自动排名，不提供移除 */
   removable: boolean;
+  /** 支持多开才显示「多开应用」；单实例应用点了只会收敛回已有窗口 */
+  multiCapable?: boolean;
   /** dock-menu 独立弹窗内铺满渲染（默认主窗口内绝对定位） */
   fill?: boolean;
   onNewInstance: () => void;
@@ -31,6 +33,7 @@ export default function DockAppMenu({
   x = 0,
   running,
   removable,
+  multiCapable = true,
   fill = false,
   onNewInstance,
   onCloseApp,
@@ -51,7 +54,9 @@ export default function DockAppMenu({
       {running && (
         <MenuRow icon={SquareX} label={t('chrome.dock.closeWindow')} danger onClick={onCloseApp} />
       )}
-      <MenuRow icon={CopyPlus} label={t('chrome.dock.newInstance')} onClick={onNewInstance} />
+      {multiCapable && (
+        <MenuRow icon={CopyPlus} label={t('chrome.dock.newInstance')} onClick={onNewInstance} />
+      )}
       {removable && (
         <MenuRow icon={Trash2} label={t('chrome.action.remove')} danger onClick={onRemove} />
       )}

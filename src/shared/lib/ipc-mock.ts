@@ -6,6 +6,7 @@ import { classifyApp } from '@/features/apps/category';
 import type {
   AppEntry,
   AppHealth,
+  AppWindowInfo,
   DockMenuPayload,
   PluginInfo,
   CountdownCustom,
@@ -94,8 +95,21 @@ const MOCK_RUNNING = new Set<string>(
   ),
 );
 
-// dock 右键菜单弹窗载荷（浏览器内 /dock-menu 路由预览种子：微信运行中+可移除）
-let MOCK_DOCK_MENU: DockMenuPayload | null = { appKey: 'mock:微信', x: 200, removable: true, running: true };
+// 已知单实例应用种子（APPS[0]=微信、APPS[1]=QQ；key 跟语言走）
+const MOCK_SINGLE = new Set<string>(
+  [APPS[0]?.app_key, APPS[1]?.app_key].filter((k): k is string => typeof k === 'string'),
+);
+
+// dock 右键菜单弹窗载荷（浏览器内 /dock-menu 路由预览种子：微信运行中+可移除+单实例）
+let MOCK_DOCK_MENU: DockMenuPayload | null = {
+  kind: 'menu',
+  appKey: APPS[0]?.app_key ?? 'mock:微信',
+  x: 200,
+  removable: true,
+  running: true,
+  multi: false,
+  windows: [],
+};
 
 const MOCK_FILES: FileHit[] = [
   { path: L('C:\\Users\\you\\Desktop\\微信截图_0901.png', 'C:\\Users\\you\\Desktop\\screenshot_0901.png'), name: L('微信截图_0901.png', 'screenshot_0901.png'), ext: 'png', kind: L('图片', 'image'), size: 240000, mtime: 1757000000 },
@@ -667,6 +681,28 @@ export const mockCommands = {
   },
   async appsRunning(keys: string[]): Promise<string[]> {
     return keys.filter((k) => MOCK_RUNNING.has(k));
+  },
+  // 已知单实例应用（微信/QQ）：浏览器层验证「多开」条件隐藏
+  async appMultiFlags(keys: string[]): Promise<string[]> {
+    return keys.filter((k) => MOCK_SINGLE.has(k));
+  },
+  // 悬停窗口卡片：Chrome 给 3 扇假窗口（1 最小化），其余运行中应用 1 扇
+  async appWindows(appKey: string): Promise<AppWindowInfo[]> {
+    if (appKey === (APPS[7]?.app_key ?? 'mock:chrome')) {
+      return [
+        { id: 101, title: L('Chrome — 仓鼠Hub 开发中', 'Chrome — HamsterHub dev'), minimized: false, png: '' },
+        { id: 102, title: L('GitHub Pull Request #42', 'GitHub Pull Request #42'), minimized: false, png: '' },
+        { id: 103, title: L('狗狗视频 - 摸鱼中', 'Dog videos - slacking'), minimized: true, png: '' },
+      ];
+    }
+    if (MOCK_RUNNING.has(appKey)) {
+      return [{ id: 100, title: L('主窗口', 'Main window'), minimized: false, png: '' }];
+    }
+    return [];
+  },
+  async appWindowActivate(id: number): Promise<null> {
+    console.log('[mock] 前置窗口', id);
+    return null;
   },
   // dock 右键菜单弹窗（真机是独立置顶小窗；浏览器内仅 /dock-menu 路由预览用，
   // 事件推送走原生 listen 在浏览器不可达，靠挂载时拉取）

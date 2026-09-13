@@ -123,3 +123,16 @@ export function useRunningAppKeys(keys: string[]) {
   });
   return useMemo(() => new Set(q.data ?? []), [q.data]);
 }
+
+/**
+ * 已知不支持多开的应用（内置名单 + 多开尝试自学习）。菜单据此隐藏
+ * 「多开应用」。不轮询：launchNew 后 invalidate 即时刷新。
+ */
+export function useSingleInstanceApps(keys: string[]) {
+  const q = useQuery({
+    queryKey: ['apps', 'single', keys],
+    queryFn: () => commands.appMultiFlags(keys),
+    staleTime: Infinity,
+  });
+  return useMemo(() => new Set(q.data ?? []), [q.data]);
+}

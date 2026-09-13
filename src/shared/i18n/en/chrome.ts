@@ -37,6 +37,8 @@ export const chrome: Record<keyof typeof chromeZh, string> = {
   'chrome.dock.customZone': 'Custom area',
   'chrome.dock.closeWindow': 'Close window',
   'chrome.dock.newInstance': 'New window',
+  'chrome.dock.pickWindow': 'Pick a window to bring to front',
+  'chrome.dock.minimized': 'Minimized',
 
   'chrome.picker.searchApps': 'Search apps',
   'chrome.picker.dockFull': 'Custom area is full ({n} apps) — right-click an icon to remove one first',
