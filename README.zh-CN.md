@@ -90,6 +90,17 @@ pnpm tauri build   # 打 NSIS 安装包（产物在 src-tauri/target/release）
 
 本项目以 MIT 协议开源。
 
+## 4. 交流与支持
+
+<div align="center">
+<table>
+  <tr>
+    <td align="center" width="260"><img src="./docs/contact/we-chat-room.jpg" width="220" alt="微信交流群二维码" /><br><sub><b>微信交流群</b> · 扫码进群，反馈与交流</sub></td>
+    <td align="center" width="260"><img src="./docs/contact/we-chat-pay.jpg" width="220" alt="微信打赏码" /><br><sub><b>赞助打赏</b> · 请仓鼠吃点坚果 🥕</sub></td>
+  </tr>
+</table>
+</div>
+
 <div align="center">
 <sub>把桌面，囤进一个窝。· Hoard your desktop into one cozy nest.</sub>
 </div>
