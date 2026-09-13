@@ -38,3 +38,6 @@ playwright-report/
 
 # 本地主屏布局调试导出
 /.layout-*.json
+
+# agent 工作区（记忆/任务等本地数据）
+.workbuddy/

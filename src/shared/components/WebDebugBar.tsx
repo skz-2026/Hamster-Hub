@@ -40,6 +40,15 @@ export function WebDebugBar() {
       >
         Spotlight
       </a>
+      {/* 造一条样例通知（通知中心在预览态没有真实事件源，DOM 事件驱动，
+          与 AppShell 的 hamster:open-app-picker 同一套预览态约定） */}
+      <button
+        onClick={() => window.dispatchEvent(new Event('hamster:demo-notification'))}
+        data-testid="debug-notify"
+        className="rounded-lg bg-white/10 px-2.5 py-1 font-medium transition-colors hover:bg-white/20"
+      >
+        {t('chrome.debug.notify')}
+      </button>
     </div>
   );
 }

@@ -69,6 +69,8 @@ src/
     agent/        桌面助手：AssistantPanel(persona 面板)、McpSyncCard(MCP 接入状态/开关)
     plugins/      UI 插件：registry、PluginWidgetHost(主屏挂载)、PluginManageCard
     search/       useUnifiedSearch（Spotlight 与搜索页共用）
+    notifications/ 通知中心：notifications.ts(条目/分组/相对时间 纯逻辑+单测)、store.ts(事件接入+
+                  localStorage 持久化+入列)、NotificationCenter(面板)、NotificationBell(未读角标入口)
     settings/ apps/ schedule/ todo/ dashboard/ workbench/ spotlight/ control/
   assets/agents/  agent 品牌 SVG 头像（claude/codex/gemini/glm 等 25 个）
   shared/

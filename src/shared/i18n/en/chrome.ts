@@ -55,6 +55,7 @@ export const chrome: Record<keyof typeof chromeZh, string> = {
   'chrome.desktop.aiAssistant': 'AI assistant',
 
   'chrome.debug.browserPreview': 'Browser preview · IPC mock',
+  'chrome.debug.notify': 'Fire a notification',
 
   'chrome.stub.milestoneLive': '{milestone} milestone is live',
 };

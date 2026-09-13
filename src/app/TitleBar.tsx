@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { commands } from '@/shared/lib/ipc';
 import { useI18n } from '@/shared/i18n/provider';
+import { NotificationBell } from '@/features/notifications/NotificationBell';
+import { NotificationCenter } from '@/features/notifications/NotificationCenter';
 
 interface TitleBarProps {
   coreVersion: string | null;
@@ -12,6 +14,7 @@ interface TitleBarProps {
 export function TitleBar({ coreVersion, onMinimize, onClose }: TitleBarProps) {
   const { t } = useI18n();
   const [pinned, setPinned] = useState(false);
+  const [ncOpen, setNcOpen] = useState(false);
 
   const togglePin = async () => {
     const next = !pinned;
@@ -57,6 +60,16 @@ export function TitleBar({ coreVersion, onMinimize, onClose }: TitleBarProps) {
           </span>
         )}
       </div>
+
+      {/* 通知中心（窗口化形态的入口：桌面接管态由桌面主页热区承载） */}
+      <div className="relative z-10 ml-auto flex items-center">
+        <NotificationBell
+          variant="chrome"
+          open={ncOpen}
+          onToggle={() => setNcOpen((v) => !v)}
+        />
+      </div>
+      <NotificationCenter open={ncOpen} onClose={() => setNcOpen(false)} />
     </header>
   );
 }

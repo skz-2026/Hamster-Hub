@@ -91,6 +91,7 @@ move to `pnpm tauri dev` for the system-level integration layer.
 | [Tech roadmap](./docs/03-tech-roadmap.md) | Tauri 2 rationale, stack list, key technical designs, engineering standards |
 | [Code architecture](./docs/04-architecture.md) | repo layout, frontend/Rust layering, data flow, testing |
 | [Pitfalls](./docs/05-pitfalls.md) | hard-won lessons, updated as we go |
+| [Optimization roadmap (2026-09)](./docs/07-roadmap-2026-09.md) | current status review, near/mid/long-term plan toward v0.2.0 |
 
 ## 3. License
 

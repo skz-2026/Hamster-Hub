@@ -7,5 +7,6 @@ import { bench } from './bench';
 import { home } from './home';
 import { pages } from './pages';
 import { vault } from './vault';
+import { notifications } from './notifications';
 
-export const en: Record<keyof typeof zhCN, string> = { ...chrome, ...settings, ...agent, ...bench, ...home, ...pages, ...vault };
+export const en: Record<keyof typeof zhCN, string> = { ...chrome, ...settings, ...agent, ...bench, ...home, ...pages, ...vault, ...notifications };

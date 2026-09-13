@@ -13,6 +13,7 @@ import { wallpaperSrcOf } from '@/features/home/WallpaperLayer';
 import { commands, events, isTauri } from '@/shared/lib/ipc';
 import { useI18n } from '@/shared/i18n/provider';
 import ReminderDialog from '@/features/todo/ReminderDialog';
+import { bindNotificationSources } from '@/features/notifications/store';
 
 const appWindow = isTauri ? getCurrentWindow() : null;
 
@@ -52,6 +53,13 @@ export function AppShell() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [showDesktopBack, navigate]);
+
+  // 通知源接入（幂等）：待办到点 / AI Agent 会话结束 / 番茄钟完成 / 更新就绪。
+  // 挂在壳层而非通知面板里——面板只在桌面主页/窗口标题栏按需渲染，
+  // 而通知要在**任何页面、两种形态**下都能收（离开页面回来仍能看到未读）。
+  useEffect(() => {
+    bindNotificationSources();
+  }, []);
 
   // Rust 核心就绪事件（IPC 事件流演示）
   useEffect(() => {

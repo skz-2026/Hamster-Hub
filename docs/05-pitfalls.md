@@ -73,3 +73,11 @@
     诊断口诀：`Get-NetTCPConnection -RemotePort 31181` 看谁挂在代理上；cargo 全家 0 CPU 无 rustc
     = 有人在等锁/等网络，先 `Get-Process cargo | Stop-Process -Force` 清场再重试。失败重试前不清
     孤儿进程 = 越积越多互相锁死。CI（GitHub Actions）无此问题。
+24. **IPC mock 的载荷字段名会悄悄与生成契约脱钩**（2026-09-13 做通知中心时发现）：
+    `ipc-mock.ts` 里的 `mockEvent<T>` 是手写泛型，而 `mockEvents` 整体被 `as typeof realEvents` 断言过，
+    T 写错**编译器不会报**。实际中 `benchStreamExit` mock 发 `{ sessionId }`、生成类型（Rust 侧
+    `session_id`）与消费方 FloatingAgent 读的都是 `session_id` → 浏览器层里 `e.payload.session_id`
+    恒为 undefined，该兜底收口静默失效（`benchPtyExit` 同病：`exitCode` vs `exit_code`）。
+    症状特征：只读 payload 的消费方「在真机好、在浏览器预览没反应」。
+    修法：mock 的载荷字段名一律**照抄 `src/shared/types/ipc.ts` 生成类型**（snake_case），
+    新增事件时先打开生成类型对照；只 `listen(() => …)` 不读 payload 的消费方会掩盖问题，别据此判断 mock 正确。

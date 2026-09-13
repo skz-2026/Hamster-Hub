@@ -63,6 +63,7 @@ export const chrome = {
 
   // 浏览器预览调试条
   'chrome.debug.browserPreview': '浏览器预览 · IPC mock',
+  'chrome.debug.notify': '造一条通知',
 
   // 里程碑占位页
   'chrome.stub.milestoneLive': '{milestone} 里程碑上线',

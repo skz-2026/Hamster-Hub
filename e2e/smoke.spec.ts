@@ -208,6 +208,79 @@ test.describe('仓鼠Hub 冒烟（浏览器预览 + IPC mock）', () => {
     await expect(page).toHaveURL(/#\/home$/);
     await expect(page.getByPlaceholder('搜索应用')).toBeVisible();
   });
+
+  test('通知中心：未读角标 + 分组条目 + 全部已读/单条移除 + 点击跳转', async ({ page }) => {
+    await page.goto('/#/');
+    await page.waitForTimeout(800);
+
+    // 空态：窗口化标题栏铃铛呼出（Esc 收起）
+    await page.getByTestId('notification-bell').click();
+    await expect(page.getByTestId('notification-center')).toBeVisible();
+    await expect(page.getByText('暂无通知')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('notification-center')).toHaveCount(0);
+
+    // 造两条通知（预览调试条的样例事件源）→ 未读角标累计
+    await page.getByTestId('debug-notify').click();
+    await page.getByTestId('debug-notify').click();
+    await expect(page.getByTestId('notification-badge')).toHaveText('2');
+
+    // 面板：今天分组 + 两条条目 + 相对时间「刚刚」
+    await page.getByTestId('notification-bell').click();
+    await expect(page.getByTestId('notification-group-today')).toBeVisible();
+    await expect(page.getByTestId('notification-item')).toHaveCount(2);
+    await expect(page.getByTestId('notification-item').first()).toContainText('AI Agent 任务完成');
+    await expect(page.getByTestId('notification-item').first()).toContainText('刚刚');
+
+    // 全部已读 → 未读点与角标都清掉
+    await page.getByRole('button', { name: '全部已读', exact: true }).click();
+    await expect(page.getByTestId('notification-dot')).toHaveCount(0);
+    await expect(page.getByTestId('notification-badge')).toHaveCount(0);
+
+    // ✕ 单条移除
+    await page
+      .getByTestId('notification-item')
+      .first()
+      .getByRole('button', { name: '移除通知' })
+      .click();
+    await expect(page.getByTestId('notification-item')).toHaveCount(1);
+
+    // 点击条目 → 收起面板并跳到目标页（AI Agent 通知 → /bench）
+    await page.getByTestId('notification-item').first().click();
+    await expect(page.getByTestId('notification-center')).toHaveCount(0);
+    await expect(page).toHaveURL(/#\/bench$/);
+  });
+
+  test('通知中心：桌面接管形态从右上角热区呼出 + 历史跨会话留存', async ({ page }) => {
+    await page.goto('/#/');
+    await page.waitForTimeout(800);
+
+    await page.getByRole('button', { name: '进入桌面模式' }).click();
+    await page.waitForTimeout(600);
+
+    // 接管态热区（壁纸之上）的铃铛 → 面板空态
+    await page.getByTestId('notification-bell').click();
+    await expect(page.getByTestId('notification-center')).toBeVisible();
+    await expect(
+      page.getByText('待办到点、AI Agent 任务完成、更新就绪都会出现在这里'),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('notification-center')).toHaveCount(0);
+
+    // 面板收起时照常收通知（事件订阅在壳层，与面板是否渲染无关）
+    await page.getByTestId('debug-notify').click();
+    await expect(page.getByTestId('notification-badge')).toHaveText('1');
+    await page.getByTestId('notification-bell').click();
+    await expect(page.getByTestId('notification-item')).toHaveCount(1);
+    await page.keyboard.press('Escape');
+
+    // reload（等价冷启动新会话）：历史与未读从 localStorage 恢复
+    await page.reload();
+    await page.waitForTimeout(900);
+    await expect(page.getByTestId('notification-badge')).toHaveText('1');
+    await page.getByTestId('notification-bell').click();
+    await expect(page.getByTestId('notification-item')).toHaveCount(1);
+  });
 });
 
 test.describe('代理工作台（bench，上游域层整合 MVP）', () => {

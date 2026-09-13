@@ -249,8 +249,8 @@ export const mockEvents = {
   desktopModeChanged: mockEvent<{ active: boolean }>('desktopModeChanged'),
   appIndexUpdated: mockEvent<{ count: number }>('appIndexUpdated'),
   benchStreamEvent: mockEvent<StreamEvent>('benchStreamEvent'),
-  benchStreamExit: mockEvent<{ sessionId: string }>('benchStreamExit'),
-  benchPtyExit: mockEvent<{ sessionId: string; exitCode: number }>('benchPtyExit'),
+  benchStreamExit: mockEvent<{ session_id: string }>('benchStreamExit'),
+  benchPtyExit: mockEvent<{ session_id: string; exit_code: number }>('benchPtyExit'),
   todoReminder: mockEvent<TodoReminder>('todoReminder'),
   focusTick: mockEvent<FocusTick>('focusTick'),
   focusFinished: mockEvent<FocusFinished>('focusFinished'),
@@ -967,7 +967,7 @@ export const mockCommands = {
       s.info.running = false;
       s.info.exitCode = 0;
       emitEv(sessionId, 'exit', '');
-      mockEvents.benchStreamExit._emit({ sessionId });
+      mockEvents.benchStreamExit._emit({ session_id: sessionId });
       liveStreams.delete(sessionId);
     }
     return null;
@@ -1050,7 +1050,7 @@ export const mockCommands = {
       s.timers.forEach(clearTimeout);
       s.info.running = false;
       s.info.exitCode = 0;
-      mockEvents.benchPtyExit._emit({ sessionId, exitCode: 0 });
+      mockEvents.benchPtyExit._emit({ session_id: sessionId, exit_code: 0 });
       ptySessions.delete(sessionId);
     }
     return null;

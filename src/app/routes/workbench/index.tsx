@@ -12,6 +12,8 @@ import type { TKey } from '@/shared/i18n/core';
 import { commands, events } from '@/shared/lib/ipc';
 import { HomeSearchBox } from '@/features/search/HomeSearchBox';
 import { ControlCenter } from '@/features/control/ControlCenter';
+import { NotificationBell } from '@/features/notifications/NotificationBell';
+import { NotificationCenter } from '@/features/notifications/NotificationCenter';
 import { useDashboardLayout } from '@/features/dashboard/hooks';
 import { DashboardTile } from '@/features/dashboard/DashboardTile';
 import {
@@ -383,6 +385,7 @@ function DesktopHome({ dash, edit, setEdit }: { dash: Dash; edit: boolean; setEd
   const { time, date, lunar } = useDateTimeInfo(now);
   const wallpaper = useWallpaper();
   const [ccOpen, setCcOpen] = useState(false);
+  const [ncOpen, setNcOpen] = useState(false);
 
   return (
     <div
@@ -403,11 +406,21 @@ function DesktopHome({ dash, edit, setEdit }: { dash: Dash; edit: boolean; setEd
         className="relative flex w-full flex-col items-center overflow-y-auto px-8 pb-10 pt-10"
         style={{ height: `calc(100% - ${TASKBAR_H_PX}px)` }}
       >
-        {/* 右上角热区：编辑入口 + 控制中心 */}
+        {/* 右上角热区：编辑入口 + 通知中心 + 控制中心（两个面板互斥，避免叠在一起） */}
         <div className="absolute right-5 top-5 z-40 flex items-center gap-2">
           <EditControls dash={dash} edit={edit} setEdit={setEdit} />
+          <NotificationBell
+            open={ncOpen}
+            onToggle={() => {
+              setCcOpen(false);
+              setNcOpen((v) => !v);
+            }}
+          />
           <button
-            onClick={() => setCcOpen((v) => !v)}
+            onClick={() => {
+              setNcOpen(false);
+              setCcOpen((v) => !v);
+            }}
             title={t('chrome.desktop.controlCenter')}
             aria-label={t('chrome.desktop.controlCenter')}
             className="grid size-10 place-items-center rounded-full bg-white/10 text-white/85 ring-1 ring-white/15 backdrop-blur-xl transition-all hover:bg-white/20 hover:text-white"
@@ -416,6 +429,7 @@ function DesktopHome({ dash, edit, setEdit }: { dash: Dash; edit: boolean; setEd
           </button>
         </div>
         <ControlCenter open={ccOpen} onClose={() => setCcOpen(false)} />
+        <NotificationCenter open={ncOpen} onClose={() => setNcOpen(false)} />
 
         {/* 问候 + 大时钟（SF 风：细体、收紧字距；错落入场） */}
         <div className="rise-in relative flex flex-col items-center gap-2">
