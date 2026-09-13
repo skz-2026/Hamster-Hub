@@ -50,6 +50,7 @@ export const settings: Record<keyof typeof settingsZh, string> = {
   'settings.about.label': 'About',
   'settings.about.desc': 'HamsterHub {version} · Local-first, data never leaves this machine',
   'settings.about.feedback': 'Feedback',
+  'settings.about.guide': 'User Guide',
 
   // Software update (GitHub Releases)
   'settings.update.label': 'Software Update',

@@ -33,6 +33,10 @@ import UpdaterRow from '@/features/settings/UpdaterRow';
 
 const FEEDBACK_URL = 'https://github.com/skz-2026/Hamster-Hub/issues';
 
+/** 使用指导手册站：按界面语言选对应语言版（zh-CN/zh-TW 共用中文手册） */
+const guideUrl = (lang: string) =>
+  `https://skz-2026.github.io/Hamster-Hub/${lang === 'en' ? 'manual.en.html' : 'manual.zh-CN.html'}`;
+
 const ACCENTS = ['#ff8a3d', '#f0563b', '#4ea1ff', '#40b881', '#a06bff', '#e8b23c'];
 
 /** label 存字面量 i18n key（显式映射，禁止动态拼 key），渲染时经 t() 翻译 */
@@ -225,12 +229,20 @@ export default function SettingsPage() {
             </Row>
             <UpdaterRow />
             <Row title={t('settings.about.label')} desc={t('settings.about.desc', { version: version ? `v${version}` : '' })}>
-              <button
-                className="text-xs text-[var(--text-muted)] underline-offset-2 hover:underline"
-                onClick={() => void commands.openUrl(FEEDBACK_URL).catch(() => {})}
-              >
-                {t('settings.about.feedback')}
-              </button>
+              <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
+                <button
+                  className="underline-offset-2 hover:underline"
+                  onClick={() => void commands.openUrl(guideUrl(lang)).catch(() => {})}
+                >
+                  {t('settings.about.guide')}
+                </button>
+                <button
+                  className="underline-offset-2 hover:underline"
+                  onClick={() => void commands.openUrl(FEEDBACK_URL).catch(() => {})}
+                >
+                  {t('settings.about.feedback')}
+                </button>
+              </div>
             </Row>
           </Group>
         </Section>

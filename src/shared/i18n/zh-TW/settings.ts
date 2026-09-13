@@ -51,6 +51,7 @@ export const settings: Record<keyof typeof settingsZh, string> = {
   'settings.about.label': '關於',
   'settings.about.desc': '倉鼠Hub {version} · 本地優先，資料不出本機',
   'settings.about.feedback': '意見回報',
+  'settings.about.guide': '使用指導',
 
   // 軟體更新（GitHub Releases）
   'settings.update.label': '軟體更新',

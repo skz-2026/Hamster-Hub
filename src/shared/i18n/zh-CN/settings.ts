@@ -48,6 +48,7 @@ export const settings = {
   'settings.about.label': '关于',
   'settings.about.desc': '仓鼠Hub {version} · 本地优先，数据不出本机',
   'settings.about.feedback': '反馈问题',
+  'settings.about.guide': '使用指导',
 
   // 软件更新（GitHub Releases）
   'settings.update.label': '软件更新',
