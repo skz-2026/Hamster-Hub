@@ -117,7 +117,7 @@ const page = (lang, title, description, body) => `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${title} · 仓鼠Hub Hamster Hub</title>
+<title>${title}</title>
 <meta name="description" content="${description}">
 <link rel="icon" type="image/png" href="favicon.png">
 <style>${CSS}</style>
@@ -139,9 +139,9 @@ fs.mkdirSync(outDir, { recursive: true });
 // ---- 手册页（中 / 英）----
 const manualPages = [
   { src: '06-user-manual.zh-CN.md', out: 'manual.zh-CN.html', lang: 'zh-CN', other: 'manual.en.html', index: 'index.html',
-    title: '用户手册', desc: '仓鼠Hub 用户手册 —— 桌面模式、Spotlight 搜索、AI 助手、密码箱全功能指南。' },
+    title: 'Hamster Hub', desc: '仓鼠Hub 用户手册 —— 桌面模式、Spotlight 搜索、AI 助手、密码箱全功能指南。' },
   { src: '06-user-manual.en.md', out: 'manual.en.html', lang: 'en', other: 'manual.zh-CN.html', index: 'index.en.html',
-    title: 'User Manual', desc: 'Hamster Hub user manual — desktop takeover, Spotlight search, AI assistant, vault and more.' },
+    title: 'Hamster Hub', desc: 'Hamster Hub user manual — desktop takeover, Spotlight search, AI assistant, vault and more.' },
 ];
 for (const p of manualPages) {
   const { render, toc } = createRenderer();
@@ -175,7 +175,7 @@ ${topbar([`<strong>首页</strong>`, { href: 'manual.zh-CN.html', label: '用户
   <h2 style="border:none">🎬 演示视频</h2>
   <div class="videos"><video src="hamster-hub-manual.mp4" controls muted playsinline></video></div>
 </div>`;
-fs.writeFileSync(path.join(outDir, 'index.html'), page('zh-CN', 'Windows 本地优先的智能桌面助手',
+fs.writeFileSync(path.join(outDir, 'index.html'), page('zh-CN', 'Hamster Hub',
   '仓鼠Hub —— Windows 本地优先的智能桌面助手。iOS 风格桌面、AI 助手、密码箱，数据不出本机。', zhBody));
 
 const enBody = `
@@ -192,7 +192,7 @@ ${topbar([`<strong>Home</strong>`, { href: 'manual.en.html', label: 'Manual' }],
   <h2 style="border:none">🎬 Demo Video</h2>
   <div class="videos"><video src="hamster-hub-manual-en.mp4" controls muted playsinline></video></div>
 </div>`;
-fs.writeFileSync(path.join(outDir, 'index.en.html'), page('en', 'Local-first AI desktop assistant for Windows',
+fs.writeFileSync(path.join(outDir, 'index.en.html'), page('en', 'Hamster Hub',
   'Hamster Hub — a local-first AI desktop assistant for Windows. iOS-style desktop, AI assistant, vault; data never leaves your PC.', enBody));
 
 // ---- 素材 ----
