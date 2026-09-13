@@ -41,3 +41,29 @@ pub struct BenchPtyExit {
     pub session_id: String,
     pub exit_code: u32,
 }
+
+// ===== 待办提醒（core::reminder 后台调度 → 应用内提示）=====
+
+/// 待办提醒到点（系统通知已同时发出）
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type, tauri_specta::Event)]
+pub struct TodoReminder {
+    pub id: u32,
+    pub content: String,
+    pub due_at: Option<i64>,
+}
+
+// ===== 番茄钟（core::focus 秒级计时 → 应用内倒计时）=====
+
+/// 计时心跳（每秒）
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type, tauri_specta::Event)]
+pub struct FocusTick {
+    pub kind: String,
+    pub remaining_secs: u32,
+    pub paused: bool,
+}
+
+/// 一轮计时结束（专注/休息完成，历史已落库）
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type, tauri_specta::Event)]
+pub struct FocusFinished {
+    pub kind: String,
+}

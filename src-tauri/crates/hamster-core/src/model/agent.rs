@@ -40,6 +40,9 @@ pub struct AgentInfo {
     pub version: Option<String>,
     /// 配置根路径（未安装为 null）
     pub config_root: Option<String>,
+    /// CLI 程序路径（自动探测 = 多版本择优；用户在设置里手动指定后为所填路径；
+    /// null = 未探测到）
+    pub program: Option<String>,
     pub capabilities: Caps,
     /// 支持内嵌对话（v2.0：adapter 提供 runtime 画像）
     pub chat: bool,

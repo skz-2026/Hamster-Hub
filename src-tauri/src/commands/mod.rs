@@ -4,6 +4,7 @@ pub mod control;
 pub mod dashboard;
 pub mod desktop;
 pub mod files;
+pub mod focus;
 pub mod note;
 pub mod settings;
 pub mod sysinfo;

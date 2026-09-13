@@ -107,6 +107,11 @@ impl AgentAdapter for ZcodeAdapter {
         })
     }
 
+    /// 本机 zcode CLI 的最佳路径（桌面版安装 CLI 可能不在 PATH，None 属正常）
+    fn program_hint(&self) -> Option<String> {
+        crate::resolve_best_program("zcode").map(|p| p.to_string_lossy().into_owned())
+    }
+
     fn capabilities(&self) -> Caps {
         // skills 目录结构未验证（⚠️），rules 体系待确认：M0 如实声明仅支持用户级 MCP
         Caps {

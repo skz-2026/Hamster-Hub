@@ -95,6 +95,23 @@ pub fn enter(app: &tauri::AppHandle) -> Result<(), crate::error::AppError> {
     // ③ 拉起看门狗（主进程死亡 → 按快照还原）；失败仅告警，正常退出路径不受影响
     spawn_watchdog(pid);
 
+    // ③½ Win+D 守卫：接管期间吞掉系统「显示桌面」（否则全屏主窗被最小化，
+    // 露出无图标无任务栏的黑屏），改为仓鼠版「显示桌面」——清开别的窗口、
+    // 仓鼠桌面主页回到眼前，接管保持不动（对齐水豚hub：仓鼠桌面就是桌面）
+    {
+        let guard_app = app.clone();
+        hamster_platform::wind_guard::install(Box::new(move || {
+            hamster_platform::wind_guard::minimize_all_except(std::process::id());
+            if let Some(w) = guard_app.get_webview_window("main") {
+                let _ = w.unminimize();
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+            // active:true 驱动前端路由回 /desktop（已在桌面主页则是空操作）
+            let _ = events::DesktopModeChanged { active: true }.emit(&guard_app);
+        }));
+    }
+
     // ④ 布局：主窗口先铺满（立即可见）；工作区静置两段落值后再摆 dock——
     // dock 的定位/显示必须在最后一次工作区变更之后，否则会被钳上抬
     //（见 WORKAREA_SETTLE 注释）
@@ -145,6 +162,9 @@ pub fn exit(app: &tauri::AppHandle) -> Result<(), crate::error::AppError> {
     if !ACTIVE.swap(false, Ordering::SeqCst) {
         return Ok(());
     }
+
+    // ⓪ 先撤 Win+D 守卫：还原期间按键立即交还系统原生行为
+    hamster_platform::wind_guard::stop();
 
     // ① 按快照还原系统状态（任务栏可见性 + 桌面图标），并删除快照。
     // 快照删除后看门狗下一次轮询（≤2s）即自行退出。

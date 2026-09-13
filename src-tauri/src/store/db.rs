@@ -15,6 +15,14 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0003_apps_pinyin",
         include_str!("../../migrations/0003_apps_pinyin.sql"),
     ),
+    (
+        "0004_todo_due_remind",
+        include_str!("../../migrations/0004_todo_due_remind.sql"),
+    ),
+    (
+        "0005_focus_session",
+        include_str!("../../migrations/0005_focus_session.sql"),
+    ),
 ];
 
 /// 打开指定路径的库并迁移（后台线程各自开连接时复用）

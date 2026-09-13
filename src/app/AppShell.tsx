@@ -9,6 +9,7 @@ import { WebDebugBar } from '@/shared/components/WebDebugBar';
 import { DockBar } from '@/features/home/DockBar';
 import { DockPickerModal } from '@/features/home/DockPickerModal';
 import { commands, events, isTauri } from '@/shared/lib/ipc';
+import { useI18n } from '@/shared/i18n/provider';
 
 const appWindow = isTauri ? getCurrentWindow() : null;
 
@@ -20,6 +21,7 @@ const appWindow = isTauri ? getCurrentWindow() : null;
  * /home 为「主屏」页（iOS 图标网格，自身已含交互 Dock 与顶栏）。
  */
 export function AppShell() {
+  const { t } = useI18n();
   const [coreVersion, setCoreVersion] = useState<string | null>(null);
   const [desktop, setDesktop] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -162,11 +164,11 @@ export function AppShell() {
       {showDesktopBack && (
         <button
           onClick={() => navigate('/desktop')}
-          title="返回桌面主页（Esc）"
+          title={t('chrome.shell.backToDesktopTitle')}
           className="fixed left-4 top-4 z-40 flex items-center gap-1 rounded-full bg-black/30 px-4 py-2 text-[12.5px] font-medium text-white/85 ring-1 ring-white/15 backdrop-blur-xl transition-all hover:bg-black/45 hover:text-white"
         >
           <ChevronLeft size={15} />
-          返回桌面
+          {t('chrome.shell.backToDesktop')}
         </button>
       )}
       {!desktop && (

@@ -16,18 +16,22 @@ import {
   Archive,
   Code2,
   File as FileIcon,
+  ListTodo,
 } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { commands, isTauri, type FileHit } from '@/shared/lib/ipc';
 import { Monogram } from '@/features/home/AppIcon';
 import { FileKindIcon } from './FileKindIcon';
 import { useUnifiedSearch } from '@/features/search/useUnifiedSearch';
+import { parseQuickAdd } from '@/features/todo/nlp';
+import { dueLabel } from '@/features/todo/due';
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { useI18n } from '@/shared/i18n/provider';
 
 const SEARCH_ENGINE = 'https://www.baidu.com/s?wd=';
 
 interface ResultItem {
-  kind: 'app' | 'file' | 'web' | 'ai';
+  kind: 'app' | 'file' | 'web' | 'ai' | 'todo';
   key: string;
   title: string;
   subtitle: string;
@@ -37,6 +41,7 @@ interface ResultItem {
 }
 
 export default function SearchOverlay() {
+  const { t } = useI18n();
   const [query, setQuery] = useState('');
   const [sel, setSel] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -60,7 +65,7 @@ export default function SearchOverlay() {
         kind: 'app' as const,
         key: a.app_key,
         title: a.display_name,
-        subtitle: '应用',
+        subtitle: t('agent.groupApps'),
         iconPath: a.icon_path,
         run: () => {
           commands.appLaunch(a.app_key).catch(console.error);
@@ -72,8 +77,8 @@ export default function SearchOverlay() {
           {
             kind: 'web' as const,
             key: `web:${q}`,
-            title: `搜索「${query.trim()}」`,
-            subtitle: '网页 · 百度',
+            title: t('agent.webSearch', { q: query.trim() }),
+            subtitle: t('agent.webBaidu'),
             iconPath: null,
             run: () => {
               commands.openUrl(SEARCH_ENGINE + encodeURIComponent(query.trim())).catch(console.error);
@@ -86,21 +91,40 @@ export default function SearchOverlay() {
       kind: 'file' as const,
       key: f.path,
       title: f.name,
-      subtitle: `${f.kind || '文件'} · ${f.path}`,
+      subtitle: `${f.kind || t('agent.fileFallback')} · ${f.path}`,
       fileHit: f,
       run: () => {
         commands.openPath(f.path).catch(console.error);
         close();
       },
     }));
+    // 快速捕获：输入即解析截止时间，回车记待办（"明天下午3点交房租"）
+    const parsed = parseQuickAdd(query.trim());
+    const todoItems: ResultItem[] = q
+      ? [
+          {
+            kind: 'todo' as const,
+            key: `todo:${q}`,
+            title: t('agent.todoQuickAdd', { q: parsed.content || query.trim() }),
+            subtitle: parsed.dueAt != null ? dueLabel(parsed.dueAt) : t('agent.todoNoDue'),
+            iconPath: null,
+            run: () => {
+              commands
+                .todoCreate(parsed.content || query.trim(), parsed.dueAt, parsed.dueAt != null ? true : null)
+                .then(() => close())
+                .catch(console.error);
+            },
+          },
+        ]
+      : [];
     // 尾部「问 AI」入口：暂存问题 → 跳主窗口 AI 助手页自动发送
     const aiItem: ResultItem[] = q
       ? [
           {
             kind: 'ai' as const,
             key: `ai:${q}`,
-            title: `问 AI：「${query.trim()}」`,
-            subtitle: 'AI 助手',
+            title: t('agent.askAi', { q: query.trim() }),
+            subtitle: t('agent.aiAssistant'),
             iconPath: null,
             run: async () => {
               const question = query.trim();
@@ -120,8 +144,8 @@ export default function SearchOverlay() {
           },
         ]
       : [];
-    return [...appItems, ...fileItems, ...webItems, ...aiItem];
-  }, [searchedApps, q, query, fileHits]);
+    return [...appItems, ...fileItems, ...todoItems, ...webItems, ...aiItem];
+  }, [searchedApps, q, query, fileHits, t]);
 
   // 失焦自动隐藏（桌面壳窗口语义；浏览器预览不隐藏）
   useEffect(() => {
@@ -172,7 +196,7 @@ export default function SearchOverlay() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKey}
-            placeholder="搜索应用、文件、网页…"
+            placeholder={t('agent.searchPlaceholder')}
             className="h-full w-full bg-transparent text-[16px] text-white placeholder:text-white/50 outline-none"
           />
           <kbd className="rounded bg-white/12 px-1.5 py-0.5 text-[10px] text-white/60">Esc</kbd>
@@ -185,7 +209,7 @@ export default function SearchOverlay() {
           >
             {results.length === 0 && (
               <p className="px-4 py-6 text-center text-[13px] text-white/60">
-                没有匹配「{query.trim()}」的结果
+                {t('agent.noResults', { q: query.trim() })}
               </p>
             )}
             {results.map((r, i) => (
@@ -204,6 +228,10 @@ export default function SearchOverlay() {
                 ) : r.kind === 'ai' ? (
                   <span className="squircle grid size-8 shrink-0 place-items-center bg-[var(--accent)] text-white">
                     <Sparkles size={15} />
+                  </span>
+                ) : r.kind === 'todo' ? (
+                  <span className="squircle grid size-8 shrink-0 place-items-center bg-[var(--accent)] text-white">
+                    <ListTodo size={16} />
                   </span>
                 ) : r.kind === 'file' && r.fileHit ? (
                   <FileKindIcon kind={r.fileHit.kind} />

@@ -4,32 +4,36 @@
 import { useState } from 'react';
 import { ArrowLeft, Database, RefreshCw, Search } from 'lucide-react';
 import { benchCommands } from '@/shared/lib/ipc';
+import { useI18n } from '@/shared/i18n/provider';
+import type { TKey } from '@/shared/i18n/core';
 import type { SearchHit, SnapshotMessage } from '@/shared/types/bench';
 import { useIndexStatus, useRecallSearch } from './hooks';
 
-function roleBadge(role: SnapshotMessage['role']): string {
-  const map: Record<SnapshotMessage['role'], string> = {
-    user: '用户',
-    assistant: '代理',
-    thinking: '思考',
-    tool: '工具',
-    system: '系统',
+function roleBadge(role: SnapshotMessage['role'], t: (key: TKey) => string): string {
+  // 显式映射（枚举 → key，禁止动态拼 key）
+  const map: Record<SnapshotMessage['role'], TKey> = {
+    user: 'bench.role.user',
+    assistant: 'bench.role.assistant',
+    thinking: 'bench.role.thinking',
+    tool: 'bench.role.tool',
+    system: 'bench.role.system',
   };
-  return map[role];
+  return t(map[role]);
 }
 
 function MessageRow({ m }: { m: SnapshotMessage }) {
+  const { t } = useI18n();
   const accent =
     m.role === 'user'
-      ? 'text-white/90'
+      ? 'text-[var(--text)]'
       : m.role === 'assistant'
-        ? 'text-white/80'
-        : 'text-white/50';
+        ? 'text-[var(--text)]'
+        : 'text-[var(--text-muted)]';
   return (
-    <div className="rounded-xl bg-white/5 px-3 py-2 ring-1 ring-white/8">
+    <div className="rounded-xl bg-[var(--panel)] px-3 py-2 ring-1 ring-[var(--border)]">
       <div className="flex items-center gap-2 pb-0.5">
-        <span className="rounded bg-white/8 px-1.5 py-0.5 text-[10px] text-white/55">{roleBadge(m.role)}</span>
-        {m.toolName && <span className="font-mono text-[10.5px] text-white/40">{m.toolName}</span>}
+        <span className="rounded bg-[var(--panel-strong)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">{roleBadge(m.role, t)}</span>
+        {m.toolName && <span className="font-mono text-[10.5px] text-[var(--text-muted)]">{m.toolName}</span>}
       </div>
       <p className={`whitespace-pre-wrap text-[12.5px] leading-relaxed ${accent}`}>{m.text}</p>
     </div>
@@ -37,6 +41,7 @@ function MessageRow({ m }: { m: SnapshotMessage }) {
 }
 
 export default function RecallSearch({ onBack }: { onBack: () => void }) {
+  const { t } = useI18n();
   const [text, setText] = useState('');
   const [submitted, setSubmitted] = useState('');
   const [context, setContext] = useState<{ hit: SearchHit; messages: SnapshotMessage[] } | null>(null);
@@ -59,38 +64,42 @@ export default function RecallSearch({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex shrink-0 items-center gap-2.5 border-b border-white/8 px-5 py-3">
-        <button onClick={onBack} title="返回" className="grid size-8 place-items-center rounded-lg text-white/60 hover:bg-white/10 hover:text-white">
+      <header className="flex shrink-0 items-center gap-2.5 border-b border-[var(--border)] px-5 py-3">
+        <button onClick={onBack} title={t('bench.recall.back')} className="grid size-8 place-items-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--hover)] hover:text-[var(--text)]">
           <ArrowLeft size={15} />
         </button>
         <Database size={15} className="text-[var(--accent)]" />
-        <h2 className="text-[13px] font-medium">Recall · 会话全文搜索</h2>
+        <h2 className="text-[13px] font-medium">{t('bench.recall.title')}</h2>
         {status && (
-          <span className="ml-auto text-[11px] text-white/40">
-            {status.sessions} 会话 · {status.messages} 消息 · {(status.bytes / 1024).toFixed(0)} KB
+          <span className="ml-auto text-[11px] text-[var(--text-muted)]">
+            {t('bench.recall.indexStatus', {
+              sessions: status.sessions,
+              messages: status.messages,
+              kb: (status.bytes / 1024).toFixed(0),
+            })}
             <button
               onClick={() => benchCommands.benchReindex().then(() => index.query.refetch())}
-              title="重建索引"
+              title={t('bench.recall.reindexTitle')}
               className="ml-2 inline-flex items-center gap-1 text-[var(--accent)] hover:brightness-125"
             >
               <RefreshCw size={11} />
-              重建
+              {t('bench.recall.reindex')}
             </button>
           </span>
         )}
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-        <div className="flex items-center gap-2 rounded-[18px] bg-black/30 px-4 py-2.5 ring-1 ring-white/12 backdrop-blur focus-within:ring-white/25">
-          <Search size={15} className="shrink-0 text-white/40" />
+        <div className="flex items-center gap-2 rounded-[18px] bg-[var(--panel-strong)] px-4 py-2.5 ring-1 ring-[var(--border)] backdrop-blur focus-within:ring-[var(--accent)]/40">
+          <Search size={15} className="shrink-0 text-[var(--text-muted)]" />
           <input
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.nativeEvent.isComposing) run();
             }}
-            placeholder="搜索所有代理的历史会话…"
-            className="flex-1 bg-transparent text-[13px] text-white outline-none placeholder:text-white/40"
+            placeholder={t('bench.recall.searchPlaceholder')}
+            className="flex-1 bg-transparent text-[13px] text-[var(--text)] outline-none placeholder:text-[var(--text-muted)]"
             autoFocus
           />
         </div>
@@ -98,20 +107,20 @@ export default function RecallSearch({ onBack }: { onBack: () => void }) {
         {/* 命中列表 */}
         {!context && submitted && (
           <div className="space-y-2 pt-4">
-            {search.isPending && <p className="text-[12px] text-white/40">搜索中…</p>}
-            {search.data?.length === 0 && <p className="text-[12px] text-white/40">没有关于「{submitted}」的命中</p>}
+            {search.isPending && <p className="text-[12px] text-[var(--text-muted)]">{t('bench.recall.searching')}</p>}
+            {search.data?.length === 0 && <p className="text-[12px] text-[var(--text-muted)]">{t('bench.recall.noHits', { query: submitted })}</p>}
             {search.data?.map((h) => (
               <button
                 key={`${h.agent}/${h.sessionKey}/${h.seq}`}
                 onClick={() => openContext(h)}
-                className="block w-full rounded-xl bg-white/5 px-3.5 py-2.5 text-left ring-1 ring-white/8 transition-colors hover:bg-white/10"
+                className="block w-full rounded-xl bg-[var(--panel)] px-3.5 py-2.5 text-left ring-1 ring-[var(--border)] transition-colors hover:bg-[var(--hover)]"
               >
                 <div className="flex items-center gap-2">
-                  <span className="shrink-0 rounded bg-white/8 px-1.5 py-0.5 text-[10px] uppercase text-white/55">{h.agent}</span>
+                  <span className="shrink-0 rounded bg-[var(--panel-strong)] px-1.5 py-0.5 text-[10px] uppercase text-[var(--text-muted)]">{h.agent}</span>
                   <span className="truncate text-[12.5px] font-medium">{h.sessionTitle}</span>
                 </div>
                 <p
-                  className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-white/55 [&_mark]:rounded [&_mark]:bg-[var(--accent-weak)] [&_mark]:px-0.5 [&_mark]:text-[var(--accent)]"
+                  className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-[var(--text-muted)] [&_mark]:rounded [&_mark]:bg-[var(--accent-weak)] [&_mark]:px-0.5 [&_mark]:text-[var(--accent)]"
                   dangerouslySetInnerHTML={{ __html: h.snippet }}
                 />
               </button>
@@ -124,12 +133,12 @@ export default function RecallSearch({ onBack }: { onBack: () => void }) {
           <div className="space-y-2 pt-4">
             <button
               onClick={() => setContext(null)}
-              className="flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1.5 text-[11.5px] text-white/70 ring-1 ring-white/10 transition-colors hover:bg-white/15"
+              className="flex items-center gap-1.5 rounded-full bg-[var(--panel)] px-3 py-1.5 text-[11.5px] text-[var(--text-muted)] ring-1 ring-[var(--border)] transition-colors hover:bg-[var(--hover)]"
             >
               <ArrowLeft size={12} />
-              返回结果
+              {t('bench.recall.backToResults')}
             </button>
-            <p className="text-[12px] text-white/45">
+            <p className="text-[12px] text-[var(--text-muted)]">
               {context.hit.sessionTitle} · {context.hit.projectPath}
             </p>
             {context.messages.map((m) => (
@@ -140,8 +149,8 @@ export default function RecallSearch({ onBack }: { onBack: () => void }) {
 
         {!submitted && (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-            <Search size={26} className="text-white/25" />
-            <p className="text-[12.5px] text-white/45">输入关键词，搜索 Claude / Codex 等代理的全部历史会话</p>
+            <Search size={26} className="text-[var(--text-muted)] opacity-50" />
+            <p className="text-[12.5px] text-[var(--text-muted)]">{t('bench.recall.hint')}</p>
           </div>
         )}
       </div>

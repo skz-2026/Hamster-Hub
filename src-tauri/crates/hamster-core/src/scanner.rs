@@ -22,6 +22,7 @@ pub fn scan(registry: &Registry) -> Vec<AgentInfo> {
                 ),
                 None => (false, None, None, false),
             };
+            let program = adapter.program_hint();
             match adapter.detect() {
                 Some(info) => AgentInfo {
                     id: info.id,
@@ -29,6 +30,7 @@ pub fn scan(registry: &Registry) -> Vec<AgentInfo> {
                     installed: true,
                     version: info.version,
                     config_root: Some(info.config_root),
+                    program,
                     capabilities: adapter.capabilities(),
                     chat,
                     prompt_inject,
@@ -41,6 +43,7 @@ pub fn scan(registry: &Registry) -> Vec<AgentInfo> {
                     installed: false,
                     version: None,
                     config_root: None,
+                    program,
                     capabilities: adapter.capabilities(),
                     chat,
                     prompt_inject,

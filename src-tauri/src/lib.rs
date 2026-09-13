@@ -61,11 +61,13 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::control::volume_set,
             commands::settings::settings_load,
             commands::settings::settings_save,
+            commands::settings::agent_cli_path_set,
             commands::settings::kv_get,
             commands::settings::kv_set,
             commands::system::app_health,
             commands::system::window_set_pinned,
             commands::system::open_url,
+            commands::system::wallpaper_image_import,
             commands::apps::app_list,
             commands::apps::app_launch,
             commands::apps::app_search,
@@ -73,6 +75,16 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::todo::todo_create,
             commands::todo::todo_toggle,
             commands::todo::todo_delete,
+            commands::todo::todo_set_due,
+            commands::todo::todo_set_recur,
+            // 番茄钟（后端计时 + 历史聚合）
+            commands::focus::focus_start,
+            commands::focus::focus_break,
+            commands::focus::focus_pause,
+            commands::focus::focus_resume,
+            commands::focus::focus_stop,
+            commands::focus::focus_status,
+            commands::focus::focus_history,
             commands::note::note_list,
             commands::note::note_create,
             commands::note::note_update,
@@ -144,7 +156,10 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             events::FileIndexUpdated,
             events::BenchStreamEvent,
             events::BenchStreamExit,
-            events::BenchPtyExit
+            events::BenchPtyExit,
+            events::TodoReminder,
+            events::FocusTick,
+            events::FocusFinished
         ])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
 }
@@ -197,6 +212,8 @@ pub fn run() {
         ))
         // bench 选择项目目录的原生文件夹选择器
         .plugin(tauri_plugin_dialog::init())
+        // 待办提醒的系统通知（Rust 侧直发）
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
@@ -219,6 +236,8 @@ pub fn run() {
             app.manage(commands::sysinfo::SharedMonitor::new(
                 commands::sysinfo::SystemMonitor::new(),
             ));
+            // 番茄钟计时状态（秒级 ticker 线程共享）
+            app.manage(core::focus::FocusState::default());
 
             // bench（代理工作台）：上游 域层装配（sessions.db 独立自管，不入主库迁移链）
             let bench_data = app
@@ -393,6 +412,9 @@ pub fn run() {
                 max_files,
             );
 
+            // 待办提醒调度（独立连接轮询到点提醒 → 系统通知 + 应用内事件）
+            core::reminder::spawn(app.handle().clone(), state.db_path.clone());
+
             // 启动即进入桌面模式（对齐水豚hub：打开应用直接全屏工作台 + 底部 Dock）
             {
                 let enable_launch_desktop = {
@@ -435,31 +457,83 @@ pub fn run() {
         .expect("仓鼠Hub 启动失败");
 }
 
+/// 托盘菜单文案（随 settings.behavior.language 切换；缺省回落简体中文）
+struct TrayLabels {
+    open: &'static str,
+    spotlight: &'static str,
+    enter_desktop: &'static str,
+    enter_desktop_on: &'static str,
+    exit_desktop: &'static str,
+    quit: &'static str,
+}
+
+fn tray_labels(lang: &str) -> TrayLabels {
+    if lang == "en" {
+        TrayLabels {
+            open: "Open HamsterHub",
+            spotlight: "Spotlight Search",
+            enter_desktop: "Enter Desktop Mode",
+            enter_desktop_on: "Desktop Mode (Active)",
+            exit_desktop: "Exit Desktop Mode",
+            quit: "Quit",
+        }
+    } else if lang == "zh-TW" {
+        TrayLabels {
+            open: "開啟倉鼠Hub",
+            spotlight: "Spotlight 搜尋",
+            enter_desktop: "進入桌面模式",
+            enter_desktop_on: "進入桌面模式（已開啟）",
+            exit_desktop: "離開桌面模式",
+            quit: "結束",
+        }
+    } else {
+        TrayLabels {
+            open: "打开仓鼠Hub",
+            spotlight: "Spotlight 搜索",
+            enter_desktop: "进入桌面模式",
+            enter_desktop_on: "进入桌面模式（已开启）",
+            exit_desktop: "退出桌面模式",
+            quit: "退出",
+        }
+    }
+}
+
 fn build_tray_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
-    let open = MenuItem::with_id(app, "open", "打开仓鼠Hub", true, None::<&str>)?;
-    let spotlight = MenuItem::with_id(app, "spotlight", "Spotlight 搜索", true, None::<&str>)?;
+    let lang = {
+        let state: tauri::State<AppState> = app.state();
+        let lock = state.db.lock();
+        match lock {
+            Ok(conn) => store::settings::load(&conn)
+                .map(|s| s.behavior.language)
+                .unwrap_or_default(),
+            Err(_) => String::new(),
+        }
+    };
+    let l = tray_labels(&lang);
+    let open = MenuItem::with_id(app, "open", l.open, true, None::<&str>)?;
+    let spotlight = MenuItem::with_id(app, "spotlight", l.spotlight, true, None::<&str>)?;
     let (enter, exit) = if desktop_mode::is_active() {
         (
             MenuItem::with_id(
                 app,
                 "enter-desktop",
-                "进入桌面模式（已开启）",
+                l.enter_desktop_on,
                 false,
                 None::<&str>,
             )?,
-            MenuItem::with_id(app, "exit-desktop", "退出桌面模式", true, None::<&str>)?,
+            MenuItem::with_id(app, "exit-desktop", l.exit_desktop, true, None::<&str>)?,
         )
     } else {
         (
-            MenuItem::with_id(app, "enter-desktop", "进入桌面模式", true, None::<&str>)?,
-            MenuItem::with_id(app, "exit-desktop", "退出桌面模式", false, None::<&str>)?,
+            MenuItem::with_id(app, "enter-desktop", l.enter_desktop, true, None::<&str>)?,
+            MenuItem::with_id(app, "exit-desktop", l.exit_desktop, false, None::<&str>)?,
         )
     };
-    let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", l.quit, true, None::<&str>)?;
     Menu::with_items(app, &[&open, &spotlight, &enter, &exit, &quit])
 }
 
-fn refresh_tray_menu(app: &tauri::AppHandle) {
+pub(crate) fn refresh_tray_menu(app: &tauri::AppHandle) {
     if let Some(tray) = app.tray_by_id("main-tray") {
         if let Ok(menu) = build_tray_menu(app) {
             let _ = tray.set_menu(Some(menu));

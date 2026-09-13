@@ -38,6 +38,9 @@ pub struct Agent {
     pub assistant_model: String,
     /// 桌面助手默认推理强度（空 = agent 默认；选项来自各 agent launchOptions）
     pub assistant_effort: String,
+    /// 用户手动指定的 Agent CLI 程序路径（agentId → 绝对路径）：优先于自动探测，
+    /// 供绿色版/自拷贝的 CLI 注册进应用。写入口 agent_cli_path_set（先校验再落库）
+    pub cli_paths: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]

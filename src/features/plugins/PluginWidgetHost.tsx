@@ -7,9 +7,12 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Puzzle } from 'lucide-react';
 import { commands } from '@/shared/lib/ipc';
+import { translate, getLang } from '@/shared/i18n/core';
+import { useI18n } from '@/shared/i18n/provider';
 import { loadPluginRender, useDisabledPlugins, usePluginApi } from './registry';
 
 export default function PluginWidgetHost({ pluginId }: { pluginId: string }) {
+  const { t } = useI18n();
   const ref = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const list = useQuery({ queryKey: ['plugins', 'list'], queryFn: () => commands.pluginList() });
@@ -28,7 +31,7 @@ export default function PluginWidgetHost({ pluginId }: { pluginId: string }) {
       try {
         const m = manifest ?? (await commands.pluginList()).find((p) => p.id === pluginId);
         if (!m) {
-          setError('插件未安装');
+          setError(translate(getLang(), 'settings.plugins.hostNotInstalled'));
           return;
         }
         const code = await commands.pluginReadCode(pluginId, m.entry);
@@ -63,7 +66,7 @@ export default function PluginWidgetHost({ pluginId }: { pluginId: string }) {
     return (
       <div className="grid h-full place-items-center text-[11px] text-white/40">
         <span className="flex items-center gap-1.5">
-          <Puzzle size={11} /> 插件已停用
+          <Puzzle size={11} /> {t('settings.plugins.hostDisabled')}
         </span>
       </div>
     );
@@ -75,13 +78,13 @@ export default function PluginWidgetHost({ pluginId }: { pluginId: string }) {
         <div className="flex h-full flex-col justify-center gap-1 px-1">
           <span className="flex items-center gap-1.5 text-[11px] font-medium text-white/85">
             <Puzzle size={12} className="text-amber-300" />
-            插件 {pluginId} 出错
+            {t('settings.plugins.hostError', { id: pluginId })}
           </span>
           <span className="line-clamp-2 text-[10px] leading-relaxed text-white/45">{error}</span>
         </div>
       )}
       {!error && !manifest && list.isSuccess && (
-        <div className="grid h-full place-items-center text-[11px] text-white/50">插件未安装</div>
+        <div className="grid h-full place-items-center text-[11px] text-white/50">{t('settings.plugins.hostNotInstalled')}</div>
       )}
     </div>
   );

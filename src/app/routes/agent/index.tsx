@@ -15,19 +15,18 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowUp, Eraser, Loader2, Settings2, Sparkles, TriangleAlert } from 'lucide-react';
 import { commands } from '@/shared/lib/ipc';
 import AssistantPanel, { type AssistantPanelHandle } from '@/features/agent/AssistantPanel';
+import { useI18n } from '@/shared/i18n/provider';
 
 interface Msg {
   role: 'user' | 'assistant';
   content: string;
 }
 
-const SYSTEM_PROMPT =
-  '你是仓鼠Hub 桌面助手内置的 AI 助手，回答简洁、友好、实用，默认使用中文。';
-
 type Mode = 'assistant' | 'quick';
 
 export default function AgentPage() {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const [mode, setMode] = useState<Mode>('assistant');
   const [pendingQ, setPendingQ] = useState<string | null>(null);
   // 桌面助手状态镜像（AssistantPanel 上报）：决定底部槽位渲染 portal 还是统一输入框
@@ -58,7 +57,7 @@ export default function AgentPage() {
     setBusy(true);
     try {
       const reply = await commands.aiChat([
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: t('agent.systemPrompt') },
         ...next.map((m) => ({ role: m.role, content: m.content })),
       ]);
       setMessages([...next, { role: 'assistant', content: reply }]);
@@ -68,7 +67,7 @@ export default function AgentPage() {
       } else {
         setMessages([
           ...next,
-          { role: 'assistant', content: `请求失败：${String(e).slice(0, 200)}` },
+          { role: 'assistant', content: t('agent.requestFailed', { msg: String(e).slice(0, 200) }) },
         ]);
       }
     } finally {
@@ -112,11 +111,11 @@ export default function AgentPage() {
 
   // 模式切换药丸（桌面助手 / 快问）
   const modeToggle = (
-    <div className="flex rounded-full bg-black/30 p-0.5 ring-1 ring-white/10">
+    <div className="flex rounded-full bg-[var(--panel)] p-0.5 ring-1 ring-[var(--border)]">
       {(
         [
-          ['assistant', '桌面助手'],
-          ['quick', '快问'],
+          ['assistant', t('agent.tab.assistant')],
+          ['quick', t('agent.tab.quickAsk')],
         ] as const
       ).map(([m, label]) => (
         <button
@@ -125,7 +124,7 @@ export default function AgentPage() {
           className={`rounded-full px-3 py-1 text-[11.5px] transition-colors ${
             mode === m
               ? 'bg-[var(--accent)] font-medium text-white'
-              : 'text-white/55 hover:text-white/85'
+              : 'text-[var(--text-muted)] hover:text-[var(--text)]'
           }`}
         >
           {label}
@@ -136,7 +135,7 @@ export default function AgentPage() {
 
   // 统一输入框（两种模式同一只；助手会话中由 portal 接管此槽位）
   const unifiedComposer = showUnified && (
-    <div className="flex items-end gap-2.5 rounded-[22px] bg-black/30 p-2 pl-5 ring-1 ring-white/12 backdrop-blur-xl focus-within:ring-white/25">
+    <div className="flex items-end gap-2.5 rounded-[22px] bg-[var(--panel-strong)] p-2 pl-5 ring-1 ring-[var(--border)] backdrop-blur-xl focus-within:ring-[var(--accent)]/40">
       <textarea
         ref={taRef}
         value={input}
@@ -150,15 +149,15 @@ export default function AgentPage() {
         rows={1}
         placeholder={
           mode === 'quick'
-            ? '问点什么…（Enter 发送，Shift+Enter 换行）'
-            : '给桌面助手下达任务…（如「把「周五交周报」记成待办，然后打开计算器」）'
+            ? t('agent.placeholderQuick')
+            : t('agent.placeholderAssistant')
         }
-        className="max-h-28 min-h-[28px] flex-1 resize-none bg-transparent py-1.5 text-[13.5px] text-white outline-none placeholder:text-white/40"
+        className="max-h-28 min-h-[28px] flex-1 resize-none bg-transparent py-1.5 text-[13.5px] text-[var(--text)] outline-none placeholder:text-[var(--text-muted)]"
       />
       <button
         onClick={composerSend}
         disabled={sendDisabled}
-        title={mode === 'quick' ? '发送' : '启动桌面助手'}
+        title={mode === 'quick' ? t('agent.send') : t('agent.launchAssistant')}
         className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--accent)] text-white transition-all hover:brightness-110 disabled:opacity-35 disabled:hover:brightness-100"
       >
         {(mode === 'quick' ? busy : assistantSt.starting) ? (
@@ -181,16 +180,16 @@ export default function AgentPage() {
               setMessages([]);
               setUnconfigured(false);
             }}
-            className="flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1.5 text-[11.5px] text-white/70 ring-1 ring-white/10 transition-colors hover:bg-white/15 hover:text-white"
+            className="flex items-center gap-1.5 rounded-full bg-[var(--panel)] px-3 py-1.5 text-[11.5px] text-[var(--text-muted)] ring-1 ring-[var(--border)] transition-colors hover:bg-[var(--hover)] hover:text-[var(--text)]"
           >
             <Eraser size={12} />
-            清空会话
+            {t('agent.clearSession')}
           </button>
         )}
         {mode === 'assistant' && assistantSt.hasSession && (
-          <span className="ml-auto flex items-center gap-1.5 text-[11px] text-white/40">
+          <span className="ml-auto flex items-center gap-1.5 text-[11px] text-[var(--text-muted)]">
             <span className="size-1.5 rounded-full bg-emerald-400/80" />
-            助手会话进行中（结束按钮在会话头部）
+            {t('agent.sessionActive')}
           </span>
         )}
       </div>
@@ -201,20 +200,20 @@ export default function AgentPage() {
   );
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden rounded-2xl bg-[radial-gradient(120%_120%_at_20%_0%,#232032_0%,#16141d_55%,#1a1520_100%)] text-white">
+    <div className="relative flex h-full flex-col overflow-hidden rounded-2xl bg-[var(--bg)] text-[var(--text)]">
       {/* 背景光晕 */}
       <div className="pointer-events-none absolute -right-24 -top-24 size-96 rounded-full bg-[var(--accent)] opacity-[0.08] blur-3xl" />
       <div className="pointer-events-none absolute -bottom-32 -left-24 size-96 rounded-full bg-indigo-400 opacity-[0.07] blur-3xl" />
 
       {/* 顶栏 */}
       <header className="relative z-10 flex shrink-0 items-center gap-2.5 px-6 py-4">
-        <span className="grid size-9 place-items-center rounded-xl bg-[var(--accent-weak)] ring-1 ring-white/10">
+        <span className="grid size-9 place-items-center rounded-xl bg-[var(--accent-weak)] ring-1 ring-[var(--border)]">
           <Sparkles size={17} className="text-[var(--accent)]" />
         </span>
         <div>
-          <h1 className="text-[15px] font-semibold leading-tight">AI 助手</h1>
-          <p className="text-[11px] text-white/45">
-            {mode === 'assistant' ? 'Agent 驱动 · 可操作桌面' : '快问 · AI 直连补全'}
+          <h1 className="text-[15px] font-semibold leading-tight">{t('agent.title')}</h1>
+          <p className="text-[11px] text-[var(--text-muted)]">
+            {mode === 'assistant' ? t('agent.subtitleAssistant') : t('agent.subtitleQuick')}
           </p>
         </div>
       </header>
@@ -245,28 +244,37 @@ export default function AgentPage() {
         /* 空会话：欢迎内容 + toggle + 输入框成组垂直居中 */
         <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-8 pb-10">
           <div className="flex flex-col items-center gap-3 text-center">
-            <span className="grid size-14 place-items-center rounded-2xl bg-white/6 ring-1 ring-white/10">
+            <span className="grid size-14 place-items-center rounded-2xl bg-[var(--panel)] ring-1 ring-[var(--border)]">
               <Sparkles size={24} className="text-[var(--accent)]" />
             </span>
             <div>
-              <p className="text-[14px] font-medium text-white/85">有什么可以帮你？</p>
-              <p className="mt-1 text-[12px] text-white/45">
-                问答、写作、翻译、点子……配置模型后即可开始
+              <p className="text-[14px] font-medium text-[var(--text)]">{t('agent.emptyTitle')}</p>
+              <p className="mt-1 text-[12px] text-[var(--text-muted)]">
+                {t('agent.emptySubtitle')}
               </p>
             </div>
             <div className="mt-1 flex flex-wrap justify-center gap-2">
-              {['帮我写一条周报开头', '推荐几个效率工具', '解释一下什么是 MCP'].map((s) => (
-                <button
-                  key={s}
-                  onClick={() => {
-                    setInput(s);
-                    taRef.current?.focus();
-                  }}
-                  className="rounded-full bg-white/8 px-3.5 py-1.5 text-[11.5px] text-white/70 ring-1 ring-white/10 transition-colors hover:bg-white/15 hover:text-white"
-                >
-                  {s}
-                </button>
-              ))}
+              {(
+                [
+                  'agent.suggestion.weeklyReport',
+                  'agent.suggestion.tools',
+                  'agent.suggestion.mcp',
+                ] as const
+              ).map((key) => {
+                const s = t(key);
+                return (
+                  <button
+                    key={key}
+                    onClick={() => {
+                      setInput(s);
+                      taRef.current?.focus();
+                    }}
+                    className="rounded-full bg-[var(--panel)] px-3.5 py-1.5 text-[11.5px] text-[var(--text-muted)] ring-1 ring-[var(--border)] transition-colors hover:bg-[var(--hover)] hover:text-[var(--text)]"
+                  >
+                    {s}
+                  </button>
+                );
+              })}
             </div>
           </div>
           {composerArea(true)}
@@ -282,7 +290,7 @@ export default function AgentPage() {
                     className={`max-w-[72%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-[13.5px] leading-relaxed ${
                       m.role === 'user'
                         ? 'rounded-br-md bg-[var(--accent)]/85 text-white'
-                        : 'rounded-bl-md bg-white/8 text-white/90 ring-1 ring-white/10'
+                        : 'rounded-bl-md bg-[var(--panel)] text-[var(--text)] ring-1 ring-[var(--border)]'
                     }`}
                   >
                     {m.content}
@@ -292,11 +300,11 @@ export default function AgentPage() {
 
               {busy && (
                 <div className="flex justify-start">
-                  <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-md bg-white/8 px-4 py-3 ring-1 ring-white/10">
+                  <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-md bg-[var(--panel)] px-4 py-3 ring-1 ring-[var(--border)]">
                     {[0, 1, 2].map((i) => (
                       <span
                         key={i}
-                        className="size-1.5 animate-bounce rounded-full bg-white/60"
+                        className="size-1.5 animate-bounce rounded-full bg-[var(--text-muted)]"
                         style={{ animationDelay: `${i * 140}ms` }}
                       />
                     ))}
@@ -306,17 +314,17 @@ export default function AgentPage() {
 
               {unconfigured && (
                 <div className="flex justify-center">
-                  <div className="flex items-center gap-3 rounded-2xl bg-amber-400/10 px-5 py-4 ring-1 ring-amber-300/25">
-                    <TriangleAlert size={18} className="shrink-0 text-amber-300" />
-                    <div className="text-[12.5px] leading-relaxed text-white/85">
-                      还没有配置 AI 模型——先到设置页填写 API 地址、模型名与 Key。
+                  <div className="flex items-center gap-3 rounded-2xl bg-amber-500/10 px-5 py-4 ring-1 ring-amber-500/25">
+                    <TriangleAlert size={18} className="shrink-0 text-amber-500" />
+                    <div className="text-[12.5px] leading-relaxed text-[var(--text)]">
+                      {t('agent.unconfiguredHint')}
                     </div>
                     <button
                       onClick={() => navigate('/settings')}
-                      className="flex shrink-0 items-center gap-1.5 rounded-full bg-amber-300/20 px-3.5 py-1.5 text-[12px] font-medium text-amber-200 transition-colors hover:bg-amber-300/30"
+                      className="flex shrink-0 items-center gap-1.5 rounded-full bg-amber-500/20 px-3.5 py-1.5 text-[12px] font-medium text-amber-500 transition-colors hover:bg-amber-500/30"
                     >
                       <Settings2 size={13} />
-                      去配置
+                      {t('agent.goConfigure')}
                     </button>
                   </div>
                 </div>

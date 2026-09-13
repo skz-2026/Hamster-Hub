@@ -14,6 +14,10 @@ import type {
   Settings,
   SystemSnapshot,
   Todo,
+  TodoReminder,
+  FocusFinished,
+  FocusStatus,
+  FocusTick,
   WeatherNow,
 } from '@/shared/types/ipc';
 import type {
@@ -29,6 +33,7 @@ import type {
   SessionMessagesPage,
   SessionSummary,
   SnapshotMessage,
+  StreamCreateArgs,
   StreamEvent,
   WorkspaceRecord,
 } from '@/shared/types/bench';
@@ -36,7 +41,7 @@ import type {
 // ===== 假数据 =====
 
 function svgIcon(letter: string, hue: number): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue},72%,58%)"/><stop offset="1" stop-color="hsl(${(hue + 40) % 360},68%,42%)"/></linearGradient></defs><rect width="120" height="120" rx="27" fill="url(#g)"/><text x="60" y="79" font-size="50" text-anchor="middle" fill="white" font-family="sans-serif" font-weight="600">${letter}</text></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue},72%,58%)"/><stop offset="1" stop-color="hsl(${(hue + 40) % 360},68%,42%)"/></linearGradient></defs><rect width="120" height="120" rx="0" fill="url(#g)"/><text x="60" y="79" font-size="50" text-anchor="middle" fill="white" font-family="sans-serif" font-weight="600">${letter}</text></svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
@@ -91,7 +96,7 @@ const DEFAULT_SETTINGS: Settings = {
   weather: { provider: 'open-meteo', city_id: '', qweather_key: null },
   ai: { base_url: 'https://open.bigmodel.cn/api/paas/v4', model: '', api_key: null },
   behavior: { autostart: false, start_minimized: false, language: 'zh-CN', desktop_mode_hotkey: 'Ctrl+Alt+D', desktop_mode_on_launch: true },
-  agent: { computer_use_enabled: false, assistant_persona: '', mcp_port: null, mcp_user_token: null, mcp_agents: [], assistant_agent_id: '', assistant_model: '', assistant_effort: '' },
+  agent: { computer_use_enabled: false, assistant_persona: '', mcp_port: null, mcp_user_token: null, mcp_agents: [], assistant_agent_id: '', assistant_model: '', assistant_effort: '', cli_paths: {} },
 };
 
 /** mock 的按 agent 分发开关状态（内存） */
@@ -180,12 +185,44 @@ export const mockEvents = {
   benchStreamEvent: mockEvent<StreamEvent>('benchStreamEvent'),
   benchStreamExit: mockEvent<{ sessionId: string }>('benchStreamExit'),
   benchPtyExit: mockEvent<{ sessionId: string; exitCode: number }>('benchPtyExit'),
+  todoReminder: mockEvent<TodoReminder>('todoReminder'),
+  focusTick: mockEvent<FocusTick>('focusTick'),
+  focusFinished: mockEvent<FocusFinished>('focusFinished'),
 };
 
 // ===== mock 状态 =====
 
 let desktopActive = false;
 let MOCK_VOLUME = { level: 0.6, muted: false };
+
+// 番茄钟 mock 计时（与 Rust ticker 语义一致：暂停不走秒，归零发 finished）
+let mockFocus: FocusStatus | null = null;
+let mockFocusTimer: ReturnType<typeof setInterval> | null = null;
+function focusStopMock() {
+  if (mockFocusTimer) {
+    clearInterval(mockFocusTimer);
+    mockFocusTimer = null;
+  }
+}
+function focusRunMock() {
+  focusStopMock();
+  mockFocusTimer = setInterval(() => {
+    if (!mockFocus) return focusStopMock();
+    if (mockFocus.paused) return;
+    mockFocus.remaining_secs -= 1;
+    mockEvents.focusTick._emit({
+      kind: mockFocus.kind,
+      remaining_secs: mockFocus.remaining_secs,
+      paused: false,
+    });
+    if (mockFocus.remaining_secs <= 0) {
+      const kind = mockFocus.kind;
+      mockFocus = null;
+      focusStopMock();
+      mockEvents.focusFinished._emit({ kind });
+    }
+  }, 1000);
+}
 const LS_KEY = 'hamsterhub.mock';
 
 function ls(): Record<string, string> {
@@ -243,6 +280,11 @@ export const mockCommands = {
     console.log('[mock] 打开 URL', url);
     return null;
   },
+  async wallpaperImageImport(path: string, _previous: string | null): Promise<string> {
+    // 浏览器无 asset protocol，返回原路径仅供预览（真机为 appdata 副本路径）
+    console.log('[mock] wallpaperImageImport', path);
+    return path;
+  },
   async fileSearch(query: string, limit: number | null): Promise<FileHit[]> {
     const q = query.trim().toLowerCase();
     if (!q) return [];
@@ -252,28 +294,77 @@ export const mockCommands = {
     const raw = ls()['todos'];
     if (raw) return JSON.parse(raw);
     const seed: Todo[] = [
-      { id: 1, content: '体验仓鼠Hub 桌面模式', done: false, created_at: 0 },
-      { id: 2, content: '把常用应用拖进 Dock', done: true, created_at: 0 },
+      { id: 1, content: '体验仓鼠Hub 桌面模式', done: false, created_at: 0, due_at: null, remind_at: null, reminded_at: null, recur: null },
+      { id: 2, content: '把常用应用拖进 Dock', done: true, created_at: 0, due_at: null, remind_at: null, reminded_at: null, recur: null },
     ];
     lsSet('todos', JSON.stringify(seed));
     return seed;
   },
-  async todoCreate(content: string): Promise<Todo> {
+  async todoCreate(content: string, dueAt: number | null, remind: boolean | null): Promise<Todo> {
     const list = await mockCommands.todoList();
     const t: Todo = {
       id: Date.now(),
       content,
       done: false,
       created_at: Math.floor(Date.now() / 1000),
+      due_at: dueAt,
+      remind_at: dueAt != null && remind ? dueAt : null,
+      reminded_at: null,
+      recur: null,
     };
     lsSet('todos', JSON.stringify([t, ...list]));
+    // 浏览器预览：8 秒后模拟一次到点提醒（真机由 Rust 调度线程发系统通知）
+    if (t.remind_at != null) {
+      setTimeout(
+        () => mockEvents.todoReminder._emit({ id: t.id, content: t.content, due_at: t.due_at }),
+        8000,
+      );
+    }
     return t;
+  },
+  async todoSetDue(id: number, dueAt: number | null, remind: boolean): Promise<Todo> {
+    const list = await mockCommands.todoList();
+    const t = list.find((x) => x.id === id);
+    if (!t) throw new Error(`待办不存在: ${id}`);
+    const next: Todo = {
+      ...t,
+      due_at: dueAt,
+      remind_at: dueAt != null && remind ? dueAt : null,
+      reminded_at: null,
+    };
+    lsSet('todos', JSON.stringify(list.map((x) => (x.id === id ? next : x))));
+    return next;
+  },
+  async todoSetRecur(id: number, recur: string | null): Promise<Todo> {
+    const list = await mockCommands.todoList();
+    const t = list.find((x) => x.id === id);
+    if (!t) throw new Error(`待办不存在: ${id}`);
+    const next: Todo = { ...t, recur };
+    lsSet('todos', JSON.stringify(list.map((x) => (x.id === id ? next : x))));
+    return next;
   },
   async todoToggle(id: number, done: boolean): Promise<null> {
     const list = await mockCommands.todoList();
+    const now = Math.floor(Date.now() / 1000);
     lsSet(
       'todos',
-      JSON.stringify(list.map((t) => (t.id === id ? { ...t, done } : t))),
+      JSON.stringify(
+        list.map((t) => {
+          if (t.id !== id) return t;
+          // 循环待办完成 = 滚到下一次（与 Rust set_done 语义一致）
+          if (done && t.recur) {
+            const base = Math.max(t.due_at ?? now, now);
+            const day = 86400;
+            const next =
+              t.recur === 'daily' ? base + day
+              : t.recur === 'weekly' ? base + 7 * day
+              : t.recur === 'monthly' ? base + 30 * day
+              : base + day; // weekdays 简化，浏览器预览用
+            return { ...t, done: false, due_at: next, remind_at: t.remind_at != null ? next : null, reminded_at: null };
+          }
+          return { ...t, done };
+        }),
+      ),
     );
     return null;
   },
@@ -281,6 +372,52 @@ export const mockCommands = {
     const list = await mockCommands.todoList();
     lsSet('todos', JSON.stringify(list.filter((t) => t.id !== id)));
     return null;
+  },
+  // ===== 番茄钟 mock（setInterval 秒级 tick，语义与 Rust ticker 一致）=====
+  async focusStart(minutes: number, todoId: number | null): Promise<FocusStatus> {
+    focusStopMock();
+    mockFocus = {
+      kind: 'focus',
+      total_secs: minutes * 60,
+      remaining_secs: minutes * 60,
+      paused: false,
+      todo_id: todoId,
+    };
+    focusRunMock();
+    return mockFocus;
+  },
+  async focusBreak(minutes: number): Promise<FocusStatus> {
+    focusStopMock();
+    mockFocus = {
+      kind: 'break',
+      total_secs: minutes * 60,
+      remaining_secs: minutes * 60,
+      paused: false,
+      todo_id: null,
+    };
+    focusRunMock();
+    return mockFocus;
+  },
+  async focusPause(): Promise<null> {
+    if (mockFocus) mockFocus.paused = true;
+    return null;
+  },
+  async focusResume(): Promise<null> {
+    if (mockFocus) mockFocus.paused = false;
+    return null;
+  },
+  async focusStop(): Promise<null> {
+    focusStopMock();
+    mockFocus = null;
+    return null;
+  },
+  async focusStatus(): Promise<FocusStatus | null> {
+    return mockFocus;
+  },
+  async focusHistory(_days: number | null): Promise<{ day: string; minutes: number }[]> {
+    const d = new Date();
+    const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return [{ day, minutes: 25 }];
   },
   async weatherGet(): Promise<WeatherNow> {
     return {
@@ -457,7 +594,13 @@ export const mockCommands = {
   // ===== 代理工作台（bench）：GUI 流式对话 + Recall（与生成绑定同名）=====
 
   async benchScanAgents(): Promise<AgentInfo[]> {
-    return MOCK_AGENTS;
+    // 对齐真机：手动指定的路径（settings.agent.cli_paths）优先，文件存在即视为已装
+    const paths = (await mockCommands.settingsLoad()).agent.cli_paths ?? {};
+    return MOCK_AGENTS.map((a) => {
+      const p = paths[a.id];
+      if (!p) return a;
+      return { ...a, installed: true, program: p };
+    });
   },
   async benchListProjects(): Promise<string[]> {
     return MOCK_PROJECTS;
@@ -475,15 +618,8 @@ export const mockCommands = {
   async benchListHistorySessions(): Promise<SessionSummary[]> {
     return MOCK_HISTORY;
   },
-  async benchStreamCreate(
-    agentId: string,
-    projectDir: string,
-    firstPrompt: string | null,
-    _model: string | null,
-    _effort: string | null,
-    resumeKey: string | null,
-    _fork: boolean,
-  ): Promise<LiveSessionInfo> {
+  async benchStreamCreate(args: StreamCreateArgs): Promise<LiveSessionInfo> {
+    const { agentId, projectDir, firstPrompt, resumeKey } = args;
     const agent = MOCK_AGENTS.find((a) => a.id === agentId);
     if (!agent?.installed) throw new Error('BENCH_AGENT_NOT_INSTALLED');
     if (!agent.streaming) throw new Error('BENCH_UNSUPPORTED');
@@ -516,16 +652,33 @@ export const mockCommands = {
   // ===== 桌面助手（浏览器假会话复用同一假流式代理；真机由 Rust 注入 hamster-desktop MCP server）=====
   async benchAssistantCreate(args: AssistantCreateArgs): Promise<AssistantSessionInfo> {
     const agentId = args.agentId ?? 'claude';
-    const session = await mockCommands.benchStreamCreate(
+    const session = await mockCommands.benchStreamCreate({
       agentId,
-      'C:\\Users\\hamster\\AppData\\Roaming\\com.hamsterhub.appgentssistant',
-      args.firstPrompt ?? null,
-      args.model ?? null,
-      null,
-      null,
-      false,
-    );
+      projectDir: 'C:\\Users\\hamster\\AppData\\Roaming\\com.hamsterhub.app\\assistant',
+      firstPrompt: args.firstPrompt ?? null,
+      model: args.model ?? null,
+      effort: null,
+      resumeKey: null,
+      fork: false,
+    });
     return { session, agentId, mcpInjected: true, computerUseEnabled: false };
+  },
+  // ===== Agent CLI 手动指定路径（与真机同语义：校验非空后写进 settings 持久层）=====
+  async agentCliPathSet(agentId: string, path: string | null): Promise<Record<string, string>> {
+    const trimmed = path?.trim() || null;
+    if (trimmed && !trimmed.includes('\\') && !trimmed.includes('/')) {
+      throw new Error(`路径不存在或不是文件: ${trimmed}`);
+    }
+    const current = await mockCommands.settingsLoad();
+    // 生成类型是 Partial<Record<string,string>>（值含 undefined），先收敛成确定值
+    const cliPaths: Record<string, string> = {};
+    for (const [k, v] of Object.entries(current.agent.cli_paths ?? {})) {
+      if (typeof v === 'string') cliPaths[k] = v;
+    }
+    if (trimmed) cliPaths[agentId] = trimmed;
+    else delete cliPaths[agentId];
+    await mockCommands.settingsSave({ ...current, agent: { ...current.agent, cli_paths: cliPaths } });
+    return cliPaths;
   },
   // ===== 桌面 MCP 分发（浏览器假数据：开关状态仅存内存）=====
   async agentMcpStatus(): Promise<AgentMcpStatus[]> {
@@ -580,7 +733,7 @@ export const mockCommands = {
     console.log('[mock] pluginBridgeCall', pluginId, capability);
     const args = JSON.parse(payload || '{}') as Record<string, unknown>;
     if (capability === 'todo.add') {
-      const t = await mockCommands.todoCreate(String(args.content ?? '（插件）'));
+      const t = await mockCommands.todoCreate(String(args.content ?? '（插件）'), null, null);
       return JSON.stringify(t);
     }
     if (capability === 'todo.list') return JSON.stringify(await mockCommands.todoList());
@@ -769,6 +922,7 @@ const MOCK_AGENTS: AgentInfo[] = [
     installed: true,
     version: '2.1.251',
     configRoot: 'C:\\Users\\you\\.claude',
+    program: 'C:\\Users\\you\\AppData\\Roaming\\npm\\claude.cmd',
     capabilities: { mcp: true, projectMcp: true, rules: true, skills: true, toolGranularity: true },
     chat: true,
     promptInject: 'argv',
@@ -784,6 +938,7 @@ const MOCK_AGENTS: AgentInfo[] = [
     installed: true,
     version: '0.152.0',
     configRoot: 'C:\\Users\\you\\.codex',
+    program: 'C:\\Users\\you\\AppData\\Roaming\\npm\\codex.cmd',
     capabilities: { mcp: true, projectMcp: false, rules: false, skills: false, toolGranularity: false },
     chat: true,
     promptInject: null,
@@ -799,6 +954,7 @@ const MOCK_AGENTS: AgentInfo[] = [
     installed: true,
     version: '0.4.2',
     configRoot: 'C:\\Users\\you\\.zcode',
+    program: null,
     capabilities: { mcp: true, projectMcp: true, rules: true, skills: false, toolGranularity: false },
     chat: true,
     promptInject: 'argv',
@@ -811,6 +967,7 @@ const MOCK_AGENTS: AgentInfo[] = [
     installed: false,
     version: null,
     configRoot: null,
+    program: null,
     capabilities: { mcp: true, projectMcp: false, rules: false, skills: false, toolGranularity: false },
     chat: false,
     promptInject: null,

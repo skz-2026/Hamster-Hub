@@ -11,6 +11,9 @@ import {
   removeFromDock,
   removeFromPage,
   reorder,
+  resolveWallpaper,
+  nextWallpaperId,
+  WALLPAPERS,
   widgetRefOf,
   type HomeLayout,
 } from './layout';
@@ -257,5 +260,28 @@ describe('小组件槽位', () => {
     const idx = l.pages[0].indexOf('widget:clock');
     const next = removeFromPage(l, 0, idx);
     expect(next.pages[0]).toEqual(['app:a', 'app:b']);
+  });
+});
+
+describe('壁纸解析与轮换', () => {
+  it('resolveWallpaper：已知 id 原样返回，未知 id 回退胡萝卜', () => {
+    expect(resolveWallpaper({ wallpaper: 'hamster' }).name).toBe('胡萝卜');
+    expect(resolveWallpaper({ wallpaper: 'burrow' }).image).toBeTruthy();
+    expect(resolveWallpaper({ wallpaper: 'meadow' }).image).toBeTruthy();
+    expect(resolveWallpaper({ wallpaper: 'nope' }).name).toBe('胡萝卜');
+  });
+
+  it('resolveWallpaper：custom 有图用图，缺图回退胡萝卜', () => {
+    expect(resolveWallpaper({ wallpaper: 'custom', wallpaperImage: 'D:/x/w.jpg' }).imagePath).toBe(
+      'D:/x/w.jpg',
+    );
+    expect(resolveWallpaper({ wallpaper: 'custom' }).name).toBe('胡萝卜');
+  });
+
+  it('nextWallpaperId：按内置清单顺序循环，custom 从头开始', () => {
+    const ids = Object.keys(WALLPAPERS);
+    expect(nextWallpaperId(ids[0])).toBe(ids[1]);
+    expect(nextWallpaperId(ids[ids.length - 1])).toBe(ids[0]);
+    expect(nextWallpaperId('custom')).toBe(ids[0]);
   });
 });

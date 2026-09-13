@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bluetooth,
+  Gamepad2,
   Image as ImageIcon,
   LogOut,
   Moon,
@@ -14,9 +15,10 @@ import {
   Wifi,
 } from 'lucide-react';
 import { commands } from '@/shared/lib/ipc';
+import { useI18n } from '@/shared/i18n/provider';
 import { useSettings, usePatchSettings } from '@/features/settings/hooks';
 import { useApps, useHomeLayout } from '@/features/home/hooks';
-import { WALLPAPERS } from '@/features/home/layout';
+import { nextWallpaperId, resolveWallpaper } from '@/features/home/layout';
 
 /**
  * 控制中心（iOS 风，桌面主页右上角滑出玻璃面板）：
@@ -25,6 +27,7 @@ import { WALLPAPERS } from '@/features/home/layout';
  */
 export function ControlCenter({ open, onClose }: { open: boolean; onClose: () => void }) {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const { data: settings } = useSettings();
   const { patch } = usePatchSettings();
   const { data: apps = [] } = useApps();
@@ -64,12 +67,18 @@ export function ControlCenter({ open, onClose }: { open: boolean; onClose: () =>
     commands.volumeSet(level, next).catch(console.error);
   };
   const cycleWallpaper = () => {
-    const ids = Object.keys(WALLPAPERS);
-    const next = ids[(ids.indexOf(layout.wallpaper) + 1) % ids.length];
-    commit({ ...layout, wallpaper: next });
+    commit({ ...layout, wallpaper: nextWallpaperId(layout.wallpaper) });
   };
-  const isLight = settings?.appearance.theme === 'light';
-  const toggleTheme = () => patch({ appearance: { theme: isLight ? 'dark' : 'light' } });
+  const theme = settings?.appearance.theme ?? 'dark';
+  // 主题磁贴三态循环：深色 → 浅色 → 像素 → 深色，图标显示即将切到的目标
+  const toggleTheme = () =>
+    patch({ appearance: { theme: theme === 'dark' ? 'light' : theme === 'light' ? 'pixel' : 'dark' } });
+  const nextThemeTile =
+    theme === 'dark'
+      ? { icon: <Sun size={18} />, label: t('home.cc.lightMode') }
+      : theme === 'light'
+        ? { icon: <Gamepad2 size={18} />, label: t('home.cc.pixelTheme') }
+        : { icon: <Moon size={18} />, label: t('home.cc.darkMode') };
   const openMs = (page: string) =>
     commands.openUrl(`ms-settings:${page}`).catch(console.error);
 
@@ -83,22 +92,22 @@ export function ControlCenter({ open, onClose }: { open: boolean; onClose: () =>
     >
       {/* 磁贴：连接 + 外观 */}
       <div className="grid grid-cols-2 gap-2.5">
-        <Tile icon={<Wifi size={18} />} tint="#0a84ff" label="Wi-Fi" sub="系统设置"
+        <Tile icon={<Wifi size={18} />} tint="#0a84ff" label="Wi-Fi" sub={t('home.cc.systemSettings')}
           onClick={() => openMs('network')} />
-        <Tile icon={<Bluetooth size={18} />} tint="#0a84ff" label="蓝牙" sub="系统设置"
+        <Tile icon={<Bluetooth size={18} />} tint="#0a84ff" label={t('home.cc.bluetooth')} sub={t('home.cc.systemSettings')}
           onClick={() => openMs('bluetooth')} />
         <Tile
-          icon={isLight ? <Moon size={18} /> : <Sun size={18} />}
+          icon={nextThemeTile.icon}
           tint="#ff9f0a"
-          label={isLight ? '深色模式' : '浅色模式'}
-          sub="点击切换"
+          label={nextThemeTile.label}
+          sub={t('home.cc.tapToSwitch')}
           onClick={toggleTheme}
         />
         <Tile
           icon={<ImageIcon size={18} />}
           tint="#bf5af2"
-          label={WALLPAPERS[layout.wallpaper]?.name ?? '壁纸'}
-          sub="点击轮换"
+          label={resolveWallpaper(layout).name}
+          sub={t('home.cc.tapToCycle')}
           onClick={cycleWallpaper}
         />
       </div>
@@ -115,7 +124,7 @@ export function ControlCenter({ open, onClose }: { open: boolean; onClose: () =>
           value={Math.round(level * 100)}
           onChange={(e) => applyVolume(Number(e.target.value) / 100)}
           className="cc-range h-7 flex-1 cursor-pointer appearance-none bg-transparent"
-          aria-label="音量"
+          aria-label={t('home.cc.volume')}
         />
         <span className="w-8 text-right text-[11px] tabular-nums text-white/60">
           {Math.round(level * 100)}
@@ -124,11 +133,11 @@ export function ControlCenter({ open, onClose }: { open: boolean; onClose: () =>
 
       {/* 快捷动作 */}
       <div className="mt-2.5 flex gap-2">
-        <Action icon={<Sparkles size={13} />} label="AI 助手" onClick={() => { onClose(); navigate('/agent'); }} />
-        <Action icon={<SettingsIcon size={13} />} label="设置" onClick={() => { onClose(); navigate('/settings'); }} />
+        <Action icon={<Sparkles size={13} />} label={t('home.cc.aiAssistant')} onClick={() => { onClose(); navigate('/agent'); }} />
+        <Action icon={<SettingsIcon size={13} />} label={t('home.cc.settings')} onClick={() => { onClose(); navigate('/settings'); }} />
         <Action
           icon={<LogOut size={13} />}
-          label="退出接管"
+          label={t('home.cc.exitTakeover')}
           danger
           onClick={() => commands.desktopModeExit().catch(console.error)}
         />

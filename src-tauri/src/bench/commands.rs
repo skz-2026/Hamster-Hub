@@ -9,6 +9,32 @@ use tauri_specta::Event;
 use crate::bench::{bench_err, BenchContext};
 use crate::error::AppError;
 use crate::events::{BenchPtyExit, BenchStreamEvent, BenchStreamExit};
+use crate::store::settings as settings_repo;
+use crate::AppState;
+
+/// settings.agent.cli_paths（用户手动指定的 CLI 路径）读取；读不到按空表处理
+fn load_cli_paths(state: &State<'_, AppState>) -> std::collections::BTreeMap<String, String> {
+    let Ok(conn) = state.db.lock() else {
+        return Default::default();
+    };
+    settings_repo::load(&conn)
+        .map(|s| s.agent.cli_paths)
+        .unwrap_or_default()
+}
+
+/// 用户手动指定的 CLI 路径覆盖自动探测（含多版本择优结果）；
+/// 路径失效（文件被移走/删除）时静默回退探测结果，不阻断启动。
+fn apply_cli_override(
+    spec: &mut hamster_core::RuntimeSpec,
+    cli_paths: &std::collections::BTreeMap<String, String>,
+    agent_id: &str,
+) {
+    if let Some(p) = cli_paths.get(agent_id) {
+        if std::path::Path::new(p).is_file() {
+            spec.program = p.clone();
+        }
+    }
+}
 
 // ===== agents / discovery =====
 
@@ -16,8 +42,20 @@ use crate::events::{BenchPtyExit, BenchStreamEvent, BenchStreamExit};
 #[specta::specta]
 pub fn bench_scan_agents(
     ctx: State<'_, BenchContext>,
+    state: State<'_, AppState>,
 ) -> Result<Vec<hamster_core::AgentInfo>, AppError> {
-    Ok(hamster_core::scanner::scan(&ctx.registry))
+    let mut infos = hamster_core::scanner::scan(&ctx.registry);
+    // 手动指定的路径优先：文件在 → 视为已安装，program 用所填路径
+    let cli_paths = load_cli_paths(&state);
+    for info in &mut infos {
+        if let Some(p) = cli_paths.get(&info.id) {
+            if std::path::Path::new(p).is_file() {
+                info.installed = true;
+                info.program = Some(p.clone());
+            }
+        }
+    }
+    Ok(infos)
 }
 
 #[tauri::command]
@@ -94,20 +132,37 @@ fn build_channel_command(
 
 /// 创建流式会话（官方 headless 协议）。事件经 BenchStreamEvent 推送；
 /// first_prompt 非空时握手后立即发起首轮。
+/// bench_stream_create 参数包（specta 的 SpectaFn 上限 10 参，命令参数打包）
+#[derive(Debug, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct StreamCreateArgs {
+    pub agent_id: String,
+    pub project_dir: String,
+    pub first_prompt: Option<String>,
+    pub model: Option<String>,
+    pub effort: Option<String>,
+    pub resume_key: Option<String>,
+    pub fork: bool,
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn bench_stream_create(
     ctx: State<'_, BenchContext>,
     streams: State<'_, hamster_runtime::StreamManager>,
     app: AppHandle,
-    agent_id: String,
-    project_dir: String,
-    first_prompt: Option<String>,
-    model: Option<String>,
-    effort: Option<String>,
-    resume_key: Option<String>,
-    fork: bool,
+    state: State<'_, AppState>,
+    args: StreamCreateArgs,
 ) -> Result<hamster_core::LiveSessionInfo, AppError> {
+    let StreamCreateArgs {
+        agent_id,
+        project_dir,
+        first_prompt,
+        model,
+        effort,
+        resume_key,
+        fork,
+    } = args;
     let dir = project_dir.trim().to_string();
     if dir.is_empty() {
         return Err(bench_err(hamster_core::HamsterError::config_invalid(
@@ -115,11 +170,12 @@ pub fn bench_stream_create(
         )));
     }
     let adapter = ctx.registry.get(&agent_id).map_err(bench_err)?;
-    let spec = adapter.runtime().ok_or_else(|| {
+    let mut spec = adapter.runtime().ok_or_else(|| {
         bench_err(hamster_core::HamsterError::Unsupported(format!(
             "{agent_id} 暂不支持内嵌对话"
         )))
     })?;
+    apply_cli_override(&mut spec, &load_cli_paths(&state), &agent_id);
     let channel = spec.structured.clone().ok_or_else(|| {
         bench_err(hamster_core::HamsterError::Unsupported(format!(
             "{agent_id} 暂不支持结构化流式通道"
@@ -266,6 +322,7 @@ pub fn bench_pty_create(
     ctx: State<'_, BenchContext>,
     sessions: State<'_, hamster_runtime::SessionManager>,
     app: AppHandle,
+    state: State<'_, AppState>,
     args: PtyCreateArgs,
     on_data: tauri::ipc::Channel<Vec<u8>>,
 ) -> Result<hamster_core::LiveSessionInfo, AppError> {
@@ -310,11 +367,12 @@ pub fn bench_pty_create(
         }
     }
     let adapter = ctx.registry.get(&agent_id).map_err(bench_err)?;
-    let spec = adapter.runtime().ok_or_else(|| {
+    let mut spec = adapter.runtime().ok_or_else(|| {
         bench_err(hamster_core::HamsterError::Unsupported(format!(
             "{agent_id} 暂不支持内嵌对话"
         )))
     })?;
+    apply_cli_override(&mut spec, &load_cli_paths(&state), &agent_id);
     let overrides = hamster_core::LaunchOverrides {
         model,
         effort,

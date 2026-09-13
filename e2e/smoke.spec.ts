@@ -12,8 +12,8 @@ test.describe('仓鼠Hub 冒烟（浏览器预览 + IPC mock）', () => {
     // 时钟在走（格式 HH:MM:SS）
     await expect(page.getByText(/^\d{2}:\d{2}:\d{2}$/).first()).toBeVisible();
 
-    // 添加待办
-    const input = page.getByPlaceholder('添加待办，回车确认');
+    // 添加待办（输入框支持自然语言解析，纯文本无时间表述则原样入库）
+    const input = page.getByPlaceholder('添加待办，试试');
     await input.fill('E2E 测试待办');
     await input.press('Enter');
     await expect(page.getByText('E2E 测试待办')).toBeVisible();

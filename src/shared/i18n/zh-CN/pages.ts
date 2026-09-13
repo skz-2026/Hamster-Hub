@@ -1,0 +1,85 @@
+/** pages 命名空间：页面级文案（工作台 / 日程 / 文件 / 应用）。基准词典，zh-TW / en 的 key 必须与之完全一致 */
+export const pages = {
+  // —— 工作台 ——
+  'pages.workbench.motd': '今天也要元气满满哦',
+  'pages.workbench.weather': '天气',
+  'pages.workbench.weatherError': '天气获取失败',
+  'pages.workbench.weatherRetry': '检查网络后自动重试',
+  'pages.workbench.tempRange': '最低 {min}° · 最高 {max}°',
+  'pages.workbench.countdown': '倒数日',
+  'pages.workbench.countdownEmpty': '暂无倒数日',
+  'pages.workbench.countdownToday': '就是今天',
+  'pages.workbench.countdownDays': '{days} 天',
+  'pages.workbench.recentFiles': '最近文件',
+  'pages.workbench.fileCount': '{count} 个',
+  'pages.workbench.recentFilesEmpty': '暂无最近文件',
+  'pages.workbench.topApps': '常用应用',
+  'pages.workbench.byFrequency': '按使用频率',
+  'pages.workbench.topAppsEmptyHint1': '启动几个应用后',
+  'pages.workbench.topAppsEmptyHint2': '这里会显示你的常用榜',
+  'pages.workbench.lunarDate': '农历{month}月{day} {year}年',
+  'pages.workbench.lunarFallback': '农历',
+
+  // —— 时段问候 ——
+  'pages.greeting.lateNight': '夜深了',
+  'pages.greeting.earlyMorning': '早上好',
+  'pages.greeting.morning': '上午好',
+  'pages.greeting.noon': '中午好',
+  'pages.greeting.afternoon': '下午好',
+  'pages.greeting.evening': '晚上好',
+
+  // —— 周几（周一起始，配合字面量 key 数组使用） ——
+  'pages.weekday.mon': '一',
+  'pages.weekday.tue': '二',
+  'pages.weekday.wed': '三',
+  'pages.weekday.thu': '四',
+  'pages.weekday.fri': '五',
+  'pages.weekday.sat': '六',
+  'pages.weekday.sun': '日',
+
+  // —— 日程 ——
+  'pages.schedule.title': '日程',
+  'pages.schedule.monthTitle': '{year} 年 {month} 月',
+  'pages.schedule.thisMonth': '今月',
+  'pages.schedule.countdown': '倒数日',
+  'pages.schedule.eventPlaceholder': '事件名',
+  'pages.schedule.countdownHint': '添加自定义倒数日，月历会自动标出',
+  'pages.schedule.today': '今天',
+  'pages.schedule.daysLater': '{days} 天',
+  'pages.schedule.expired': '已过期',
+  'pages.schedule.notes': '便签',
+  'pages.schedule.noteCount': '{count} 条',
+  'pages.schedule.notePlaceholder': '记一条便签',
+  'pages.schedule.notesEmpty': '还没有便签',
+  'pages.schedule.doubleClickEdit': '双击编辑',
+  'pages.schedule.pin': '置顶',
+  'pages.schedule.unpin': '取消置顶',
+  'pages.schedule.delete': '删除',
+
+  // —— 文件页 ——
+  'pages.files.title': '文件',
+  'pages.files.reindex': '重建索引',
+  'pages.files.reindexTitle': '全量重扫文件索引（watcher 平时自动增量维护）',
+  'pages.files.searchPlaceholder': '搜索文件（拼音 / 首字母 / 文件名）…',
+  'pages.files.all': '全部',
+  'pages.files.kindFile': '文件',
+  'pages.files.noMatch': '没有匹配「{q}」的文件',
+  'pages.files.emptyIndex': '索引还没有内容：点右上角「重建索引」扫描一遍（索引范围见设置 file_index.roots）',
+  'pages.files.reveal': '在资源管理器中显示',
+
+  // —— 应用页 ——
+  'pages.apps.title': '应用',
+  'pages.apps.indexing': '索引中…',
+  'pages.apps.summary': '共 {count} 个 · 单击启动',
+  'pages.apps.emptyCategory': '该分类下暂无应用',
+
+  // —— 应用分类 ——
+  'pages.cat.all': '全部',
+  'pages.cat.communication': '沟通',
+  'pages.cat.office': '办公',
+  'pages.cat.dev': '开发',
+  'pages.cat.entertainment': '娱乐',
+  'pages.cat.tools': '工具',
+  'pages.cat.system': '系统',
+  'pages.cat.other': '其他',
+} as const;

@@ -73,7 +73,7 @@ export default function AgentAvatar({ agentId, size = 18, title }: AgentAvatarPr
     <span
       title={title}
       className={`inline-grid shrink-0 place-items-center overflow-hidden rounded-[28%] ${
-        iconSvg ? 'bg-[var(--bg,#26242b)] ring-1 ring-white/10' : 'text-white'
+        iconSvg ? 'bg-[var(--bg,#26242b)] ring-1 ring-[var(--border)]' : 'text-white'
       }`}
       style={{
         width: size,

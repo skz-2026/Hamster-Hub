@@ -3,9 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { Search, LayoutDashboard, CalendarDays, LayoutGrid, FolderOpen, Settings, SlidersHorizontal, Sparkles, Bot } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { commands } from '@/shared/lib/ipc';
+import { useI18n } from '@/shared/i18n/provider';
+import type { TKey } from '@/shared/i18n/core';
 import { useClock, useDateTimeInfo, greetingOf } from '@/features/workbench/hooks';
 import { useApps, useHomeLayout } from '@/features/home/hooks';
-import { WALLPAPERS, type WidgetType } from '@/features/home/layout';
+import { resolveWallpaper, TASKBAR_H_PX, type WidgetType } from '@/features/home/layout';
+import { WallpaperLayer } from '@/features/home/WallpaperLayer';
 import { HomeWidget } from '@/features/home/HomeWidget';
 import { pluginWidgetRefOf } from '@/features/plugins/types';
 import { useDisabledPlugins, usePluginList } from '@/features/plugins/registry';
@@ -17,13 +20,13 @@ const WIDGETS: WidgetType[] = ['clock', 'weather', 'todo', 'countdown'];
 const DESKTOP_PLUGIN_SLOTS = 2;
 
 /** 快捷入口（桌面模式无侧栏，页面导航收进这里） */
-const QUICK_LINKS: { label: string; to: string; Icon: LucideIcon }[] = [
-  { label: '工作台', to: '/', Icon: LayoutDashboard },
-  { label: '代理', to: '/bench', Icon: Bot },
-  { label: '日程', to: '/schedule', Icon: CalendarDays },
-  { label: '应用', to: '/apps', Icon: LayoutGrid },
-  { label: '文件', to: '/files', Icon: FolderOpen },
-  { label: '设置', to: '/settings', Icon: Settings },
+const QUICK_LINKS: { labelKey: TKey; to: string; Icon: LucideIcon }[] = [
+  { labelKey: 'chrome.nav.workbench', to: '/', Icon: LayoutDashboard },
+  { labelKey: 'chrome.nav.agent', to: '/bench', Icon: Bot },
+  { labelKey: 'chrome.nav.schedule', to: '/schedule', Icon: CalendarDays },
+  { labelKey: 'chrome.nav.apps', to: '/apps', Icon: LayoutGrid },
+  { labelKey: 'chrome.nav.files', to: '/files', Icon: FolderOpen },
+  { labelKey: 'chrome.nav.settings', to: '/settings', Icon: Settings },
 ];
 
 /**
@@ -32,6 +35,7 @@ const QUICK_LINKS: { label: string; to: string; Icon: LucideIcon }[] = [
  * 小组件卡片行 + 快捷入口。底部为独立置顶任务栏窗口（完全替代系统任务栏）。
  */
 export default function DesktopPage() {
+  const { t } = useI18n();
   const plugins = usePluginList();
   const disabled = useDisabledPlugins();
   const pluginWidgets = (plugins.data ?? [])
@@ -42,7 +46,7 @@ export default function DesktopPage() {
   const { time, date, lunar } = useDateTimeInfo(now);
   const { data: apps = [] } = useApps();
   const { layout } = useHomeLayout(apps);
-  const wallpaper = WALLPAPERS[layout.wallpaper] ?? WALLPAPERS.midnight;
+  const wallpaper = resolveWallpaper(layout);
   const [ccOpen, setCcOpen] = useState(false);
 
   // 桌面模式已关则退回窗口化工作台（事件导航由 AppShell 统一处理，这里兜底）
@@ -57,18 +61,27 @@ export default function DesktopPage() {
 
   return (
     <div
-      className="relative flex h-full flex-col items-center justify-center gap-8 overflow-hidden px-8 text-white"
+      className="relative h-full w-full overflow-hidden text-white"
       style={{ background: wallpaper.css }}
       onContextMenu={(e) => e.preventDefault()}
     >
+      {/* 布局容器止于任务栏上沿（底部 68px 由置顶 taskbar 窗覆盖），
+          壁纸与内容不再伸到任务栏背后被遮挡 */}
+      <div
+        className="relative flex w-full flex-col items-center justify-center gap-8 overflow-hidden px-8"
+        style={{ height: `calc(100% - ${TASKBAR_H_PX}px)` }}
+      >
+      {/* 图片壁纸层（渐变壁纸不渲染；自定义图片经 asset protocol） */}
+      <WallpaperLayer wallpaper={wallpaper} />
+
       {/* 柔光晕（模拟 macOS 壁纸景深） */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-64 bg-gradient-to-b from-white/[0.05] to-transparent" />
 
       {/* 控制中心触发钮（右上角热区） */}
       <button
         onClick={() => setCcOpen((v) => !v)}
-        title="控制中心"
-        aria-label="控制中心"
+        title={t('chrome.desktop.controlCenter')}
+        aria-label={t('chrome.desktop.controlCenter')}
         className="absolute right-5 top-5 z-40 grid size-10 place-items-center rounded-full bg-white/10 text-white/85 ring-1 ring-white/15 backdrop-blur-xl transition-all hover:bg-white/20 hover:text-white"
       >
         <SlidersHorizontal size={17} />
@@ -79,7 +92,7 @@ export default function DesktopPage() {
       <div className="rise-in relative flex flex-col items-center gap-2">
         <span className="text-5xl leading-none drop-shadow-[0_4px_16px_rgba(0,0,0,.4)]">🐹</span>
         <h1 className="text-[22px] font-medium tracking-wide text-white/95 [text-shadow:0_2px_16px_rgba(0,0,0,.45)]">
-          {greetingOf(now)}，欢迎回来
+          {t('chrome.desktop.welcomeBack', { greeting: greetingOf(now) })}
         </h1>
         <div className="text-[96px] font-extralight leading-none tracking-[-0.02em] tabular-nums [text-shadow:0_6px_32px_rgba(0,0,0,.45)]">
           {time.slice(0, 5)}
@@ -100,7 +113,7 @@ export default function DesktopPage() {
       >
         <Search size={19} className="shrink-0 text-white/60 transition-colors group-hover:text-white/85" />
         <span className="text-[15px] text-white/55 transition-colors group-hover:text-white/70">
-          搜索应用、文件…
+          {t('chrome.desktop.searchPlaceholder')}
         </span>
       </button>
 
@@ -112,7 +125,7 @@ export default function DesktopPage() {
           </div>
         ))}
         {pluginWidgets.map((p) => (
-          <div key={p.id} className="w-[180px]" title={`插件：${p.name}`}>
+          <div key={p.id} className="w-[180px]" title={t('chrome.desktop.pluginTitle', { name: p.name })}>
             <HomeWidget type={pluginWidgetRefOf(p.id)} />
           </div>
         ))}
@@ -125,18 +138,19 @@ export default function DesktopPage() {
           className="flex items-center gap-2 rounded-full bg-[var(--accent)]/85 px-[18px] py-[7px] text-[12.5px] font-semibold text-white shadow-[0_4px_18px_rgba(240,112,15,.35)] transition-all hover:brightness-110"
         >
           <Sparkles size={14} />
-          AI 助手
+          {t('chrome.desktop.aiAssistant')}
         </button>
-        {QUICK_LINKS.map(({ label, to, Icon }) => (
+        {QUICK_LINKS.map(({ labelKey, to, Icon }) => (
           <button
             key={to}
             onClick={() => navigate(to)}
             className="flex items-center gap-1.5 rounded-full bg-white/10 px-4 py-[7px] text-[12.5px] font-medium text-white/85 ring-1 ring-white/12 backdrop-blur-xl transition-all hover:bg-white/18 hover:ring-white/22"
           >
             <Icon size={14} />
-            {label}
+            {t(labelKey)}
           </button>
         ))}
+      </div>
       </div>
     </div>
   );

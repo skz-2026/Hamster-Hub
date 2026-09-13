@@ -84,13 +84,18 @@ impl AgentAdapter for GeminiAdapter {
 
     fn detect(&self) -> Option<InstallInfo> {
         // CLI 可解析才算已装：目录残留（试装/其他工具创建）不再误报
-        crate::acp::find_program("gemini")?;
+        crate::resolve_best_program("gemini")?;
         self.config_root().exists().then(|| InstallInfo {
             id: ID.into(),
             name: NAME.into(),
             version: None,
             config_root: self.config_root().to_string_lossy().to_string(),
         })
+    }
+
+    /// 本机 gemini CLI 的最佳路径（设置页展示；None = 未探测到）
+    fn program_hint(&self) -> Option<String> {
+        crate::resolve_best_program("gemini").map(|p| p.to_string_lossy().into_owned())
     }
 
     fn capabilities(&self) -> Caps {

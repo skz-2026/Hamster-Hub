@@ -503,14 +503,22 @@ impl AcpAgentAdapter {
         }
     }
 
-    /// 探测到的启动程序：首个可解析的候选名（绝对路径优先，便于 spawn 稳定）。
+    /// 探测到的启动程序：最佳可执行（多版本取最高；探测见 lib.rs resolve_best_program）。
     fn resolved_program(&self) -> String {
         self.spec
             .programs
             .iter()
-            .find_map(|p| find_program(p))
+            .find_map(|p| crate::resolve_best_program(p))
             .map(|p| p.to_string_lossy().into_owned())
             .unwrap_or_else(|| self.spec.programs[0].to_string())
+    }
+
+    /// 可解析的最佳可执行路径（None = 本机没有）。
+    fn best_program(&self) -> Option<std::path::PathBuf> {
+        self.spec
+            .programs
+            .iter()
+            .find_map(|p| crate::resolve_best_program(p))
     }
 
     /// detect 的可注入版本（测试注假 resolve，避免依赖测试机的 PATH）。
@@ -545,7 +553,13 @@ impl AgentAdapter for AcpAgentAdapter {
     /// （软证据，仅决定 configRoot 展示）。纯文件系统探测，不运行任何外部命令。
     /// 目录存在不再单独算已装：IDE/试装残留（如 `.cursor`）会误报。
     fn detect(&self) -> Option<InstallInfo> {
-        self.detect_with(find_program)
+        self.detect_with(crate::resolve_best_program)
+    }
+
+    /// 最佳可执行路径（设置页展示 + 手动指定路径的对照基线）
+    fn program_hint(&self) -> Option<String> {
+        self.best_program()
+            .map(|p| p.to_string_lossy().into_owned())
     }
 
     /// 只接通道：MCP / 规则 / Skills / 工具颗粒度一律 false（未实测，不夸大）。
@@ -612,45 +626,8 @@ impl AgentAdapter for AcpAgentAdapter {
     }
 }
 
-/// 可执行探测：npm 全局 bin → PATH。纯文件系统判断，不运行任何命令。
-///
-/// 与 `resolve_program` 的差别：会继续回退到 PATH 全路径解析（ACP Agent 多为
-/// 各渠道安装，不一定在 npm 全局目录）。
-pub(crate) fn find_program(name: &str) -> Option<PathBuf> {
-    if name.contains('/') || name.contains('\\') {
-        let p = PathBuf::from(name);
-        return p.is_file().then_some(p);
-    }
-    let candidates = if cfg!(windows) {
-        vec![
-            format!("{name}.cmd"),
-            format!("{name}.exe"),
-            name.to_string(),
-        ]
-    } else {
-        vec![name.to_string()]
-    };
-    // 1) npm 全局 bin（Windows = %APPDATA%\npm，优先级高于 PATH 上的陈旧副本）
-    if let Some(dir) = crate::npm_global_bin_dir() {
-        for c in &candidates {
-            let p = dir.join(c);
-            if p.is_file() {
-                return Some(p);
-            }
-        }
-    }
-    // 2) PATH
-    let paths = std::env::var_os("PATH")?;
-    for dir in std::env::split_paths(&paths) {
-        for c in &candidates {
-            let p = dir.join(c);
-            if p.is_file() {
-                return Some(p);
-            }
-        }
-    }
-    None
-}
+/// 可执行探测统一走 `crate::resolve_best_program`（npm 全局 → PATH 收集候选，
+/// 多版本按 `--version` 择优，带 TTL 缓存）；本模块不再单独维护一份查找逻辑。
 
 #[cfg(test)]
 mod tests {
@@ -725,22 +702,9 @@ mod tests {
     fn detect_falls_back_to_program_path() {
         let home = tempfile::tempdir().unwrap();
         let info = AcpAgentAdapter::new(home.path(), spec("opencode"))
-            .detect_with(|p| {
-                (p == "opencode").then(|| PathBuf::from("/usr/local/bin/opencode"))
-            })
+            .detect_with(|p| (p == "opencode").then(|| PathBuf::from("/usr/local/bin/opencode")))
             .expect("可执行可解析即已装");
         assert_eq!(info.config_root, "/usr/local/bin/opencode");
-    }
-
-    /// 无配置目录时回退到可执行探测（绝对路径入参 → 直接命中）。
-    #[test]
-    fn find_program_resolves_absolute_path() {
-        let home = tempfile::tempdir().unwrap();
-        let exe = home.path().join("fake-agent.cmd");
-        std::fs::write(&exe, "@echo off").unwrap();
-        let found = find_program(&exe.to_string_lossy());
-        assert_eq!(found.as_deref(), Some(exe.as_path()));
-        assert!(find_program("hamster-no-such-agent-xyz").is_none());
     }
 
     /// 未装（无目录也无程序）→ detect 为 None，不污染扫描清单。
@@ -749,7 +713,7 @@ mod tests {
         let home = tempfile::tempdir().unwrap();
         let a = AcpAgentAdapter::new(home.path(), spec("minimax"));
         // 沙箱 home 下无 .minimax；程序名 minimax 极不可能存在
-        if find_program("minimax").is_none() {
+        if crate::resolve_best_program("minimax").is_none() {
             assert!(a.detect().is_none());
         }
     }

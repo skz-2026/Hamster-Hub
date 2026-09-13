@@ -8,8 +8,10 @@
 import { Boxes } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { commands } from '@/shared/lib/ipc';
+import { useI18n } from '@/shared/i18n/provider';
 
 export default function TrayButton() {
+  const { t } = useI18n();
   const open = useMutation({
     mutationFn: () => commands.trayOpenOverflow(),
   });
@@ -20,8 +22,8 @@ export default function TrayButton() {
         e.stopPropagation();
         open.mutate();
       }}
-      title="托盘与应用"
-      aria-label="托盘与应用"
+      title={t('chrome.tray.trayAndApps')}
+      aria-label={t('chrome.tray.trayAndApps')}
       className="group grid size-[44px] place-items-center rounded-xl bg-white/[0.08] text-white/55 ring-1 ring-white/12 transition-all hover:bg-white/16 hover:text-white/90"
     >
       <Boxes size={19} />

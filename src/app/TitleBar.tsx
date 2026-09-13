@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { commands } from '@/shared/lib/ipc';
+import { useI18n } from '@/shared/i18n/provider';
 
 interface TitleBarProps {
   coreVersion: string | null;
@@ -9,6 +10,7 @@ interface TitleBarProps {
 
 /** 自定义标题栏（macOS 红绿灯风）：左侧窗口控制 + 应用标识，整条为拖拽区 */
 export function TitleBar({ coreVersion, onMinimize, onClose }: TitleBarProps) {
+  const { t } = useI18n();
   const [pinned, setPinned] = useState(false);
 
   const togglePin = async () => {
@@ -28,15 +30,15 @@ export function TitleBar({ coreVersion, onMinimize, onClose }: TitleBarProps) {
     >
       {/* macOS 红绿灯：隐藏到托盘 / 最小化 / 置顶 */}
       <div className="flex items-center gap-2">
-        <TrafficLight color="#ff5f57" title="隐藏到托盘" onClick={onClose}>
+        <TrafficLight color="#ff5f57" title={t('chrome.titlebar.hideToTray')} onClick={onClose}>
           ✕
         </TrafficLight>
-        <TrafficLight color="#febc2e" title="最小化" onClick={onMinimize}>
+        <TrafficLight color="#febc2e" title={t('chrome.titlebar.minimize')} onClick={onMinimize}>
           −
         </TrafficLight>
         <TrafficLight
           color="#28c840"
-          title={pinned ? '取消置顶' : '窗口置顶'}
+          title={pinned ? t('chrome.titlebar.unpin') : t('chrome.titlebar.pin')}
           onClick={togglePin}
           lit={pinned}
         >
@@ -47,11 +49,11 @@ export function TitleBar({ coreVersion, onMinimize, onClose }: TitleBarProps) {
       {/* 窗口标题绝对居中（macOS 惯例） */}
       <div className="pointer-events-none absolute inset-x-0 flex items-center justify-center gap-2">
         <span className="text-[12.5px] font-medium tracking-wide text-[var(--text)]/85">
-          仓鼠Hub
+          {t('chrome.app.name')}
         </span>
         {coreVersion && (
           <span className="rounded-full border border-[var(--border)] px-2 py-px text-[10px] text-[var(--text-muted)]">
-            核心 v{coreVersion}
+            {t('chrome.titlebar.coreVersion', { v: coreVersion })}
           </span>
         )}
       </div>

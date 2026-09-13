@@ -14,8 +14,11 @@ import { useClock, greetingOf } from '@/features/workbench/hooks';
 import { useWeather, useCountdown, useRecentFiles, useTopApps } from '@/features/dashboard/hooks';
 import { useDateTimeInfo } from '@/features/workbench/hooks';
 import { AppIcon, Monogram } from '@/features/home/AppIcon';
+import { useI18n } from '@/shared/i18n/provider';
 import { commands } from '@/shared/lib/ipc';
 import TodoCard from '@/features/todo/TodoCard';
+import ReminderToast from '@/features/todo/ReminderToast';
+import FocusCard from '@/features/focus/FocusCard';
 import { FileKindIcon } from '@/features/spotlight/FileKindIcon';
 
 /** 工作台：毛玻璃仪表盘（对标水豚hub 工作台，数据全部真实） */
@@ -44,13 +47,20 @@ export default function WorkbenchPage() {
           <CountdownCard />
           <RecentFilesCard />
           <TopAppsCard />
+
+          {/* 第三排：番茄钟(4) */}
+          <FocusCard />
         </div>
       </div>
+
+      {/* 待办到点提醒（后端调度线程 → 应用内浮出） */}
+      <ReminderToast />
     </div>
   );
 }
 
 function ClockCard({ now, lunar }: { now: Date; lunar: string }) {
+  const { t } = useI18n();
   const { time, date } = useDateTimeInfo(now);
   return (
     <section className="card col-span-12 flex min-h-[220px] flex-col justify-center p-6 md:col-span-5">
@@ -61,20 +71,21 @@ function ClockCard({ now, lunar }: { now: Date; lunar: string }) {
       <div className="mt-1 text-[12px] text-white/45">{lunar}</div>
       <div className="mt-4 flex items-center gap-1.5 text-[11px] text-white/50">
         <Sparkles size={12} className="text-[var(--accent)]" />
-        今天也要元气满满哦
+        {t('pages.workbench.motd')}
       </div>
     </section>
   );
 }
 
 function WeatherCard() {
+  const { t } = useI18n();
   const { data: w, isLoading, isError } = useWeather();
   return (
     <section className="card col-span-12 flex min-h-[220px] flex-col p-5 md:col-span-3">
       <header className="flex items-center justify-between text-sm font-medium text-white/90">
         <span className="flex items-center gap-2">
           <CloudSun size={16} className="text-[var(--accent)]" />
-          天气
+          {t('pages.workbench.weather')}
         </span>
         {w && (
           <span className="flex items-center gap-1 text-[11px] text-white/50">
@@ -88,9 +99,9 @@ function WeatherCard() {
           <Loader2 className="mx-auto animate-spin text-white/40" size={22} />
         ) : isError || !w ? (
           <p className="text-center text-xs text-white/45">
-            天气获取失败
+            {t('pages.workbench.weatherError')}
             <br />
-            <span className="text-[10px]">检查网络后自动重试</span>
+            <span className="text-[10px]">{t('pages.workbench.weatherRetry')}</span>
           </p>
         ) : (
           <>
@@ -100,7 +111,7 @@ function WeatherCard() {
             </div>
             <div className="mt-2 text-[13px] text-white/80">{w.kind}</div>
             <div className="mt-1 text-[11px] text-white/50 tabular-nums">
-              最低 {w.temp_min}° · 最高 {w.temp_max}°
+              {t('pages.workbench.tempRange', { min: w.temp_min, max: w.temp_max })}
             </div>
           </>
         )}
@@ -110,16 +121,17 @@ function WeatherCard() {
 }
 
 function CountdownCard() {
+  const { t } = useI18n();
   const { data: items = [] } = useCountdown();
   return (
     <section className="card col-span-12 flex min-h-[190px] flex-col p-5 md:col-span-4">
       <header className="mb-3 flex items-center gap-2 text-sm font-medium text-white/90">
-        <CalendarDays size={16} className="text-[var(--accent)]" />
-        倒数日
+          <CalendarDays size={16} className="text-[var(--accent)]" />
+          {t('pages.workbench.countdown')}
       </header>
       <div className="flex-1 space-y-2.5">
         {items.length === 0 && (
-          <p className="pt-4 text-center text-xs text-white/45">暂无倒数日</p>
+          <p className="pt-4 text-center text-xs text-white/45">{t('pages.workbench.countdownEmpty')}</p>
         )}
         {items.map((it) => (
           <div key={it.title} className="flex items-center justify-between">
@@ -127,7 +139,9 @@ function CountdownCard() {
               {it.emoji} {it.title}
             </span>
             <span className="rounded-full bg-sky-500/20 px-2.5 py-0.5 text-[11px] font-medium text-sky-300 tabular-nums">
-              {it.days === 0 ? '就是今天' : `${it.days} 天`}
+              {it.days === 0
+                ? t('pages.workbench.countdownToday')
+                : t('pages.workbench.countdownDays', { days: it.days })}
             </span>
           </div>
         ))}
@@ -137,21 +151,22 @@ function CountdownCard() {
 }
 
 function RecentFilesCard() {
+  const { t } = useI18n();
   const { data: files = [], isLoading } = useRecentFiles(6);
   return (
     <section className="card col-span-12 flex min-h-[190px] flex-col p-5 md:col-span-4">
       <header className="mb-3 flex items-center justify-between text-sm font-medium text-white/90">
         <span className="flex items-center gap-2">
           <FileClock size={16} className="text-[var(--accent)]" />
-          最近文件
+          {t('pages.workbench.recentFiles')}
         </span>
-        <span className="text-[11px] text-white/45">{files.length} 个</span>
+        <span className="text-[11px] text-white/45">{t('pages.workbench.fileCount', { count: files.length })}</span>
       </header>
       <div className="-mx-1 flex-1 space-y-0.5 overflow-y-auto">
         {isLoading ? (
           <Loader2 className="mx-auto mt-6 animate-spin text-white/40" size={18} />
         ) : files.length === 0 ? (
-          <p className="pt-4 text-center text-xs text-white/45">暂无最近文件</p>
+          <p className="pt-4 text-center text-xs text-white/45">{t('pages.workbench.recentFilesEmpty')}</p>
         ) : (
           files.map((f) => (
             <button
@@ -174,26 +189,27 @@ function RecentFilesCard() {
 }
 
 function TopAppsCard() {
+  const { t } = useI18n();
   const { data: apps = [], isLoading } = useTopApps(8);
   return (
     <section className="card col-span-12 flex min-h-[190px] flex-col p-5 md:col-span-4">
       <header className="mb-3 flex items-center justify-between text-sm font-medium text-white/90">
         <span className="flex items-center gap-2">
           <LayoutGrid size={16} className="text-[var(--accent)]" />
-          常用应用
+          {t('pages.workbench.topApps')}
         </span>
         <span className="flex items-center gap-1 text-[11px] text-white/45">
           <TrendingUp size={11} />
-          按使用频率
+          {t('pages.workbench.byFrequency')}
         </span>
       </header>
       {isLoading ? (
         <Loader2 className="mx-auto mt-6 animate-spin text-white/40" size={18} />
       ) : apps.length === 0 ? (
         <p className="pt-4 text-center text-xs text-white/45">
-          启动几个应用后
+          {t('pages.workbench.topAppsEmptyHint1')}
           <br />
-          这里会显示你的常用榜
+          {t('pages.workbench.topAppsEmptyHint2')}
         </p>
       ) : (
         <div className="grid flex-1 grid-cols-4 content-start justify-items-center gap-y-2 overflow-y-auto">

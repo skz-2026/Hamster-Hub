@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { FlaskConical } from 'lucide-react';
 import { commands, isTauri } from '@/shared/lib/ipc';
+import { useI18n } from '@/shared/i18n/provider';
 
 /**
  * 浏览器预览调试条（仅非 tauri 环境渲染）：模拟桌面模式进出与 Spotlight 热键，
  * 让 /home 与 /spotlight 在浏览器里可完整验证。
  */
 export function WebDebugBar() {
+  const { t } = useI18n();
   const [active, setActive] = useState(false);
   if (isTauri) return null;
 
@@ -23,14 +25,14 @@ export function WebDebugBar() {
   return (
     <div className="fixed bottom-24 left-3 z-[999] flex items-center gap-2 rounded-xl bg-neutral-900/85 px-3 py-2 text-[11px] text-neutral-200 ring-1 ring-white/15 backdrop-blur">
       <FlaskConical size={13} className="text-[#ff8a3d]" />
-      <span className="opacity-70">浏览器预览 · IPC mock</span>
+      <span className="opacity-70">{t('chrome.debug.browserPreview')}</span>
       <button
         onClick={toggle}
         className={`rounded-lg px-2.5 py-1 font-medium transition-colors ${
           active ? 'bg-[#ff8a3d] text-white' : 'bg-white/10 hover:bg-white/20'
         }`}
       >
-        {active ? '退出桌面模式' : '进入桌面模式'}
+        {active ? t('chrome.action.exitDesktop') : t('chrome.action.enterDesktop')}
       </button>
       <a
         href="#/spotlight"

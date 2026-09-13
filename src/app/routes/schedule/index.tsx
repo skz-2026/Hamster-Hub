@@ -12,9 +12,19 @@ import {
   Target,
 } from 'lucide-react';
 import { Solar } from 'lunar-javascript';
+import { useI18n } from '@/shared/i18n/provider';
 import { useNotes, useCountdownCustom } from './hooks';
 
-const WEEK = ['一', '二', '三', '四', '五', '六', '日'];
+/** 周几用字面量 key 数组（周一起始），禁止动态拼 key */
+const WEEK_KEYS = [
+  'pages.weekday.mon',
+  'pages.weekday.tue',
+  'pages.weekday.wed',
+  'pages.weekday.thu',
+  'pages.weekday.fri',
+  'pages.weekday.sat',
+  'pages.weekday.sun',
+] as const;
 
 function fmt(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -22,6 +32,7 @@ function fmt(d: Date) {
 
 /** 日程页：月视图（农历/节日高亮）+ 倒数日管理 + 便签墙 */
 export default function SchedulePage() {
+  const { t } = useI18n();
   const today = new Date();
   const [cursor, setCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const notes = useNotes();
@@ -47,7 +58,7 @@ export default function SchedulePage() {
     <div className="mx-auto max-w-6xl">
       <h1 className="mb-5 flex items-center gap-2 text-xl font-semibold">
         <CalendarDays size={20} className="text-[var(--accent)]" />
-        日程
+        {t('pages.schedule.title')}
       </h1>
 
       <div className="grid grid-cols-12 gap-4">
@@ -55,7 +66,7 @@ export default function SchedulePage() {
         <section className="card col-span-12 p-5 lg:col-span-7">
           <header className="mb-4 flex items-center justify-between">
             <span className="text-[15px] font-medium tabular-nums">
-              {year} 年 {month + 1} 月
+              {t('pages.schedule.monthTitle', { year, month: month + 1 })}
             </span>
             <div className="flex gap-1">
               <NavBtn onClick={() => shift(-1)}>
@@ -65,7 +76,7 @@ export default function SchedulePage() {
                 onClick={() => setCursor(new Date(today.getFullYear(), today.getMonth(), 1))}
                 className="rounded-lg px-2.5 py-1 text-xs text-[var(--text-muted)] transition-colors hover:bg-[var(--hover)]"
               >
-                今月
+                {t('pages.schedule.thisMonth')}
               </button>
               <NavBtn onClick={() => shift(1)}>
                 <ChevronRight size={15} />
@@ -74,9 +85,9 @@ export default function SchedulePage() {
           </header>
 
           <div className="grid grid-cols-7 gap-1 text-center">
-            {WEEK.map((w) => (
-              <div key={w} className="pb-2 text-[11px] text-[var(--text-muted)]">
-                {w}
+            {WEEK_KEYS.map((key) => (
+              <div key={key} className="pb-2 text-[11px] text-[var(--text-muted)]">
+                {t(key)}
               </div>
             ))}
             {cells.map((d, i) => {
@@ -148,6 +159,7 @@ function CountdownManager({
 }: {
   countdown: ReturnType<typeof useCountdownCustom>;
 }) {
+  const { t } = useI18n();
   const [title, setTitle] = useState('');
   const [date, setDate] = useState('');
   const items = countdown.query.data ?? [];
@@ -164,14 +176,14 @@ function CountdownManager({
     <section className="card p-5">
       <header className="mb-3 flex items-center gap-2 text-sm font-medium">
         <Target size={16} className="text-[var(--accent)]" />
-        倒数日
+        {t('pages.schedule.countdown')}
       </header>
 
       <div className="mb-3 flex gap-2">
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="事件名"
+          placeholder={t('pages.schedule.eventPlaceholder')}
           className="h-8 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-transparent px-2.5 text-xs outline-none focus:border-[var(--accent)]"
         />
         <input
@@ -196,7 +208,7 @@ function CountdownManager({
       <div className="space-y-1.5">
         {items.length === 0 && (
           <p className="py-2 text-center text-xs text-[var(--text-muted)]">
-            添加自定义倒数日，月历会自动标出
+            {t('pages.schedule.countdownHint')}
           </p>
         )}
         {items.map((c) => {
@@ -213,7 +225,11 @@ function CountdownManager({
               </span>
               <span className="flex items-center gap-2">
                 <span className="rounded-full bg-sky-500/20 px-2 py-0.5 text-[10.5px] tabular-nums text-sky-300">
-                  {days >= 0 ? (days === 0 ? '今天' : `${days} 天`) : '已过期'}
+                  {days >= 0
+                    ? days === 0
+                      ? t('pages.schedule.today')
+                      : t('pages.schedule.daysLater', { days })
+                    : t('pages.schedule.expired')}
                 </span>
                 <button
                   onClick={() => countdown.remove.mutate(c.id)}
@@ -231,6 +247,7 @@ function CountdownManager({
 }
 
 function NotesBoard({ notes }: { notes: ReturnType<typeof useNotes> }) {
+  const { t } = useI18n();
   const [draft, setDraft] = useState('');
   const [editing, setEditing] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState('');
@@ -247,9 +264,9 @@ function NotesBoard({ notes }: { notes: ReturnType<typeof useNotes> }) {
       <header className="mb-3 flex items-center justify-between text-sm font-medium">
         <span className="flex items-center gap-2">
           <StickyNote size={16} className="text-[var(--accent)]" />
-          便签
+          {t('pages.schedule.notes')}
         </span>
-        <span className="text-[11px] text-[var(--text-muted)]">{list.length} 条</span>
+        <span className="text-[11px] text-[var(--text-muted)]">{t('pages.schedule.noteCount', { count: list.length })}</span>
       </header>
 
       <div className="mb-3 flex gap-2">
@@ -257,7 +274,7 @@ function NotesBoard({ notes }: { notes: ReturnType<typeof useNotes> }) {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && submit()}
-          placeholder="记一条便签"
+          placeholder={t('pages.schedule.notePlaceholder')}
           className="h-8 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-transparent px-2.5 text-xs outline-none focus:border-[var(--accent)]"
         />
         <button
@@ -273,7 +290,7 @@ function NotesBoard({ notes }: { notes: ReturnType<typeof useNotes> }) {
         {notes.query.isLoading ? (
           <Loader2 className="mx-auto mt-3 animate-spin text-[var(--text-muted)]" size={16} />
         ) : list.length === 0 ? (
-          <p className="py-3 text-center text-xs text-[var(--text-muted)]">还没有便签</p>
+          <p className="py-3 text-center text-xs text-[var(--text-muted)]">{t('pages.schedule.notesEmpty')}</p>
         ) : (
           list.map((n) => (
             <div
@@ -302,7 +319,7 @@ function NotesBoard({ notes }: { notes: ReturnType<typeof useNotes> }) {
                     setEditing(n.id);
                     setEditDraft(n.content);
                   }}
-                  title="双击编辑"
+                  title={t('pages.schedule.doubleClickEdit')}
                   className="min-w-0 flex-1 break-words text-[13px]"
                 >
                   {n.content}
@@ -310,12 +327,12 @@ function NotesBoard({ notes }: { notes: ReturnType<typeof useNotes> }) {
               )}
               <span className="flex shrink-0 gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                 <IconBtn
-                  title={n.pinned ? '取消置顶' : '置顶'}
+                  title={n.pinned ? t('pages.schedule.unpin') : t('pages.schedule.pin')}
                   onClick={() => notes.togglePin.mutate({ id: n.id, pinned: !n.pinned })}
                 >
                   {n.pinned ? <PinOff size={12} /> : <Pin size={12} />}
                 </IconBtn>
-                <IconBtn title="删除" onClick={() => notes.remove.mutate(n.id)}>
+                <IconBtn title={t('pages.schedule.delete')} onClick={() => notes.remove.mutate(n.id)}>
                   <Trash2 size={12} />
                 </IconBtn>
               </span>

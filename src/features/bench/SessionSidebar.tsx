@@ -7,6 +7,8 @@
 import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Loader2, Plus, Search, Terminal, X } from 'lucide-react';
 import { benchCommands } from '@/shared/lib/ipc';
+import { useI18n } from '@/shared/i18n/provider';
+import type { TKey, TParams } from '@/shared/i18n/core';
 import type { LiveSessionInfo } from '@/shared/types/bench';
 import type { MySession } from './registry';
 import { removeMySession } from './registry';
@@ -14,12 +16,14 @@ import AgentAvatar from './AgentAvatar';
 import { useAgents, useLiveSessions, useMySessions, createStreamSession } from './hooks';
 import { seedStreamRows } from './stream-registry';
 
-function relTime(ms: number): string {
+type TFn = (key: TKey, params?: TParams) => string;
+
+function relTime(ms: number, t: TFn): string {
   const diff = Date.now() - ms;
-  if (diff < 60_000) return '刚刚';
-  if (diff < 3600_000) return `${Math.floor(diff / 60_000)} 分钟前`;
-  if (diff < 86400_000) return `${Math.floor(diff / 3600_000)} 小时前`;
-  return `${Math.floor(diff / 86400_000)} 天前`;
+  if (diff < 60_000) return t('bench.time.justNow');
+  if (diff < 3600_000) return t('bench.time.minutesAgo', { n: Math.floor(diff / 60_000) });
+  if (diff < 86400_000) return t('bench.time.hoursAgo', { n: Math.floor(diff / 3600_000) });
+  return t('bench.time.daysAgo', { n: Math.floor(diff / 86400_000) });
 }
 
 const normPath = (p: string): string =>
@@ -34,6 +38,7 @@ interface ProjGroup {
 }
 
 function LiveItem({ s, name, active, onClick }: { s: LiveSessionInfo; name: string; active: boolean; onClick: () => void }) {
+  const { t } = useI18n();
   return (
     <button
       onClick={onClick}
@@ -42,14 +47,15 @@ function LiveItem({ s, name, active, onClick }: { s: LiveSessionInfo; name: stri
       <div className="flex items-center gap-1.5">
         <AgentAvatar agentId={s.agentId} size={16} title={name} />
         <span className={`truncate text-[12.5px] font-medium ${s.running ? '' : 'opacity-70'}`}>{name}</span>
-        <span className="ml-auto shrink-0 text-[10.5px] text-white/40">{relTime(s.lastActiveAt)}</span>
+        <span className="ml-auto shrink-0 text-[10.5px] text-[var(--text-muted)]">{relTime(s.lastActiveAt, t)}</span>
       </div>
-      <p className="mt-0.5 truncate pl-[22px] text-[11px] text-white/45">{s.projectDir}</p>
+      <p className="mt-0.5 truncate pl-[22px] text-[11px] text-[var(--text-muted)]">{s.projectDir}</p>
     </button>
   );
 }
 
 function MyItem({ s, name, resuming, onOpen, onRemove }: { s: MySession; name: string; resuming: boolean; onOpen: () => void; onRemove: () => void }) {
+  const { t } = useI18n();
   return (
     <div className="group relative">
       <button
@@ -64,15 +70,15 @@ function MyItem({ s, name, resuming, onOpen, onRemove }: { s: MySession; name: s
           )}
           <span className="truncate text-[12px]">{s.title}</span>
         </div>
-        <p className="mt-0.5 pl-0.5 text-[10px] text-white/35">{relTime(s.lastActiveAt)}</p>
+        <p className="mt-0.5 pl-0.5 text-[10px] text-[var(--text-muted)]">{relTime(s.lastActiveAt, t)}</p>
       </button>
       <button
         onClick={(e) => {
           e.stopPropagation();
           onRemove();
         }}
-        title="从列表移除"
-        className="absolute right-1.5 top-1.5 hidden size-5 place-items-center rounded text-white/40 hover:bg-white/10 hover:text-white group-hover:grid"
+        title={t('bench.sidebar.removeFromList')}
+        className="absolute right-1.5 top-1.5 hidden size-5 place-items-center rounded text-[var(--text-muted)] hover:bg-[var(--hover)] hover:text-[var(--text)] group-hover:grid"
       >
         <X size={11} />
       </button>
@@ -93,6 +99,7 @@ export default function SessionSidebar({
   onNewSession: () => void;
   onOpenRecall: () => void;
 }) {
+  const { t } = useI18n();
   const live = useLiveSessions();
   const my = useMySessions();
   const agents = useAgents();
@@ -185,7 +192,7 @@ export default function SessionSidebar({
     }
     const agent = (agents.query.data ?? []).find((a) => a.id === entry.agent);
     if (!agent?.installed || !agent.streaming) {
-      setError(`${agentName(entry.agent)} 未安装或不支持 GUI 对话`);
+      setError(t('bench.sidebar.error.agentNotCapable', { agent: agentName(entry.agent) }));
       return;
     }
     setResumingKey(entry.id);
@@ -219,48 +226,51 @@ export default function SessionSidebar({
       my.invalidate();
       onResumed(info);
     } catch (e) {
-      setError(`${agentName(entry.agent)} 流式续聊失败（${String(e).replace(/^Error:\s*/, '')}）`);
+      setError(t('bench.sidebar.error.resumeFailed', {
+        agent: agentName(entry.agent),
+        msg: String(e).replace(/^Error:\s*/, ''),
+      }));
     } finally {
       setResumingKey(null);
     }
   };
 
   return (
-    <aside className="flex w-[264px] shrink-0 flex-col border-r border-white/8">
+    <aside className="flex w-[264px] shrink-0 flex-col border-r border-[var(--border)]">
       <div className="flex gap-2 px-3 pb-2 pt-3">
         <button
           onClick={onNewSession}
           className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-[var(--accent)] px-3 py-2 text-[12.5px] font-medium text-white transition-all hover:brightness-110"
         >
           <Plus size={14} strokeWidth={2.4} />
-          新会话
+          {t('bench.sidebar.newSession')}
         </button>
         <button
           onClick={onOpenRecall}
-          title="Recall 全文搜索"
-          className="grid size-9 place-items-center rounded-xl bg-white/8 text-white/70 ring-1 ring-white/10 transition-colors hover:bg-white/15 hover:text-white"
+          title={t('bench.sidebar.recallSearchTitle')}
+          className="grid size-9 place-items-center rounded-xl bg-[var(--panel)] text-[var(--text-muted)] ring-1 ring-[var(--border)] transition-colors hover:bg-[var(--hover)] hover:text-[var(--text)]"
         >
           <Search size={15} />
         </button>
       </div>
 
       <div className="px-3 pb-2">
-        <div className="flex items-center gap-1.5 rounded-xl bg-black/25 px-2.5 py-1.5 ring-1 ring-white/8 focus-within:ring-white/20">
-          <Search size={12} className="shrink-0 text-white/35" />
+        <div className="flex items-center gap-1.5 rounded-xl bg-[var(--panel-strong)] px-2.5 py-1.5 ring-1 ring-[var(--border)] focus-within:ring-[var(--accent)]/40">
+          <Search size={12} className="shrink-0 text-[var(--text-muted)]" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="搜索会话…"
-            className="w-full bg-transparent text-[12px] text-white outline-none placeholder:text-white/35"
+            placeholder={t('bench.sidebar.searchPlaceholder')}
+            className="w-full bg-transparent text-[12px] text-[var(--text)] outline-none placeholder:text-[var(--text-muted)]"
           />
         </div>
       </div>
 
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 pb-3">
         <section>
-          <p className="flex items-center gap-1.5 px-1 pb-1.5 text-[11px] font-medium uppercase tracking-wide text-white/40">
+          <p className="flex items-center gap-1.5 px-1 pb-1.5 text-[11px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
             <Terminal size={11} />
-            活会话
+            {t('bench.sidebar.liveSessions')}
           </p>
           <div className="space-y-0.5">
             {liveSessions.map((s) => (
@@ -272,13 +282,13 @@ export default function SessionSidebar({
                 onClick={() => onSelectSession(s)}
               />
             ))}
-            {liveSessions.length === 0 && <p className="px-1 py-1.5 text-[11.5px] text-white/35">暂无进行中的会话</p>}
+            {liveSessions.length === 0 && <p className="px-1 py-1.5 text-[11.5px] text-[var(--text-muted)]">{t('bench.sidebar.noLiveSessions')}</p>}
           </div>
         </section>
 
         <section>
-          <p className="flex items-center gap-1.5 px-1 pb-1.5 text-[11px] font-medium uppercase tracking-wide text-white/40">
-            会话（按项目）
+          <p className="flex items-center gap-1.5 px-1 pb-1.5 text-[11px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
+            {t('bench.sidebar.sessionsByProject')}
           </p>
           <div className="space-y-1">
             {groups.map((g) => {
@@ -289,12 +299,12 @@ export default function SessionSidebar({
                     onClick={() => toggleGroup(g)}
                     className="flex w-full items-center gap-1.5 rounded-lg px-1.5 py-1.5 text-left transition-colors hover:bg-[var(--hover)]"
                   >
-                    {open ? <ChevronDown size={12} className="shrink-0 text-white/45" /> : <ChevronRight size={12} className="shrink-0 text-white/45" />}
-                    <span className="truncate text-[12px] font-medium text-white/80">{g.name}</span>
-                    <span className="ml-auto shrink-0 text-[10px] text-white/35">{g.sessions.length}</span>
+                    {open ? <ChevronDown size={12} className="shrink-0 text-[var(--text-muted)]" /> : <ChevronRight size={12} className="shrink-0 text-[var(--text-muted)]" />}
+                    <span className="truncate text-[12px] font-medium text-[var(--text)]">{g.name}</span>
+                    <span className="ml-auto shrink-0 text-[10px] text-[var(--text-muted)]">{g.sessions.length}</span>
                   </button>
                   {open && (
-                    <div className="ml-2 border-l border-white/8 pl-1.5">
+                    <div className="ml-2 border-l border-[var(--border)] pl-1.5">
                       {g.sessions.map((s) => (
                         <MyItem
                           key={s.id}
@@ -312,16 +322,16 @@ export default function SessionSidebar({
                 </div>
               );
             })}
-            {my.query.isLoading && <p className="px-1 py-2 text-[11.5px] text-white/35">加载中…</p>}
+            {my.query.isLoading && <p className="px-1 py-2 text-[11.5px] text-[var(--text-muted)]">{t('bench.common.loading')}</p>}
             {!my.query.isLoading && groups.length === 0 && (
-              <p className="px-1 py-2 text-[11.5px] leading-relaxed text-white/35">
-                {q ? '没有匹配的会话' : '还没有会话——从上方发起第一段对话'}
+              <p className="px-1 py-2 text-[11.5px] leading-relaxed text-[var(--text-muted)]">
+                {q ? t('bench.sidebar.noMatch') : t('bench.sidebar.empty')}
               </p>
             )}
           </div>
         </section>
 
-        {error && <p className="px-1 text-[11.5px] leading-relaxed text-red-300">{error}</p>}
+        {error && <p className="px-1 text-[11.5px] leading-relaxed text-red-500">{error}</p>}
       </div>
     </aside>
   );

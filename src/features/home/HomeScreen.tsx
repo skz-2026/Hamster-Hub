@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, X, Check, Palette, Loader2, SquarePlus } from 'lucide-react';
 import { commands, events, type AppEntry } from '@/shared/lib/ipc';
+import { useI18n } from '@/shared/i18n/provider';
 import { useApps, useHomeLayout } from './hooks';
 import {
   AppIcon,
@@ -19,6 +20,7 @@ import {
   mergeIntoFolder,
   moveAcrossPages,
   moveToDock,
+  nextWallpaperId,
   pluginIdOf,
   pluginWidgetRefOf,
   rawAppKey,
@@ -27,12 +29,13 @@ import {
   reorder,
   removeFromDock,
   removeFromPage,
-  WIDGET_LABEL,
+  resolveWallpaper,
+  TASKBAR_H_PX,
   WIDGET_TYPES,
-  WALLPAPERS,
   type HomeLayout,
   type WidgetType,
 } from './layout';
+import { WallpaperLayer } from './WallpaperLayer';
 
 const LONG_PRESS_MS = 450;
 const MERGE_HOVER_MS = 550;
@@ -47,6 +50,7 @@ interface DragState {
 
 export default function HomeScreen() {
   const navigate = useNavigate();
+  const { t, lang } = useI18n();
   const plugins = usePluginList();
   const { data: apps = [], isLoading } = useApps();
   const { layout, commit, ready } = useHomeLayout(apps);
@@ -71,7 +75,7 @@ export default function HomeScreen() {
   const mergedRef = useRef(false);
   const wheelLockRef = useRef(0);
 
-  const now = useClockMinute();
+  const now = useClockMinute(lang);
 
   // 页面重载/热更新后与 Rust 侧状态对齐：桌面模式已关则退回工作台
   useEffect(() => {
@@ -280,13 +284,20 @@ export default function HomeScreen() {
   const removeDock = (idx: number) => commit(removeFromDock(layout, idx));
 
   const cycleWallpaper = () => {
-    const ids = Object.keys(WALLPAPERS);
-    const next = ids[(ids.indexOf(layout.wallpaper) + 1) % ids.length];
-    commit({ ...layout, wallpaper: next });
+    commit({ ...layout, wallpaper: nextWallpaperId(layout.wallpaper) });
   };
 
   // ===== 渲染 =====
-  const wallpaper = WALLPAPERS[layout.wallpaper] ?? WALLPAPERS.hamster;
+  // 小组件类型 → i18n 标签（显式映射，禁止拼 key）
+  const widgetLabel: Record<WidgetType, string> = {
+    clock: t('home.widget.clock'),
+    weather: t('home.widget.weather'),
+    todo: t('home.widget.todo'),
+    countdown: t('home.widget.countdown'),
+    sysinfo: t('home.widget.sysinfo'),
+    taskmgr: t('home.widget.taskmgr'),
+  };
+  const wallpaper = resolveWallpaper(layout);
   const q = query.trim().toLowerCase();
   const results = q ? apps.filter((a) => a.display_name.toLowerCase().includes(q)) : [];
   const folder = openFolder ? layout.folders[openFolder] : null;
@@ -297,6 +308,18 @@ export default function HomeScreen() {
       style={{ background: wallpaper.css }}
       onContextMenu={(e) => e.preventDefault()}
     >
+      {/* 接管模式：布局容器止于任务栏上沿（底部 68px 由置顶 taskbar 窗覆盖），
+          壁纸/dock/圆点都以这条线为底，不再伸到任务栏背后被遮挡 */}
+      <div
+        className="relative w-full overflow-hidden"
+        style={{
+          height: takeover ? `calc(100% - ${TASKBAR_H_PX}px)` : '100%',
+          background: wallpaper.css,
+        }}
+      >
+      {/* 图片壁纸层（渐变壁纸不渲染；自定义图片经 asset protocol） */}
+      <WallpaperLayer wallpaper={wallpaper} />
+
       {/* 顶部状态栏：时间 | 搜索 | 编辑/壁纸/退出 */}
       <header className="absolute inset-x-0 top-0 z-20 flex items-center gap-3 px-6 pt-4">
         <div className="w-32 text-left">
@@ -313,7 +336,7 @@ export default function HomeScreen() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索应用"
+            placeholder={t('home.search.placeholder')}
             className="ios-ease h-9 w-full rounded-full bg-white/18 pl-9 pr-8 text-[13px] text-white placeholder:text-white/55 backdrop-blur-xl outline-none ring-1 ring-white/15 focus:bg-white/26"
           />
           {query && (
@@ -328,27 +351,27 @@ export default function HomeScreen() {
 
         <div className="flex w-32 items-center justify-end gap-1.5">
           {edit && (
-            <IconBtn title="切换壁纸" onClick={cycleWallpaper}>
+            <IconBtn title={t('home.action.cycleWallpaper')} onClick={cycleWallpaper}>
               <Palette size={15} />
             </IconBtn>
           )}
           {edit && (
             <div className="relative">
-              <IconBtn title="添加小组件" onClick={() => setWidgetMenu((v) => !v)}>
+              <IconBtn title={t('home.action.addWidget')} onClick={() => setWidgetMenu((v) => !v)}>
                 <SquarePlus size={15} />
               </IconBtn>
               {widgetMenu && (
                 <div className="absolute right-0 top-9 z-30 w-28 rounded-xl bg-neutral-900/90 p-1 ring-1 ring-white/15 backdrop-blur-xl">
-                  {WIDGET_TYPES.map((t) => (
+                  {WIDGET_TYPES.map((w) => (
                     <button
-                      key={t}
+                      key={w}
                       onClick={() => {
-                        commit(addWidget(layout, t as WidgetType));
+                        commit(addWidget(layout, w as WidgetType));
                         setWidgetMenu(false);
                       }}
                       className="block w-full rounded-lg px-3 py-1.5 text-left text-xs text-white/90 transition-colors hover:bg-white/10"
                     >
-                      {WIDGET_LABEL[t]}
+                      {widgetLabel[w]}
                     </button>
                   ))}
                   {(plugins.data ?? []).length > 0 && (
@@ -372,20 +395,20 @@ export default function HomeScreen() {
               )}
             </div>
           )}
-          <IconBtn title={edit ? '完成' : '长按图标整理主屏'} onClick={() => setEdit((v) => !v)}>
-            {edit ? <Check size={15} /> : <span className="text-[11px]">整理</span>}
+          <IconBtn title={edit ? t('home.action.done') : t('home.action.arrangeHint')} onClick={() => setEdit((v) => !v)}>
+            {edit ? <Check size={15} /> : <span className="text-[11px]">{t('home.action.arrange')}</span>}
           </IconBtn>
           {!edit && (
-            <IconBtn title="返回桌面" onClick={() => navigate('/desktop')}>
-              <span className="text-[11px]">桌面</span>
+            <IconBtn title={t('home.action.backToDesktop')} onClick={() => navigate('/desktop')}>
+              <span className="text-[11px]">{t('home.nav.desktop')}</span>
             </IconBtn>
           )}
           {!edit && (
             <IconBtn
-              title="退出桌面模式"
+              title={t('home.action.exitDesktopMode')}
               onClick={() => commands.desktopModeExit().catch(console.error)}
             >
-              <span className="text-[11px]">退出</span>
+              <span className="text-[11px]">{t('home.nav.exit')}</span>
             </IconBtn>
           )}
         </div>
@@ -407,13 +430,13 @@ export default function HomeScreen() {
         {isLoading || !ready ? (
           <div className="grid w-full place-items-center gap-2 text-white/80">
             <Loader2 className="animate-spin" size={22} />
-            <span className="text-[13px]">正在索引本机应用…</span>
+            <span className="text-[13px]">{t('home.loading.indexing')}</span>
           </div>
         ) : layout.pages.length === 1 && layout.pages[0].length === 0 ? (
           <div className="grid w-full place-items-center text-white/70">
             <div className="flex flex-col items-center gap-3">
-              <Monogram name="仓" size={64} />
-              <span className="text-[13px]">没有找到可显示的应用</span>
+              <Monogram name={t('home.empty.monogram')} size={64} />
+              <span className="text-[13px]">{t('home.empty.noApps')}</span>
             </div>
           </div>
         ) : (
@@ -447,7 +470,7 @@ export default function HomeScreen() {
                         {edit && (
                           <button
                             onClick={() => removeSlot(pi, idx)}
-                            title="移除小组件"
+                            title={t('home.action.removeWidget')}
                             className="absolute -left-1.5 -top-1.5 grid size-5 place-items-center rounded-full bg-neutral-900/85 text-[11px] text-white"
                           >
                             ✕
@@ -503,14 +526,14 @@ export default function HomeScreen() {
       {layout.pages.length > 1 && !q && (
         <div
           className={`absolute inset-x-0 z-10 flex justify-center gap-2 ${
-            takeover ? 'bottom-[178px]' : 'bottom-[118px]'
+            takeover ? 'bottom-[110px]' : 'bottom-[118px]'
           }`}
         >
           {layout.pages.map((_, i) => (
             <button
               key={i}
               onClick={() => scrollToPage(i)}
-              aria-label={`第 ${i + 1} 页`}
+              aria-label={t('home.pageN', { n: i + 1 })}
               className={`size-[7px] rounded-full transition-colors ${
                 i === pageIdx ? 'bg-white' : 'bg-white/35 hover:bg-white/60'
               }`}
@@ -519,11 +542,10 @@ export default function HomeScreen() {
         </div>
       )}
 
-      {/* Dock */}
-      {/* Dock：接管模式下整体抬到任务栏条上沿之上（条高 68 + 16 间距 = 84） */}
+      {/* Dock：接管模式下贴布局容器底（任务栏条上沿再留 16px 间距） */}
       <div
         className={`absolute inset-x-0 z-20 flex justify-center ${
-          takeover ? 'bottom-[84px]' : 'bottom-6'
+          takeover ? 'bottom-4' : 'bottom-6'
         }`}
       >
         <div
@@ -553,7 +575,7 @@ export default function HomeScreen() {
             );
           })}
           {layout.dock.length === 0 && (
-            <span className="px-2 text-[11.5px] text-white/60">拖入常用应用</span>
+            <span className="px-2 text-[11.5px] text-white/60">{t('home.dock.dropHint')}</span>
           )}
         </div>
       </div>
@@ -599,7 +621,7 @@ export default function HomeScreen() {
       {q && (
         <div className="absolute inset-x-0 top-16 bottom-44 z-30 overflow-y-auto px-16 pt-4">
           {results.length === 0 ? (
-            <p className="mt-10 text-center text-[13px] text-white/70">没有匹配「{query}」的应用</p>
+            <p className="mt-10 text-center text-[13px] text-white/70">{t('home.search.noMatch', { query })}</p>
           ) : (
             <div className="grid grid-cols-7 justify-items-center gap-y-6">
               {results.map((a) => (
@@ -617,6 +639,7 @@ export default function HomeScreen() {
           )}
         </div>
       )}
+      </div>
     </div>
   );
 
@@ -694,15 +717,15 @@ function DragGhost({
   );
 }
 
-/** 分钟级时钟（状态栏） */
-function useClockMinute() {
+/** 分钟级时钟（状态栏）；日期跟随界面语言 */
+function useClockMinute(lang: ReturnType<typeof useI18n>['lang']) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 10_000);
     return () => clearInterval(t);
   }, []);
   const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  const date = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(now);
+  const date = new Intl.DateTimeFormat(lang, { month: 'long', day: 'numeric', weekday: 'long' }).format(now);
   return { time, date };
 }
 

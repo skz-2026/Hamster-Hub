@@ -9,9 +9,11 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Copy, Eye, EyeOff, Loader2, RefreshCw } from 'lucide-react';
 import { commands } from '@/shared/lib/ipc';
+import { useI18n } from '@/shared/i18n/provider';
 
 export default function McpSyncCard() {
   const qc = useQueryClient();
+  const { t } = useI18n();
   const access = useQuery({ queryKey: ['agent-mcp-access'], queryFn: () => commands.agentMcpAccessInfo() });
   const status = useQuery({ queryKey: ['agent-mcp-status'], queryFn: () => commands.agentMcpStatus() });
   const [revealed, setRevealed] = useState(false);
@@ -41,19 +43,18 @@ export default function McpSyncCard() {
 
   return (
     <section className="card px-4 py-3.5">
-      <div className="text-sm font-medium">桌面 MCP · 分发到 Agent</div>
+      <div className="text-sm font-medium">{t('agent.mcpCardTitle')}</div>
       <div className="mt-0.5 text-xs leading-relaxed text-[var(--text-muted)]">
-        把仓鼠Hub 的桌面能力（应用/文件/待办/音量/浏览器/屏幕）按标准 MCP 配置写入指定
-        agent——开启即生效，移除即摘除；写入前自动备份，可回滚。
+        {t('agent.mcpCardDesc')}
       </div>
 
       {/* 接入信息 */}
-      <div className="mt-3 space-y-1.5 rounded-xl bg-black/20 p-3 font-mono text-[11px] leading-relaxed">
+      <div className="mt-3 space-y-1.5 rounded-xl bg-[var(--panel-strong)] p-3 font-mono text-[11px] leading-relaxed">
         <div className="flex items-center justify-between gap-2">
           <span className="shrink-0 text-[var(--text-muted)]">URL</span>
           <button
             onClick={() => copy(access.data?.url ?? '')}
-            title="复制 URL"
+            title={t('agent.copyUrl')}
             className="truncate text-left text-[var(--text)] underline-offset-2 hover:underline"
           >
             {access.data?.url ?? '…'}
@@ -65,15 +66,15 @@ export default function McpSyncCard() {
             <span className="truncate">
               {revealed ? access.data?.token : '••••••••-••••-••••'}
             </span>
-            <button onClick={() => setRevealed((v) => !v)} className="shrink-0 text-[var(--text-muted)] hover:text-[var(--text)]" aria-label="显示/隐藏令牌">
+            <button onClick={() => setRevealed((v) => !v)} className="shrink-0 text-[var(--text-muted)] hover:text-[var(--text)]" aria-label={t('agent.toggleToken')}>
               {revealed ? <EyeOff size={12} /> : <Eye size={12} />}
             </button>
-            <button onClick={() => copy(access.data?.token ?? '')} className="shrink-0 text-[var(--text-muted)] hover:text-[var(--text)]" aria-label="复制令牌">
+            <button onClick={() => copy(access.data?.token ?? '')} className="shrink-0 text-[var(--text-muted)] hover:text-[var(--text)]" aria-label={t('agent.copyToken')}>
               <Copy size={12} />
             </button>
             <button
               onClick={regenerate}
-              title="重新生成（旧令牌立即失效，已分发配置需更新）"
+              title={t('agent.regenerateToken')}
               className="shrink-0 text-[var(--text-muted)] hover:text-[var(--accent)]"
             >
               <RefreshCw size={12} />
@@ -82,9 +83,8 @@ export default function McpSyncCard() {
         </div>
       </div>
       {access.data?.portFellBack && (
-        <p className="mt-2 text-[11px] leading-relaxed text-amber-300">
-          首选端口 {access.data.defaultPort} 被占用，本次回退随机端口——已分发配置里的 URL
-          暂不可用，释放端口后重启应用即可恢复。
+        <p className="mt-2 text-[11px] leading-relaxed text-amber-500">
+          {t('agent.portFallback', { port: access.data.defaultPort })}
         </p>
       )}
 
@@ -92,11 +92,11 @@ export default function McpSyncCard() {
       <div className="mt-3 space-y-1">
         {agents.length === 0 && (
           <p className="text-xs text-[var(--text-muted)]">
-            未检测到支持 MCP 分发的 agent（安装 Claude Code / Codex 等后自动出现）。
+            {t('agent.noAgents')}
           </p>
         )}
         {agents.map((a) => (
-          <div key={a.agentId} className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-white/[0.04]">
+          <div key={a.agentId} className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-[var(--hover)]">
             <div className="min-w-0">
               <span className="text-[12.5px] text-[var(--text)]">{a.agentName}</span>
               <span className="ml-2 truncate text-[10.5px] text-[var(--text-muted)]">{a.configPath}</span>
@@ -104,7 +104,7 @@ export default function McpSyncCard() {
             {busyId === a.agentId ? (
               <Loader2 size={14} className="shrink-0 animate-spin text-[var(--text-muted)]" />
             ) : (
-              <MiniSwitch checked={a.enabled} onChange={(v) => toggle(a.agentId, v)} label={`分发桌面 MCP 到 ${a.agentName}`} />
+              <MiniSwitch checked={a.enabled} onChange={(v) => toggle(a.agentId, v)} label={t('agent.distributeTo', { name: a.agentName })} />
             )}
           </div>
         ))}

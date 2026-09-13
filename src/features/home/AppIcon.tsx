@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { Folder } from 'lucide-react';
+import { useI18n } from '@/shared/i18n/provider';
 
 /** data:URL（mock 层）直通，本地图标路径经 tauri asset 协议转换 */
 function iconSrc(iconPath: string): string {
@@ -61,6 +62,7 @@ export function AppIcon({
   dragging,
   className,
 }: AppIconProps) {
+  const { t } = useI18n();
   return (
     <button
       type="button"
@@ -91,7 +93,7 @@ export function AppIcon({
         {onRemove && (
           <span
             role="button"
-            aria-label="移除"
+            aria-label={t('home.action.remove')}
             onClick={(e) => {
               e.stopPropagation();
               onRemove();
@@ -137,6 +139,7 @@ export function FolderIcon({
   mergeHint?: boolean;
   dragging?: boolean;
 }) {
+  const { t } = useI18n();
   const preview = iconPaths.slice(0, 4);
   return (
     <button
@@ -177,7 +180,7 @@ export function FolderIcon({
         {onRemove && (
           <span
             role="button"
-            aria-label="删除文件夹"
+            aria-label={t('home.action.deleteFolder')}
             onClick={(e) => {
               e.stopPropagation();
               onRemove();

@@ -7,6 +7,7 @@ import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { AssistantRuntimeProvider, useExternalStoreRuntime, type AppendMessage } from '@assistant-ui/react';
 import { Bot, SquareStack } from 'lucide-react';
 import { benchCommands } from '@/shared/lib/ipc';
+import { useI18n } from '@/shared/i18n/provider';
 import type { LiveSessionInfo } from '@/shared/types/bench';
 import ChatThread from './ChatThread';
 import TerminalView from './TerminalView';
@@ -29,6 +30,7 @@ export default function ChatSessionView({
   composerHost?: HTMLElement | null;
   composerPlaceholder?: string;
 }) {
+  const { t } = useI18n();
   const isPty = session.channel === 'pty';
   const sid = session.sessionId;
   // 版本号订阅：任何流式事件（含 turnStarted 等无行变更事件）都驱动重渲染
@@ -56,31 +58,31 @@ export default function ChatSessionView({
   return (
     <div className="flex h-full flex-col">
       {/* 会话头部 */}
-      <header className="flex shrink-0 items-center gap-2.5 border-b border-white/8 px-5 py-3">
-        <span className="grid size-8 place-items-center rounded-lg bg-[var(--accent-weak)] ring-1 ring-white/10">
+      <header className="flex shrink-0 items-center gap-2.5 border-b border-[var(--border)] px-5 py-3">
+        <span className="grid size-8 place-items-center rounded-lg bg-[var(--accent-weak)] ring-1 ring-[var(--border)]">
           <Bot size={15} className="text-[var(--accent)]" />
         </span>
         <div className="min-w-0">
           <p className="truncate text-[13px] font-medium leading-tight">
             {agentName}
-            {isPty && <span className="ml-2 rounded bg-white/8 px-1.5 py-0.5 text-[10px] text-white/50">TUI</span>}
+            {isPty && <span className="ml-2 rounded bg-[var(--panel)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">TUI</span>}
           </p>
-          <p className="truncate text-[11px] text-white/45">{session.projectDir}</p>
+          <p className="truncate text-[11px] text-[var(--text-muted)]">{session.projectDir}</p>
         </div>
         <div className="ml-auto flex items-center gap-2">
           {running && (
             <span className="flex items-center gap-1.5 rounded-full bg-[var(--accent-weak)] px-2.5 py-1 text-[11px] text-[var(--accent)]">
               <span className="size-1.5 animate-pulse rounded-full bg-[var(--accent)]" />
-              运行中
+              {t('bench.chat.running')}
             </span>
           )}
           <button
             onClick={onKill}
-            title="结束会话"
-            className="flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1.5 text-[11.5px] text-white/70 ring-1 ring-white/10 transition-colors hover:bg-red-400/15 hover:text-red-200"
+            title={t('bench.chat.endSessionTitle')}
+            className="flex items-center gap-1.5 rounded-full bg-[var(--panel)] px-3 py-1.5 text-[11.5px] text-[var(--text-muted)] ring-1 ring-[var(--border)] transition-colors hover:bg-red-500/15 hover:text-red-500"
           >
             <SquareStack size={12} />
-            结束
+            {t('bench.chat.end')}
           </button>
         </div>
       </header>

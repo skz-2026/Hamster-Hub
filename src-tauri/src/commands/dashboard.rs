@@ -11,7 +11,7 @@ use crate::AppState;
 #[specta::specta]
 pub async fn weather_get(state: State<'_, AppState>) -> Result<weather::WeatherNow, AppError> {
     let now = weather::now_secs();
-    let (city, db_path) = {
+    let (city, lang, db_path) = {
         let conn = state
             .db
             .lock()
@@ -22,12 +22,12 @@ pub async fn weather_get(state: State<'_, AppState>) -> Result<weather::WeatherN
         } else {
             s.weather.city_id.clone()
         };
-        (city, state.db_path.clone())
+        (city, s.behavior.language, state.db_path.clone())
     };
     // 阻塞段：TTL 内的新鲜缓存直接返回
     let fresh = {
         let conn = crate::store::db::open_at(&db_path)?;
-        weather::cache_fresh(&conn, &city, now)
+        weather::cache_fresh(&conn, &city, now, &lang)
     };
     if let Some(w) = fresh {
         return Ok(w);
@@ -38,12 +38,12 @@ pub async fn weather_get(state: State<'_, AppState>) -> Result<weather::WeatherN
     let conn = crate::store::db::open_at(&db_path)?;
     match raw {
         Some(raw) => {
-            let w = weather::parse_forecast(&city, &raw, weather::now_secs())
+            let w = weather::parse_forecast(&city, &raw, weather::now_secs(), &lang)
                 .ok_or_else(|| AppError::new("NET", "天气响应解析失败"))?;
             weather::cache_write(&conn, &city, &raw)?;
             Ok(w)
         }
-        None => weather::cache_stale(&conn, &city)
+        None => weather::cache_stale(&conn, &city, &lang)
             .ok_or_else(|| AppError::new("NET", format!("天气获取失败且无缓存: {city}"))),
     }
 }

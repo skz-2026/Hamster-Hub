@@ -19,20 +19,65 @@ pub struct WeatherNow {
     pub fetched_at: u32,
 }
 
-/// WMO weather code → (文案, emoji)
-pub fn describe_code(code: i64) -> (&'static str, &'static str) {
+/// WMO weather code → emoji（各语言共用）
+fn emoji_of(code: i64) -> &'static str {
     match code {
-        0 => ("晴", "☀️"),
-        1 => ("晴间多云", "🌤️"),
-        2 => ("多云", "⛅"),
-        3 => ("阴", "☁️"),
-        45 | 48 => ("雾", "🌫️"),
-        51..=57 => ("毛毛雨", "🌦️"),
-        61..=67 | 80..=82 => ("雨", "🌧️"),
-        71..=77 | 85 | 86 => ("雪", "🌨️"),
-        95..=99 => ("雷阵雨", "⛈️"),
-        _ => ("未知", "🌡️"),
+        0 => "☀️",
+        1 => "🌤️",
+        2 => "⛅",
+        3 => "☁️",
+        45 | 48 => "🌫️",
+        51..=57 => "🌦️",
+        61..=67 | 80..=82 => "🌧️",
+        71..=77 | 85 | 86 => "🌨️",
+        95..=99 => "⛈️",
+        _ => "🌡️",
     }
+}
+
+/// WMO weather code → (文案, emoji)；文案随界面语言（settings.behavior.language）
+pub fn describe_code(code: i64, lang: &str) -> (&'static str, &'static str) {
+    let text = if lang == "en" {
+        match code {
+            0 => "Clear",
+            1 => "Partly cloudy",
+            2 => "Cloudy",
+            3 => "Overcast",
+            45 | 48 => "Fog",
+            51..=57 => "Drizzle",
+            61..=67 | 80..=82 => "Rain",
+            71..=77 | 85 | 86 => "Snow",
+            95..=99 => "Thunderstorm",
+            _ => "Unknown",
+        }
+    } else if lang == "zh-TW" {
+        match code {
+            0 => "晴",
+            1 => "晴時多雲",
+            2 => "多雲",
+            3 => "陰天",
+            45 | 48 => "霧",
+            51..=57 => "毛毛雨",
+            61..=67 | 80..=82 => "雨",
+            71..=77 | 85 | 86 => "雪",
+            95..=99 => "雷雨",
+            _ => "未知",
+        }
+    } else {
+        match code {
+            0 => "晴",
+            1 => "晴间多云",
+            2 => "多云",
+            3 => "阴",
+            45 | 48 => "雾",
+            51..=57 => "毛毛雨",
+            61..=67 | 80..=82 => "雨",
+            71..=77 | 85 | 86 => "雪",
+            95..=99 => "雷阵雨",
+            _ => "未知",
+        }
+    };
+    (text, emoji_of(code))
 }
 
 pub const CACHE_TTL: u32 = 30 * 60;
@@ -44,13 +89,13 @@ pub fn now_secs() -> u32 {
         .unwrap_or(0)
 }
 
-/// 解析 Open-Meteo forecast 原始响应（纯函数，可测）
-pub fn parse_forecast(city: &str, v: &Value, fetched_at: u32) -> Option<WeatherNow> {
+/// 解析 Open-Meteo forecast 原始响应（纯函数，可测）；lang 来自 settings.behavior.language
+pub fn parse_forecast(city: &str, v: &Value, fetched_at: u32, lang: &str) -> Option<WeatherNow> {
     let current = v.get("current")?;
     let daily = v.get("daily")?;
     let temp = current.get("temperature_2m")?.as_f64()? as i32;
     let code = current.get("weather_code")?.as_i64()?;
-    let (kind, emoji) = describe_code(code);
+    let (kind, emoji) = describe_code(code, lang);
     let temp_min = daily.get("temperature_2m_min")?.get(0)?.as_f64()? as i32;
     let temp_max = daily.get("temperature_2m_max")?.get(0)?.as_f64()? as i32;
     Some(WeatherNow {
@@ -78,16 +123,16 @@ fn cache_read(conn: &Connection, city: &str) -> Option<(Value, u32)> {
 }
 
 /// 新鲜缓存（TTL 内）；供 async 命令在 await 前调用
-pub fn cache_fresh(conn: &Connection, city: &str, now: u32) -> Option<WeatherNow> {
+pub fn cache_fresh(conn: &Connection, city: &str, now: u32, lang: &str) -> Option<WeatherNow> {
     let (raw, at) = cache_read(conn, city)?;
     (now.saturating_sub(at) < CACHE_TTL).then_some(())?;
-    parse_forecast(city, &raw, at)
+    parse_forecast(city, &raw, at, lang)
 }
 
 /// 过期缓存兜底；供 async 命令在 await 后调用
-pub fn cache_stale(conn: &Connection, city: &str) -> Option<WeatherNow> {
+pub fn cache_stale(conn: &Connection, city: &str, lang: &str) -> Option<WeatherNow> {
     let (raw, at) = cache_read(conn, city)?;
-    parse_forecast(city, &raw, at)
+    parse_forecast(city, &raw, at, lang)
 }
 
 pub fn cache_write(conn: &Connection, city: &str, raw: &Value) -> Result<(), AppError> {

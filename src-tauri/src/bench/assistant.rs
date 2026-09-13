@@ -431,11 +431,17 @@ pub fn bench_assistant_create(
             (!e.is_empty()).then(|| e.to_string())
         });
     let adapter = ctx.registry.get(&agent_id).map_err(bench_err)?;
-    let spec = adapter.runtime().ok_or_else(|| {
+    let mut spec = adapter.runtime().ok_or_else(|| {
         bench_err(hamster_core::HamsterError::Unsupported(format!(
             "{agent_id} 暂不支持内嵌对话"
         )))
     })?;
+    // 用户手动指定的 CLI 路径优先于自动探测（设置 → Agent；失效路径静默回退）
+    if let Some(p) = settings.agent.cli_paths.get(&agent_id) {
+        if std::path::Path::new(p).is_file() {
+            spec.program = p.clone();
+        }
+    }
     let channel = spec.structured.clone().ok_or_else(|| {
         bench_err(hamster_core::HamsterError::Unsupported(format!(
             "{agent_id} 暂不支持结构化流式通道"

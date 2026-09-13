@@ -7,4 +7,5 @@ pub mod snapshot;
 pub mod taskbar;
 pub mod tray;
 pub mod volume;
+pub mod wind_guard;
 pub mod workarea;

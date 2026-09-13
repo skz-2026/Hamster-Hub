@@ -22,6 +22,12 @@ pub trait AgentAdapter: Send + Sync {
     /// 是否已安装（只读探测，不运行任何外部命令）。
     fn detect(&self) -> Option<InstallInfo>;
 
+    /// 本机可解析的 CLI 程序路径（设置页展示与手动指定路径的对照基线；
+    /// None = 未探测到）。多版本共存时为按版本择优的结果。
+    fn program_hint(&self) -> Option<String> {
+        None
+    }
+
     /// 能力声明，必须如实。
     fn capabilities(&self) -> Caps;
 

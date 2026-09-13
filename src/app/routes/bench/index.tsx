@@ -68,7 +68,7 @@ export default function BenchPage() {
   };
 
   return (
-    <div className="relative flex h-full overflow-hidden rounded-2xl bg-[#1a191d] text-white">
+    <div className="relative flex h-full overflow-hidden rounded-2xl bg-[var(--bg)] text-[var(--text)]">
       <SessionSidebar
         activeSessionId={view.kind === 'chat' ? view.uid : null}
         onSelectSession={openOrActivate}

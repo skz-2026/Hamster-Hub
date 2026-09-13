@@ -24,6 +24,14 @@ async settingsLoad() : Promise<Settings> {
 async settingsSave(settings: Settings) : Promise<Settings> {
     return await TAURI_INVOKE("settings_save", { settings });
 },
+/**
+ * 手动指定 Agent CLI 程序路径（设置 → Agent；绿色版/自拷贝 CLI 未上 PATH 时用）。
+ * 先校验再落库：agent id 必须在注册表内、路径必须是存在的文件；`path = None` 清除。
+ * 生效点：扫描（installed/program）与启动（覆盖自动探测的最高版本结果）。
+ */
+async agentCliPathSet(agentId: string, path: string | null) : Promise<Partial<{ [key in string]: string }>> {
+    return await TAURI_INVOKE("agent_cli_path_set", { agentId, path });
+},
 async kvGet(key: string) : Promise<string | null> {
     return await TAURI_INVOKE("kv_get", { key });
 },
@@ -38,6 +46,15 @@ async windowSetPinned(pinned: boolean) : Promise<null> {
 },
 async openUrl(url: string) : Promise<null> {
     return await TAURI_INVOKE("open_url", { url });
+},
+/**
+ * 导入自定义主屏壁纸：校验图片扩展名 → 拷贝进 app_data_dir/wallpapers →
+ * 返回新文件的绝对路径（前端存入 home.layout.wallpaperImage，经 asset
+ * protocol 显示）。previous 传上一张自定义壁纸路径，仅在 wallpapers
+ * 目录内才会被删除，避免误删用户目录里的原图。
+ */
+async wallpaperImageImport(path: string, previous: string | null) : Promise<string> {
+    return await TAURI_INVOKE("wallpaper_image_import", { path, previous });
 },
 async appList() : Promise<AppEntry[]> {
     return await TAURI_INVOKE("app_list");
@@ -54,14 +71,41 @@ async appSearch(query: string, limit: number | null) : Promise<AppEntry[]> {
 async todoList() : Promise<Todo[]> {
     return await TAURI_INVOKE("todo_list");
 },
-async todoCreate(content: string) : Promise<Todo> {
-    return await TAURI_INVOKE("todo_create", { content });
+async todoCreate(content: string, dueAt: number | null, remind: boolean | null) : Promise<Todo> {
+    return await TAURI_INVOKE("todo_create", { content, dueAt, remind });
 },
 async todoToggle(id: number, done: boolean) : Promise<null> {
     return await TAURI_INVOKE("todo_toggle", { id, done });
 },
 async todoDelete(id: number) : Promise<null> {
     return await TAURI_INVOKE("todo_delete", { id });
+},
+async todoSetDue(id: number, dueAt: number | null, remind: boolean) : Promise<Todo> {
+    return await TAURI_INVOKE("todo_set_due", { id, dueAt, remind });
+},
+async todoSetRecur(id: number, recur: string | null) : Promise<Todo> {
+    return await TAURI_INVOKE("todo_set_recur", { id, recur });
+},
+async focusStart(minutes: number, todoId: number | null) : Promise<FocusStatus> {
+    return await TAURI_INVOKE("focus_start", { minutes, todoId });
+},
+async focusBreak(minutes: number) : Promise<FocusStatus> {
+    return await TAURI_INVOKE("focus_break", { minutes });
+},
+async focusPause() : Promise<null> {
+    return await TAURI_INVOKE("focus_pause");
+},
+async focusResume() : Promise<null> {
+    return await TAURI_INVOKE("focus_resume");
+},
+async focusStop() : Promise<null> {
+    return await TAURI_INVOKE("focus_stop");
+},
+async focusStatus() : Promise<FocusStatus | null> {
+    return await TAURI_INVOKE("focus_status");
+},
+async focusHistory(days: number | null) : Promise<FocusDayStat[]> {
+    return await TAURI_INVOKE("focus_history", { days });
 },
 async noteList() : Promise<Note[]> {
     return await TAURI_INVOKE("note_list");
@@ -166,12 +210,8 @@ async benchListProjects() : Promise<string[]> {
 async benchAgentWorkspaces() : Promise<WorkspaceRecord[]> {
     return await TAURI_INVOKE("bench_agent_workspaces");
 },
-/**
- * 创建流式会话（官方 headless 协议）。事件经 BenchStreamEvent 推送；
- * first_prompt 非空时握手后立即发起首轮。
- */
-async benchStreamCreate(agentId: string, projectDir: string, firstPrompt: string | null, model: string | null, effort: string | null, resumeKey: string | null, fork: boolean) : Promise<LiveSessionInfo> {
-    return await TAURI_INVOKE("bench_stream_create", { agentId, projectDir, firstPrompt, model, effort, resumeKey, fork });
+async benchStreamCreate(args: StreamCreateArgs) : Promise<LiveSessionInfo> {
+    return await TAURI_INVOKE("bench_stream_create", { args });
 },
 async benchStreamSend(sessionId: string, text: string, model: string | null, effort: string | null) : Promise<null> {
     return await TAURI_INVOKE("bench_stream_send", { sessionId, text, model, effort });
@@ -336,7 +376,10 @@ benchStreamEvent: BenchStreamEvent,
 benchStreamExit: BenchStreamExit,
 coreReady: CoreReady,
 desktopModeChanged: DesktopModeChanged,
-fileIndexUpdated: FileIndexUpdated
+fileIndexUpdated: FileIndexUpdated,
+focusFinished: FocusFinished,
+focusTick: FocusTick,
+todoReminder: TodoReminder
 }>({
 appIndexUpdated: "app-index-updated",
 benchPtyExit: "bench-pty-exit",
@@ -344,7 +387,10 @@ benchStreamEvent: "bench-stream-event",
 benchStreamExit: "bench-stream-exit",
 coreReady: "core-ready",
 desktopModeChanged: "desktop-mode-changed",
-fileIndexUpdated: "file-index-updated"
+fileIndexUpdated: "file-index-updated",
+focusFinished: "focus-finished",
+focusTick: "focus-tick",
+todoReminder: "todo-reminder"
 })
 
 /** user-defined constants **/
@@ -390,7 +436,12 @@ assistant_model: string;
 /**
  * 桌面助手默认推理强度（空 = agent 默认；选项来自各 agent launchOptions）
  */
-assistant_effort: string }
+assistant_effort: string; 
+/**
+ * 用户手动指定的 Agent CLI 程序路径（agentId → 绝对路径）：优先于自动探测，
+ * 供绿色版/自拷贝的 CLI 注册进应用。写入口 agent_cli_path_set（先校验再落库）
+ */
+cli_paths: Partial<{ [key in string]: string }> }
 /**
  * 扫描结果（前端展示形态）。
  */
@@ -398,7 +449,12 @@ export type AgentInfo = { id: string; name: string; installed: boolean; version:
 /**
  * 配置根路径（未安装为 null）
  */
-configRoot: string | null; capabilities: Caps; 
+configRoot: string | null; 
+/**
+ * CLI 程序路径（自动探测 = 多版本择优；用户在设置里手动指定后为所填路径；
+ * null = 未探测到）
+ */
+program: string | null; capabilities: Caps; 
 /**
  * 支持内嵌对话（v2.0：adapter 提供 runtime 画像）
  */
@@ -532,6 +588,28 @@ mount: string; total_gb: number; used_gb: number; percent: number }
 export type FileHit = { path: string; name: string; ext: string | null; kind: string; size: number; mtime: number }
 export type FileIndex = { roots: string[]; max_files: number }
 export type FileIndexUpdated = { count: number }
+export type FocusDayStat = { 
+/**
+ * 本地日期 "2026-09-13"
+ */
+day: string; 
+/**
+ * 当日专注分钟（向下取整）
+ */
+minutes: number }
+/**
+ * 一轮计时结束（专注/休息完成，历史已落库）
+ */
+export type FocusFinished = { kind: string }
+export type FocusStatus = { 
+/**
+ * focus = 专注 / break = 休息
+ */
+kind: string; total_secs: number; remaining_secs: number; paused: boolean; todo_id: number | null }
+/**
+ * 计时心跳（每秒）
+ */
+export type FocusTick = { kind: string; remaining_secs: number; paused: boolean }
 /**
  * 索引库状态（Settings / Doctor 展示）。
  */
@@ -715,6 +793,12 @@ export type SnapshotRole = "user" | "assistant" |
  */
 "thinking" | "tool" | "system"
 /**
+ * 创建流式会话（官方 headless 协议）。事件经 BenchStreamEvent 推送；
+ * first_prompt 非空时握手后立即发起首轮。
+ * bench_stream_create 参数包（specta 的 SpectaFn 上限 10 参，命令参数打包）
+ */
+export type StreamCreateArgs = { agentId: string; projectDir: string; firstPrompt: string | null; model: string | null; effort: string | null; resumeKey: string | null; fork: boolean }
+/**
  * 归一化流式事件（方言无关；前端据此增量渲染原生视图）。
  */
 export type StreamEvent = { sessionId: string; 
@@ -789,7 +873,27 @@ export type SystemSnapshot = { mem: MemStat; disks: DiskStat[]; cpu: CpuStat;
  */
 temps: TempStat[] }
 export type TempStat = { label: string; celsius: number }
-export type Todo = { id: number; content: string; done: boolean; created_at: number }
+export type Todo = { id: number; content: string; done: boolean; created_at: number; 
+/**
+ * 截止时刻（NULL = 无；日期任务取当日 00:00）
+ */
+due_at: number | null; 
+/**
+ * 提醒时刻（NULL = 不提醒）
+ */
+remind_at: number | null; 
+/**
+ * 已提醒时刻（NULL = 未提醒）
+ */
+reminded_at: number | null; 
+/**
+ * 循环规则（core::recur::RULES；NULL = 不循环）
+ */
+recur: string | null }
+/**
+ * 待办提醒到点（系统通知已同时发出）
+ */
+export type TodoReminder = { id: number; content: string; due_at: number | null }
 export type VolumeState = { 
 /**
  * 0.0 - 1.0

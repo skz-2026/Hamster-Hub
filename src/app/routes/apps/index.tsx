@@ -4,47 +4,67 @@ import { commands } from '@/shared/lib/ipc';
 import { useApps } from '@/features/home/hooks';
 import { AppIcon, Monogram } from '@/features/home/AppIcon';
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { useI18n } from '@/shared/i18n/provider';
+import type { TKey } from '@/shared/i18n/core';
 import { CATEGORIES, withCategories, type AppCategory } from '@/features/apps/category';
 
+/** 「全部」筛选哨兵（页面侧处理，不入 AppCategory 类型） */
+type CatFilter = 'all' | AppCategory;
+
+/** 分类 id → 词典 key（显式映射，类型安全） */
+const CATEGORY_KEY: Record<CatFilter, TKey> = {
+  all: 'pages.cat.all',
+  communication: 'pages.cat.communication',
+  office: 'pages.cat.office',
+  dev: 'pages.cat.dev',
+  entertainment: 'pages.cat.entertainment',
+  tools: 'pages.cat.tools',
+  system: 'pages.cat.system',
+  other: 'pages.cat.other',
+};
+
 const CAT_COLOR: Record<AppCategory, string> = {
-  沟通: 'bg-sky-500/25 text-sky-300',
-  办公: 'bg-blue-500/25 text-blue-300',
-  开发: 'bg-teal-500/25 text-teal-300',
-  娱乐: 'bg-purple-500/25 text-purple-300',
-  工具: 'bg-amber-500/25 text-amber-300',
-  系统: 'bg-slate-500/25 text-slate-300',
-  其他: 'bg-neutral-500/25 text-neutral-300',
+  communication: 'bg-sky-500/25 text-sky-300',
+  office: 'bg-blue-500/25 text-blue-300',
+  dev: 'bg-teal-500/25 text-teal-300',
+  entertainment: 'bg-purple-500/25 text-purple-300',
+  tools: 'bg-amber-500/25 text-amber-300',
+  system: 'bg-slate-500/25 text-slate-300',
+  other: 'bg-neutral-500/25 text-neutral-300',
 };
 
 /** 应用页：分类药丸 + 真实图标宫格（桌面整理核心，对标 CapyHub 应用页） */
 export default function AppsPage() {
+  const { t } = useI18n();
   const { data: apps = [], isLoading } = useApps();
-  const [cat, setCat] = useState<'全部' | AppCategory>('全部');
+  const [cat, setCat] = useState<CatFilter>('all');
 
   const categorized = useMemo(() => withCategories(apps), [apps]);
   const shown = useMemo(
-    () => (cat === '全部' ? categorized : categorized.filter((a) => a.category === cat)),
+    () => (cat === 'all' ? categorized : categorized.filter((a) => a.category === cat)),
     [categorized, cat],
   );
 
-  const countOf = (c: '全部' | AppCategory) =>
-    c === '全部' ? categorized.length : categorized.filter((a) => a.category === c).length;
+  const countOf = (c: CatFilter) =>
+    c === 'all' ? categorized.length : categorized.filter((a) => a.category === c).length;
 
   return (
     <div className="mx-auto max-w-6xl">
       <div className="mb-5 flex items-center justify-between">
         <h1 className="flex items-center gap-2 text-xl font-semibold">
           <LayoutGrid size={20} className="text-[var(--accent)]" />
-          应用
+          {t('pages.apps.title')}
         </h1>
         <span className="text-xs text-[var(--text-muted)]">
-          {isLoading ? '索引中…' : `共 ${categorized.length} 个 · 单击启动`}
+          {isLoading
+            ? t('pages.apps.indexing')
+            : t('pages.apps.summary', { count: categorized.length })}
         </span>
       </div>
 
       {/* 分类药丸 */}
       <div className="mb-6 flex flex-wrap items-center gap-2">
-        {(['全部', ...CATEGORIES] as const).map((c) => (
+        {(['all', ...CATEGORIES] as const).map((c) => (
           <button
             key={c}
             onClick={() => setCat(c)}
@@ -54,7 +74,7 @@ export default function AppsPage() {
                 : 'bg-[var(--panel)] text-[var(--text-muted)] hover:text-[var(--text)] ring-1 ring-[var(--border)]'
             }`}
           >
-            {c}
+            {t(CATEGORY_KEY[c])}
             <span className="ml-1 opacity-60 tabular-nums">{countOf(c)}</span>
           </button>
         ))}
@@ -67,7 +87,7 @@ export default function AppsPage() {
         </div>
       ) : shown.length === 0 ? (
         <p className="py-24 text-center text-sm text-[var(--text-muted)]">
-          该分类下暂无应用
+          {t('pages.apps.emptyCategory')}
         </p>
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(92px,1fr))] justify-items-center gap-y-5">
@@ -76,7 +96,7 @@ export default function AppsPage() {
               key={a.app_key}
               onClick={() => commands.appLaunch(a.app_key).catch(console.error)}
               className="group flex w-[84px] flex-col items-center gap-1.5 rounded-xl p-2 outline-none transition-colors hover:bg-[var(--hover)]"
-              title={a.category}
+              title={t(CATEGORY_KEY[a.category])}
             >
               {a.icon_path ? (
                 <img

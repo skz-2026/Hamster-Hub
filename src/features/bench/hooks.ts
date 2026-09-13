@@ -6,6 +6,7 @@
 import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { benchCommands, events } from '@/shared/lib/ipc';
+import { translate, getLang } from '@/shared/i18n/core';
 import type { LiveSessionInfo, SearchQuery } from '@/shared/types/bench';
 import { applyStreamEvent } from './stream-registry';
 import { addMySession, loadMySessions, MY_SESSIONS_EVENT, patchMySession } from './registry';
@@ -129,15 +130,15 @@ export async function createStreamSession(opts: {
   effort: string | null;
   resumeKey: string | null;
 }): Promise<LiveSessionInfo> {
-  const info = await benchCommands.benchStreamCreate(
-    opts.agentId,
-    opts.projectDir,
-    opts.firstPrompt,
-    opts.model,
-    opts.effort,
-    opts.resumeKey,
-    false,
-  );
+  const info = await benchCommands.benchStreamCreate({
+    agentId: opts.agentId,
+    projectDir: opts.projectDir,
+    firstPrompt: opts.firstPrompt,
+    model: opts.model,
+    effort: opts.effort,
+    resumeKey: opts.resumeKey,
+    fork: false,
+  });
   if (opts.resumeKey) {
     // 续聊：更新既有条目的活会话 id 与活跃时间
     await patchMySession(
@@ -149,7 +150,8 @@ export async function createStreamSession(opts: {
       id: info.sessionId,
       agent: opts.agentId,
       projectDir: opts.projectDir,
-      title: opts.firstPrompt ?? `${opts.agentId} 会话`,
+      // 非组件上下文：用模块级 translate（当前语言由 I18nProvider 同步）
+      title: opts.firstPrompt ?? translate(getLang(), 'bench.hooks.defaultSessionName', { agent: opts.agentId }),
       sessionKey: info.resumeKey ?? null,
     });
   }

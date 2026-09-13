@@ -33,10 +33,12 @@ export type {
   CountdownCustom,
   CountdownItem,
   FileHit,
+  FocusStatus,
   Note,
   ProcInfo,
   Settings,
   SystemSnapshot,
   Todo,
+  TodoReminder,
   WeatherNow,
 } from '@/shared/types/ipc';

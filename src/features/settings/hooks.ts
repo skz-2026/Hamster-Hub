@@ -16,16 +16,21 @@ export function useSaveSettings() {
   });
 }
 
-/** 局部更新设置并持久化 */
+/** 局部更新设置并持久化（patch 即发即忘；patchAsync 可 await，供行内保存状态用） */
 export function usePatchSettings() {
   const { data: settings } = useSettings();
   const save = useSaveSettings();
+  const merge = (partial: DeepPartial<Settings>) => {
+    if (!settings) throw new Error('settings 尚未加载');
+    return deepMerge(settings, partial);
+  };
   return {
     isSaving: save.isPending,
     patch: (partial: DeepPartial<Settings>) => {
       if (!settings) return;
-      save.mutate(deepMerge(settings, partial));
+      save.mutate(merge(partial));
     },
+    patchAsync: (partial: DeepPartial<Settings>) => save.mutateAsync(merge(partial)),
   };
 }
 

@@ -1,0 +1,122 @@
+import type { settings as settingsZh } from '../zh-CN/settings';
+
+/** 繁体中文译法需符合台湾习惯用词（如 设置→設定、文件→檔案、网络→網路） */
+export const settings: Record<keyof typeof settingsZh, string> = {
+  // 頁題與錨點分組
+  'settings.title': '設定',
+  'settings.section.appearance': '外觀',
+  'settings.section.desktop': '桌面模式',
+  'settings.section.assistant': 'AI 與助理',
+  'settings.section.plugins': '外掛程式',
+  'settings.section.system': '系統',
+
+  // 外觀：主題 / 強調色 / 語言 / 桌布
+  'settings.theme.label': '主題',
+  'settings.theme.desc': '深色毛玻璃 / 淺色奶油 / 復古像素',
+  'settings.theme.dark': '深色',
+  'settings.theme.light': '淺色',
+  'settings.theme.pixel': '像素',
+  'settings.accent.label': '強調色',
+  'settings.accent.desc': '按鈕與高亮的主色調',
+  'settings.language.label': '語言',
+  'settings.language.desc': '切換介面顯示語言，立即生效',
+  'settings.wallpaper.label': '主畫面桌布',
+  'settings.wallpaper.desc': '倉鼠首頁與桌面首頁的背景：內建插畫可選，也可上傳本機圖片（儲存在應用程式資料目錄）',
+  'settings.wallpaper.loading': '載入中…',
+  'settings.wallpaper.filterName': '圖片',
+  'settings.wallpaper.customImage': '自訂圖片',
+  'settings.wallpaper.pickTitle': '選擇本機圖片作為桌布',
+  'settings.wallpaper.pickAria': '選擇自訂桌布圖片',
+
+  // 桌面模式
+  'settings.desktopMode.label': '桌面模式',
+  'settings.desktopMode.desc': '全螢幕工作台 + 底部 Dock（工作列保留可見，開啟的應用程式永不遮擋）',
+  'settings.desktopMode.backToHome': '返回桌面首頁',
+  'settings.desktopMode.enter': '進入桌面模式',
+  'settings.desktopMode.launch.label': '啟動進入桌面模式',
+  'settings.desktopMode.launch.desc': '開啟倉鼠Hub 直接全螢幕進入（對齊水豚hub，重啟後生效）',
+  'settings.desktopMode.hotkey.label': '桌面模式熱鍵',
+  'settings.desktopMode.hotkey.desc': '進入/離開 iOS 主畫面（重啟後生效；也可用通知區選單）',
+  'settings.desktopMode.hotkey.placeholder': '如 Ctrl+Alt+D',
+
+  // 系統
+  'settings.spotlight.label': 'Spotlight 熱鍵',
+  'settings.spotlight.desc': '呼出全域搜尋（重啟後生效；被占用時可用通知區選單）',
+  'settings.spotlight.placeholder': '如 Ctrl+Shift+S',
+  'settings.weather.label': '天氣城市',
+  'settings.weather.desc': '工作台天氣卡顯示的城市（Open-Meteo 資料）',
+  'settings.weather.cityPlaceholder': '城市名，如 臺北',
+  'settings.autostart.label': '開機自啟',
+  'settings.autostart.desc': '隨 Windows 啟動並最小化到通知區',
+  'settings.about.label': '關於',
+  'settings.about.desc': '倉鼠Hub {version} · 本地優先，資料不出本機',
+  'settings.about.feedback': '意見回饋與更新',
+
+  // AI 與助理
+  'settings.computerUse.label': '允許操作電腦（Computer Use）',
+  'settings.computerUse.desc': '桌面助理可經桌面工具截圖並操作真實滑鼠鍵盤（預設關；開啟後每次呼叫留稽核，急停 = 結束會話）',
+  'settings.persona.label': '桌面助理人設',
+  'settings.persona.desc': '附加為 Agent 的系統設定（空 = 內建倉鼠預設）',
+  'settings.persona.placeholder': '例如：回答盡量精簡，先給結論。',
+  'settings.engine.label': '桌面助理預設引擎',
+  'settings.engine.desc': '桌面助理用哪個 Agent、什麼模型與推理強度啟動（自動 = claude → zcode → 首個可用）',
+  'settings.engine.agentTitle': '桌面助理由哪個本機 Agent 驅動',
+  'settings.engine.autoAgent': '自動選擇代理',
+  'settings.engine.autoAgentHint': 'claude → zcode → 首個可用',
+  'settings.engine.defaultModel': '預設模型',
+  'settings.engine.defaultEffort': '預設推理強度',
+  'settings.engine.followAgentDefault': '模型跟隨被選中代理的自身預設',
+
+  // Agent CLI 位置
+  'settings.cli.label': 'Agent CLI 位置',
+  'settings.cli.desc': '自動探測（多版本預設取最高）；未上 PATH 的自拷貝 CLI 可在此手動指定，指定的路徑優先',
+  'settings.cli.notDetected': '未探測到',
+  'settings.cli.manualBadge': '手動指定',
+  'settings.cli.pathPlaceholder': 'CLI 程式絕對路徑，如 D:\\tools\\claude.cmd',
+  'settings.cli.edit': '修改',
+  'settings.cli.specifyPath': '指定路徑',
+  'settings.cli.resetAuto': '恢復自動',
+  'settings.cli.resetTitle': '刪除手動指定，恢復自動探測',
+  'settings.cli.uninstalled': '未安裝（{n}）',
+
+  // 快問 AI 直連
+  'settings.aiDirect.label': '快問 AI 直連',
+  'settings.aiDirect.desc': 'OpenAI 相容介面（{url}/chat/completions）；僅用於快問，設定儲存在本機',
+  'settings.aiDirect.noAddress': '未設定地址',
+  'settings.aiDirect.urlLabel': '快問 API 位址',
+  'settings.aiDirect.urlPlaceholder': 'API 位址，如 https://open.bigmodel.cn/api/paas/v4',
+  'settings.aiDirect.modelLabel': '快問模型名稱',
+  'settings.aiDirect.modelPlaceholder': '模型名稱，如 glm-4.6',
+  'settings.aiDirect.keyLabel': '快問 API Key',
+  'settings.aiDirect.keyPlaceholder': 'API Key（留空 = 未設定）',
+
+  // 通用動作與儲存狀態
+  'settings.action.save': '儲存',
+  'settings.action.cancel': '取消',
+  'settings.save.saving': '儲存中…',
+  'settings.save.saved': '已儲存',
+  'settings.save.error': '儲存失敗',
+  'settings.save.pending': '待儲存',
+  'settings.field.show': '顯示',
+  'settings.field.hide': '隱藏',
+
+  // 外掛程式卡
+  'settings.plugins.label': '外掛程式',
+  'settings.plugins.descBefore': '主畫面小工具外掛程式：目錄在',
+  'settings.plugins.dirName': '應用程式資料',
+  'settings.plugins.descAfter': '，放入資料夾即安裝。停用後從選擇器隱藏、已新增槽位顯示佔位。',
+  'settings.plugins.empty': '尚未安裝外掛程式。',
+  'settings.plugins.permissionsTitle': '宣告權限：{perms}',
+  'settings.plugins.permCount': '{n} 項權限',
+  'settings.plugins.confirmDelete': '確認刪除',
+  'settings.plugins.enableAria': '啟用 {name}',
+  'settings.plugins.disableAria': '停用 {name}',
+  'settings.plugins.stateEnabled': '已啟用（點擊停用）',
+  'settings.plugins.stateDisabled': '已停用（點擊啟用）',
+  'settings.plugins.deleteTitle': '刪除 {name}（整目錄移除）',
+  'settings.plugins.delete': '刪除',
+
+  'settings.plugins.hostNotInstalled': '外掛程式未安裝',
+  'settings.plugins.hostDisabled': '外掛程式已停用',
+  'settings.plugins.hostError': '外掛程式 {id} 發生錯誤',
+};

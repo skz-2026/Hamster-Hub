@@ -7,6 +7,8 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FolderOpen, FolderSearch, Loader2, RefreshCw, Search } from 'lucide-react';
 import { commands, type FileHit } from '@/shared/lib/ipc';
+import { getLang } from '@/shared/i18n/core';
+import { useI18n } from '@/shared/i18n/provider';
 import { FileKindIcon } from '@/features/spotlight/FileKindIcon';
 
 const fmtSize = (n: number) =>
@@ -20,7 +22,7 @@ const fmtSize = (n: number) =>
 
 const fmtDate = (sec: number) =>
   sec > 0
-    ? new Date(sec * 1000).toLocaleString('zh-CN', {
+    ? new Date(sec * 1000).toLocaleString(getLang(), {
         month: 'numeric',
         day: 'numeric',
         hour: '2-digit',
@@ -28,13 +30,17 @@ const fmtDate = (sec: number) =>
       })
     : '';
 
-/** 类型药丸从当前数据派生（kind 为空的归「文件」，不凭空造空分类） */
-const kindOf = (f: FileHit) => f.kind || '文件';
+/** 「全部」筛选的内部哨兵值（不入数据，标签走词典） */
+const ALL_KIND = 'all';
+
+/** 类型药丸从当前数据派生（kind 为空的归「file」，不凭空造空分类） */
+const kindOf = (f: FileHit) => f.kind || 'file';
 
 export default function FilesPage() {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const [query, setQuery] = useState('');
-  const [kind, setKind] = useState<string>('全部');
+  const [kind, setKind] = useState<string>(ALL_KIND);
   const q = query.trim();
 
   const recent = useQuery({
@@ -54,7 +60,11 @@ export default function FilesPage() {
   const loading = q.length > 0 ? search.isLoading : recent.isLoading;
   const rows = useMemo(() => (q.length > 0 ? (search.data ?? []) : (recent.data ?? [])), [q, search.data, recent.data]);
   const kinds = useMemo(() => [...new Set(rows.map(kindOf))], [rows]);
-  const shown = kind === '全部' ? rows : rows.filter((f) => kindOf(f) === kind);
+  const shown = kind === ALL_KIND ? rows : rows.filter((f) => kindOf(f) === kind);
+
+  /** 药丸标签：哨兵与兜底 id 走词典，其余为后端数据原样展示 */
+  const labelOf = (k: string) =>
+    k === ALL_KIND ? t('pages.files.all') : k === 'file' ? t('pages.files.kindFile') : k;
 
   const open = (f: FileHit) => void commands.openPath(f.path).catch(console.error);
   const reveal = (e: React.MouseEvent, f: FileHit) => {
@@ -67,16 +77,16 @@ export default function FilesPage() {
       <div className="mb-5 flex items-center justify-between">
         <h1 className="flex items-center gap-2 text-xl font-semibold">
           <FolderOpen size={20} className="text-[var(--accent)]" />
-          文件
+          {t('pages.files.title')}
         </h1>
         <button
           onClick={() => refresh.mutate()}
           disabled={refresh.isPending}
           className="flex items-center gap-1.5 rounded-full bg-[var(--panel)] px-3 py-1.5 text-[12px] text-[var(--text-muted)] ring-1 ring-[var(--border)] transition-colors hover:text-[var(--text)] disabled:opacity-60"
-          title="全量重扫文件索引（watcher 平时自动增量维护）"
+          title={t('pages.files.reindexTitle')}
         >
           {refresh.isPending ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-          重建索引
+          {t('pages.files.reindex')}
         </button>
       </div>
 
@@ -85,14 +95,14 @@ export default function FilesPage() {
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="搜索文件（拼音 / 首字母 / 文件名）…"
+          placeholder={t('pages.files.searchPlaceholder')}
           className="h-full w-full bg-transparent text-[13.5px] text-[var(--text)] outline-none placeholder:text-[var(--text-muted)]"
         />
       </div>
 
       {kinds.length > 1 && (
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          {(['全部', ...kinds] as const).map((k) => (
+          {([ALL_KIND, ...kinds] as const).map((k) => (
             <button
               key={k}
               onClick={() => setKind(k)}
@@ -102,7 +112,7 @@ export default function FilesPage() {
                   : 'bg-[var(--panel)] text-[var(--text-muted)] ring-1 ring-[var(--border)] hover:text-[var(--text)]'
               }`}
             >
-              {k}
+              {labelOf(k)}
             </button>
           ))}
         </div>
@@ -116,9 +126,9 @@ export default function FilesPage() {
         ) : shown.length === 0 ? (
           <p className="py-20 text-center text-[13px] text-[var(--text-muted)]">
             {q.length > 0 ? (
-              <>没有匹配「{q}」的文件</>
+              <>{t('pages.files.noMatch', { q })}</>
             ) : (
-              <>索引还没有内容：点右上角「重建索引」扫描一遍（索引范围见设置 file_index.roots）</>
+              <>{t('pages.files.emptyIndex')}</>
             )}
           </p>
         ) : (
@@ -141,7 +151,7 @@ export default function FilesPage() {
                 </div>
                 <button
                   onClick={(e) => reveal(e, f)}
-                  title="在资源管理器中显示"
+                  title={t('pages.files.reveal')}
                   className="grid size-8 shrink-0 place-items-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--panel-strong)] hover:text-[var(--text)]"
                 >
                   <FolderSearch size={15} />

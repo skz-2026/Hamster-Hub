@@ -14,6 +14,7 @@ import type {
   SessionMessagesPage,
   SessionSummary,
   SnapshotMessage,
+  StreamCreateArgs,
   StreamEvent,
   StreamEventDiff,
   LiveSessionInfo,
@@ -37,6 +38,7 @@ export type {
   SessionSummary,
   SnapshotMessage,
   SnapshotRole,
+  StreamCreateArgs,
   StreamEvent,
   StreamEventDiff,
   WorkspaceRecord,
@@ -86,15 +88,7 @@ export interface BenchCommands {
   /** 各已安装 Agent 会话记录里发现的历史工作目录 */
   benchAgentWorkspaces(): Promise<WorkspaceRecord[]>;
   // 流式通道（GUI 对话；事件经 events.benchStreamEvent 推送）
-  benchStreamCreate(
-    agentId: string,
-    projectDir: string,
-    firstPrompt: string | null,
-    model: string | null,
-    effort: string | null,
-    resumeKey: string | null,
-    fork: boolean,
-  ): Promise<LiveSessionInfo>;
+  benchStreamCreate(args: StreamCreateArgs): Promise<LiveSessionInfo>;
   benchStreamSend(sessionId: string, text: string, model: string | null, effort: string | null): Promise<null>;
   benchStreamInterrupt(sessionId: string): Promise<null>;
   benchStreamKill(sessionId: string): Promise<null>;

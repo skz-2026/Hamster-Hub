@@ -15,6 +15,8 @@
   --text: #f4f0ea;
   --text-muted: #a79e96;
   --hover: rgba(255, 255, 255, 0.07);
+  /* 弹层/大卡片的实体表面（不透光，保证任意底色上可读） */
+  --popover: #26242b;
 }
 
 :root[data-theme='light'] {
@@ -25,6 +27,19 @@
   --text: #2a2521;
   --text-muted: #8b8178;
   --hover: rgba(28, 26, 32, 0.05);
+  --popover: #ffffff;
+}
+
+/* 像素主题：实色复古游戏机面板（不用毛玻璃），边框/阴影在下方 override 段统一加硬 */
+:root[data-theme='pixel'] {
+  --bg: #1a1c2c;
+  --panel: #242848;
+  --panel-strong: #2e3358;
+  --border: #4b5386;
+  --text: #efead8;
+  --text-muted: #8f96bb;
+  --hover: rgba(255, 255, 255, 0.08);
+  --popover: #262b4a;
 }
 
 html,
@@ -197,6 +212,11 @@ body {
   font-size: 0.9em;
   font-family: 'Cascadia Code', Consolas, monospace;
 }
+/* light 主题下行内代码换浅底（代码块 pre 保持暗色终端质感） */
+:root[data-theme='light'] .bench-md code:not(pre code) {
+  background: rgba(28, 26, 32, 0.07);
+  border-color: rgba(28, 26, 32, 0.1);
+}
 .bench-md pre {
   margin: 0.5em 0;
   padding: 0.75em 1em;
@@ -222,3 +242,74 @@ body {
 .bench-md table { border-collapse: collapse; margin: 0.5em 0; font-size: 0.95em; }
 .bench-md th, .bench-md td { border: 1px solid var(--border); padding: 0.25em 0.7em; }
 .bench-md hr { border: 0; border-top: 1px solid var(--border); margin: 0.7em 0; }
+
+/* ===== 像素主题（data-theme='pixel'）：复古游戏机质感 ===== */
+/* 全局直角：覆盖 Tailwind 圆角工具类与 .squircle（:root[data-theme] 的特异性高于单类） */
+:root[data-theme='pixel'] *,
+:root[data-theme='pixel'] *::before,
+:root[data-theme='pixel'] *::after {
+  border-radius: 0;
+}
+
+/* 复古点阵字体栈：装有像素字体则用之，否则落到等宽字体保留终端味 */
+:root[data-theme='pixel'] body {
+  font-family:
+    'Press Start 2P',
+    'Fusion Pixel 12px Proportional SC',
+    'Zpix',
+    'Cascadia Code',
+    Consolas,
+    'Courier New',
+    monospace;
+}
+
+/* 毛玻璃换实色硬边：卡片、Dock、文件夹面板统一 2px 硬边框 + 台阶投影 */
+:root[data-theme='pixel'] .card,
+:root[data-theme='pixel'] .ios-dock,
+:root[data-theme='pixel'] .ios-folder-panel {
+  background: var(--panel);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 2px solid var(--border);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.4);
+}
+
+/* CRT 扫描线：3px 周期暗条纹铺满全屏（只视觉、不拦截事件） */
+:root[data-theme='pixel'] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(6, 8, 18, 0.12) 0px,
+    rgba(6, 8, 18, 0.12) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+/* 位图一律点阵化放大，贴图边缘保持硬朗 */
+:root[data-theme='pixel'] img {
+  image-rendering: pixelated;
+}
+
+:root[data-theme='pixel'] ::selection {
+  background: var(--accent-weak);
+  color: var(--text);
+}
+
+/* 滚动条与控制中心滑条同步直角化 */
+:root[data-theme='pixel'] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+:root[data-theme='pixel'] ::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 0;
+}
+:root[data-theme='pixel'] .cc-range::-webkit-slider-runnable-track,
+:root[data-theme='pixel'] .cc-range::-webkit-slider-thumb {
+  border-radius: 0;
+}

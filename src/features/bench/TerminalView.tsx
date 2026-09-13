@@ -10,6 +10,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { Channel } from '@tauri-apps/api/core';
 import '@xterm/xterm/css/xterm.css';
 import { benchCommands, isTauri } from '@/shared/lib/ipc';
+import { translate, getLang } from '@/shared/i18n/core';
 import type { LiveSessionInfo } from '@/shared/types/bench';
 
 export default function TerminalView({
@@ -92,7 +93,9 @@ export default function TerminalView({
         readyRef.current?.(info);
       })
       .catch((e) => {
-        term.writeln(`\x1b[31m会话创建失败：${String(e).replace(/^Error:\s*/, '')}\x1b[0m`);
+        // 非组件上下文：用模块级 translate（当前语言由 I18nProvider 同步）
+        const msg = String(e).replace(/^Error:\s*/, '');
+        term.writeln(`\x1b[31m${translate(getLang(), 'bench.terminal.createFailed', { msg })}\x1b[0m`);
       });
 
     // 用户键入直写 stdin（TUI 自己回显）

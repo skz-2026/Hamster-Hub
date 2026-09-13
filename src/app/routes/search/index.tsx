@@ -11,12 +11,21 @@ import { useUnifiedSearch } from '@/features/search/useUnifiedSearch';
 import { Monogram } from '@/features/home/AppIcon';
 import { FileKindIcon } from '@/features/spotlight/FileKindIcon';
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { useI18n } from '@/shared/i18n/provider';
 
 const SEARCH_ENGINE = 'https://www.baidu.com/s?wd=';
 
+/** 分组 → 标签 key（显式映射，禁止动态拼 key） */
+const GROUP_LABEL = {
+  app: 'agent.groupApps',
+  file: 'agent.groupFiles',
+  web: 'agent.groupWeb',
+  ai: 'agent.groupAi',
+} as const;
+
 interface ResultItem {
   key: string;
-  group: '应用' | '文件' | '网页' | 'AI';
+  group: keyof typeof GROUP_LABEL;
   title: string;
   subtitle: string;
   icon: React.ReactNode;
@@ -38,6 +47,7 @@ function appIcon(a: AppEntry) {
 /** 应用/文件/网页/AI 四路结果聚合（与 Spotlight 同序：应用 → 文件 → 网页 → AI） */
 function useResults(q: string): ResultItem[] {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const { apps, files } = useUnifiedSearch(q, 12, 20);
   return useMemo<ResultItem[]>(() => {
     if (!q) return [];
@@ -52,25 +62,25 @@ function useResults(q: string): ResultItem[] {
     return [
       ...apps.map<ResultItem>((a) => ({
         key: `app:${a.app_key}`,
-        group: '应用',
+        group: 'app',
         title: a.display_name,
-        subtitle: '应用 · Enter 启动',
+        subtitle: t('agent.appEnterHint'),
         icon: appIcon(a),
         run: () => void commands.appLaunch(a.app_key).catch(console.error),
       })),
       ...files.map<ResultItem>((f) => ({
         key: `file:${f.path}`,
-        group: '文件',
+        group: 'file',
         title: f.name,
-        subtitle: `${f.kind || '文件'} · ${f.path}`,
+        subtitle: `${f.kind || t('agent.fileFallback')} · ${f.path}`,
         icon: <FileKindIcon kind={f.kind} />,
         run: () => void commands.openPath(f.path).catch(console.error),
       })),
       {
         key: 'web',
-        group: '网页',
-        title: `搜索「${q}」`,
-        subtitle: '网页 · 百度',
+        group: 'web',
+        title: t('agent.webSearch', { q }),
+        subtitle: t('agent.webBaidu'),
         icon: (
           <span className="squircle grid size-8 shrink-0 place-items-center bg-[#2f6be0] text-white">
             <Globe size={16} />
@@ -80,9 +90,9 @@ function useResults(q: string): ResultItem[] {
       },
       {
         key: 'ai',
-        group: 'AI',
-        title: `问 AI：「${q}」`,
-        subtitle: 'AI 助手',
+        group: 'ai',
+        title: t('agent.askAi', { q }),
+        subtitle: t('agent.aiAssistant'),
         icon: (
           <span className="squircle grid size-8 shrink-0 place-items-center bg-[var(--accent)] text-white">
             <Sparkles size={15} />
@@ -91,10 +101,11 @@ function useResults(q: string): ResultItem[] {
         run: () => void ask(),
       },
     ];
-  }, [apps, files, q, navigate]);
+  }, [apps, files, q, navigate, t]);
 }
 
 export default function SearchPage() {
+  const { t } = useI18n();
   const [query, setQuery] = useState('');
   const [sel, setSel] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -128,9 +139,9 @@ export default function SearchPage() {
       <div className="mb-5 flex items-center justify-between">
         <h1 className="flex items-center gap-2 text-xl font-semibold">
           <Search size={20} className="text-[var(--accent)]" />
-          搜索
+          {t('agent.searchTitle')}
         </h1>
-        <span className="text-xs text-[var(--text-muted)]">拼音 / 首字母缩写 / 中文子串均可命中</span>
+        <span className="text-xs text-[var(--text-muted)]">{t('agent.searchHint')}</span>
       </div>
 
       <div className="flex h-12 items-center gap-3 rounded-2xl bg-[var(--panel)] px-4 ring-1 ring-[var(--border)] transition-colors focus-within:ring-[var(--accent)]">
@@ -140,7 +151,7 @@ export default function SearchPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKey}
-          placeholder="搜索应用、文件、网页…"
+          placeholder={t('agent.searchPlaceholder')}
           className="h-full w-full bg-transparent text-[14.5px] text-[var(--text)] outline-none placeholder:text-[var(--text-muted)]"
         />
       </div>
@@ -148,17 +159,17 @@ export default function SearchPage() {
       {!q ? (
         <div className="mt-6 rounded-2xl bg-[var(--panel)] px-5 py-8 text-center ring-1 ring-[var(--border)]">
           <p className="text-sm text-[var(--text-muted)]">
-            输入即搜：应用（如「微信」「wx」「weixin」）、本地文件、网页与问 AI。
+            {t('agent.emptyHint')}
           </p>
           <p className="mt-2 text-xs text-[var(--text-muted)] opacity-70">
-            全局随时可用 Alt+Space 召出 Spotlight，与本页同一检索。
+            {t('agent.spotlightHint')}
           </p>
         </div>
       ) : (
         <div ref={listRef} className="mt-4 space-y-1 pb-6">
           {results.length === 0 && (
             <p className="py-16 text-center text-[13px] text-[var(--text-muted)]">
-              没有匹配「{q}」的结果
+              {t('agent.noResults', { q })}
             </p>
           )}
           {results.map((r, i) => {
@@ -168,7 +179,7 @@ export default function SearchPage() {
               <div key={r.key}>
                 {header && (
                   <div className="mb-1 mt-4 px-1 text-[11px] font-medium tracking-wide text-[var(--text-muted)]">
-                    {header}
+                    {t(GROUP_LABEL[header])}
                   </div>
                 )}
                 <button

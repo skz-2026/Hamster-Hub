@@ -18,28 +18,27 @@ import {
 } from 'lucide-react';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { isTauri } from '@/shared/lib/ipc';
+import { useI18n } from '@/shared/i18n/provider';
+import type { TKey, TParams } from '@/shared/i18n/core';
 import { useAgents, useProjects, useWorkspaces, createStreamSession } from './hooks';
 import SelectPill from './SelectPill';
 import AgentAvatar from './AgentAvatar';
 import type { LiveSessionInfo } from '@/shared/types/bench';
 
-const SUGGESTIONS = [
-  { icon: FolderTree, label: '梳理仓库结构', prompt: '帮我梳理一下这个仓库的目录结构和核心模块' },
-  { icon: Bug, label: '修复报错', prompt: '遇到一个报错，帮我定位并修复：' },
-  { icon: FlaskConical, label: '写单元测试', prompt: '为下面的函数补一组单元测试：' },
-  { icon: FileSearch, label: '代码审查', prompt: '帮我审查这段代码，指出问题和改进点：' },
-];
+type TFn = (key: TKey, params?: TParams) => string;
 
-function greetingLine(now: Date): string {
+function greetingLine(now: Date, t: TFn): string {
   const h = now.getHours();
-  if (h < 5) return '夜深了，有什么想让我帮忙的吗';
-  if (h < 12) return `${h < 9 ? '早上好' : '上午好'}呀，有什么想让我帮忙的吗`;
-  if (h < 14) return '中午好，有什么想让我帮忙的吗';
-  if (h < 18) return '下午好，有什么想让我帮忙的吗';
-  return '晚上好，有什么想让我帮忙的吗';
+  if (h < 5) return t('bench.welcome.greeting.night');
+  if (h < 9) return t('bench.welcome.greeting.earlyMorning');
+  if (h < 12) return t('bench.welcome.greeting.morning');
+  if (h < 14) return t('bench.welcome.greeting.noon');
+  if (h < 18) return t('bench.welcome.greeting.afternoon');
+  return t('bench.welcome.greeting.evening');
 }
 
 export default function BenchWelcome({ onCreated }: { onCreated: (info: LiveSessionInfo) => void }) {
+  const { t } = useI18n();
   const agents = useAgents();
   const projects = useProjects();
   const workspaces = useWorkspaces();
@@ -56,6 +55,14 @@ export default function BenchWelcome({ onCreated }: { onCreated: (info: LiveSess
     [agents.query.data],
   );
   const agent = streamable.find((a) => a.id === agentId) ?? null;
+
+  // 快捷 prompt 卡片（label + 发给 AI 的 prompt 正文，均为用户可见文案）
+  const suggestions = [
+    { icon: FolderTree, label: t('bench.welcome.suggest.repoTitle'), prompt: t('bench.welcome.suggest.repoPrompt') },
+    { icon: Bug, label: t('bench.welcome.suggest.fixTitle'), prompt: t('bench.welcome.suggest.fixPrompt') },
+    { icon: FlaskConical, label: t('bench.welcome.suggest.testTitle'), prompt: t('bench.welcome.suggest.testPrompt') },
+    { icon: FileSearch, label: t('bench.welcome.suggest.reviewTitle'), prompt: t('bench.welcome.suggest.reviewPrompt') },
+  ];
 
   // 项目选项 = 最近使用（Store）∪ 各 Agent 会话记录发现的目录（去重，发现的在前）
   const projectOptions = useMemo(() => {
@@ -102,7 +109,7 @@ export default function BenchWelcome({ onCreated }: { onCreated: (info: LiveSess
       const picked = await openDialog({ directory: true, multiple: false });
       if (typeof picked === 'string' && picked.trim()) setProjectDir(picked);
     } else {
-      const picked = window.prompt('输入项目目录路径（浏览器预览层无原生选择器）');
+      const picked = window.prompt(t('bench.welcome.promptProjectPath'));
       if (picked && picked.trim()) setProjectDir(picked.trim());
     }
   };
@@ -110,11 +117,11 @@ export default function BenchWelcome({ onCreated }: { onCreated: (info: LiveSess
   const send = async () => {
     if (!text.trim() || busy) return;
     if (!agent) {
-      setError('没有支持 GUI 对话的代理（需已安装且支持流式通道）');
+      setError(t('bench.welcome.error.noStreamableAgent'));
       return;
     }
     if (!projectDir.trim()) {
-      setError('请先选择项目目录');
+      setError(t('bench.welcome.error.selectProjectDir'));
       return;
     }
     setBusy(true);
@@ -143,22 +150,22 @@ export default function BenchWelcome({ onCreated }: { onCreated: (info: LiveSess
       <span className="select-none text-[110px] leading-[0.9] opacity-[0.05] xl:text-[150px]" aria-hidden>
         🐹
       </span>
-      <h1 className="mt-3 text-center text-[26px] font-medium text-white/90 xl:text-[30px]">{greetingLine(new Date())}</h1>
+      <h1 className="mt-3 text-center text-[26px] font-medium text-[var(--text)] xl:text-[30px]">{greetingLine(new Date(), t)}</h1>
 
       {/* 内嵌 composer（不可 overflow-hidden：下拉面板需溢出卡片；宽度随窗口比例伸缩） */}
-      <div className="mt-9 w-full max-w-[620px] rounded-2xl bg-[#232228] ring-1 ring-white/10 xl:max-w-[760px] 2xl:max-w-[880px]">
+      <div className="mt-9 w-full max-w-[620px] rounded-2xl bg-[var(--popover)] shadow-[0_8px_32px_rgba(0,0,0,0.12)] ring-1 ring-[var(--border)] xl:max-w-[760px] 2xl:max-w-[880px]">
         {/* 项目药丸行 */}
-        <div className="flex items-center rounded-t-2xl border-b border-white/6 bg-white/3 px-2.5 py-2">
+        <div className="flex items-center rounded-t-2xl border-b border-[var(--border)] bg-[var(--panel)] px-2.5 py-2">
           <SelectPill
-            icon={<FolderOpen size={13} className="text-white/50" />}
+            icon={<FolderOpen size={13} className="text-[var(--text-muted)]" />}
             value={projectDir}
             options={projectOptions}
             onChange={setProjectDir}
-            placeholder="选择项目目录"
-            title={projectDir || '选择项目目录'}
+            placeholder={t('bench.welcome.selectProjectDir')}
+            title={projectDir || t('bench.welcome.selectProjectDir')}
             footer={{
-              label: '浏览文件夹…',
-              icon: <FolderPlus size={13} className="text-white/50" />,
+              label: t('bench.welcome.browseFolders'),
+              icon: <FolderPlus size={13} className="text-[var(--text-muted)]" />,
               onSelect: () => void browseFolder(),
             }}
           />
@@ -175,16 +182,16 @@ export default function BenchWelcome({ onCreated }: { onCreated: (info: LiveSess
           }}
           rows={2}
           autoFocus
-          placeholder="向代理提问，描述你的任务…（Enter 发送，Shift+Enter 换行）"
-          className="w-full resize-none bg-transparent px-4 pt-3 text-[13.5px] leading-relaxed text-white outline-none placeholder:text-white/35"
+          placeholder={t('bench.welcome.composerPlaceholder')}
+          className="w-full resize-none bg-transparent px-4 pt-3 text-[13.5px] leading-relaxed text-[var(--text)] outline-none placeholder:text-[var(--text-muted)]"
         />
 
         {/* 底部工具行 */}
         <div className="flex items-center gap-1.5 px-2.5 pb-2.5">
           <button
-            title="添加附件（即将支持）"
+            title={t('bench.welcome.addAttachment')}
             disabled
-            className="grid size-8 place-items-center rounded-lg text-white/40 hover:bg-white/6 disabled:cursor-not-allowed"
+            className="grid size-8 place-items-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--hover)] disabled:cursor-not-allowed"
           >
             <Plus size={15} />
           </button>
@@ -193,7 +200,7 @@ export default function BenchWelcome({ onCreated }: { onCreated: (info: LiveSess
               agent ? (
                 <AgentAvatar agentId={agent.id} size={14} />
               ) : (
-                <Bot size={13} className="text-white/50" />
+                <Bot size={13} className="text-[var(--text-muted)]" />
               )
             }
             value={agentId}
@@ -204,9 +211,9 @@ export default function BenchWelcome({ onCreated }: { onCreated: (info: LiveSess
               icon: <AgentAvatar agentId={a.id} size={16} />,
             }))}
             onChange={switchAgent}
-            placeholder="选择代理"
+            placeholder={t('bench.welcome.selectAgent')}
             accent
-            title="代理（需支持 GUI 流式对话）"
+            title={t('bench.welcome.agentTitle')}
           />
           <div className="ml-auto flex items-center gap-1.5">
             {agent?.launchOptions?.model && (
@@ -214,7 +221,7 @@ export default function BenchWelcome({ onCreated }: { onCreated: (info: LiveSess
                 value={model}
                 options={agent.launchOptions.model.choices.map((c) => ({ value: c, label: c }))}
                 onChange={setModel}
-                placeholder="选择模型"
+                placeholder={t('bench.welcome.selectModel')}
               />
             )}
             {agent?.launchOptions?.effort && (
@@ -222,14 +229,14 @@ export default function BenchWelcome({ onCreated }: { onCreated: (info: LiveSess
                 value={effort}
                 options={agent.launchOptions.effort.choices.map((c) => ({ value: c, label: c }))}
                 onChange={setEffort}
-                placeholder="推理强度"
+                placeholder={t('bench.welcome.effort')}
               />
             )}
             <button
               onClick={() => void send()}
               disabled={!text.trim() || busy}
               className="ml-1 grid size-9 place-items-center rounded-xl bg-[var(--accent)] text-white transition-all hover:brightness-110 disabled:opacity-35 disabled:hover:brightness-100"
-              title="发送并创建会话"
+              title={t('bench.welcome.send')}
             >
               {busy ? <Loader2 size={16} className="animate-spin" /> : <ArrowUp size={17} strokeWidth={2.4} />}
             </button>
@@ -237,17 +244,17 @@ export default function BenchWelcome({ onCreated }: { onCreated: (info: LiveSess
         </div>
       </div>
 
-      {error && <p className="mt-3 text-[12px] text-red-300">{error}</p>}
+      {error && <p className="mt-3 text-[12px] text-red-500">{error}</p>}
 
       {/* 建议 chips */}
       <div className="mt-6 flex flex-wrap justify-center gap-2.5">
-        {SUGGESTIONS.map(({ icon: Icon, label, prompt }) => (
+        {suggestions.map(({ icon: Icon, label, prompt }) => (
           <button
             key={label}
             onClick={() => setText(prompt)}
-            className="flex items-center gap-1.5 rounded-lg bg-white/5 px-3.5 py-2 text-[12.5px] text-white/70 ring-1 ring-white/8 transition-colors hover:bg-white/10 hover:text-white"
+            className="flex items-center gap-1.5 rounded-lg bg-[var(--panel)] px-3.5 py-2 text-[12.5px] text-[var(--text-muted)] ring-1 ring-[var(--border)] transition-colors hover:bg-[var(--hover)] hover:text-[var(--text)]"
           >
-            <Icon size={13} className="text-white/45" />
+            <Icon size={13} className="text-[var(--text-muted)]" />
             {label}
           </button>
         ))}

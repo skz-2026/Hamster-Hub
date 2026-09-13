@@ -255,6 +255,11 @@ impl AgentAdapter for ClaudeAdapter {
         }
     }
 
+    /// 本机 claude CLI 的最佳路径（设置页展示；None = 未探测到）
+    fn program_hint(&self) -> Option<String> {
+        crate::resolve_best_program("claude").map(|p| p.to_string_lossy().into_owned())
+    }
+
     fn capabilities(&self) -> Caps {
         Caps {
             mcp: true,

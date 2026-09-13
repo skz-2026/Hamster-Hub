@@ -3,11 +3,21 @@
  * 全部为纯函数，便于单测（layout.test.ts）；组件只做交互粘合。
  */
 import type { AppEntry } from '@/shared/types/ipc';
+import burrowWallpaper from '@/assets/wallpapers/burrow.jpg';
+import meadowWallpaper from '@/assets/wallpapers/meadow.jpg';
 
 export const GRID_COLS = 7;
 export const GRID_ROWS = 5;
 export const PAGE_CAPACITY = GRID_COLS * GRID_ROWS;
 export const DOCK_CAPACITY = 6;
+
+/**
+ * 接管模式底部任务栏条高（逻辑 px），与 src-tauri/desktop_mode.rs 的
+ * TASKBAR_H_LOGICAL 保持一致：主窗口虽整屏铺满，但主屏/桌面主页的布局
+ * 容器在其基础上预留这 68px（任务栏置顶窗恰好盖住），壁纸与 dock 都
+ * 止于任务栏上沿，不再被遮挡。
+ */
+export const TASKBAR_H_PX = 68;
 
 /** 页面槽位项：`app:${appKey}` 或 `folder:${folderId}` */
 export type SlotItem = string;
@@ -21,6 +31,11 @@ export interface FolderDef {
 export interface HomeLayout {
   version: number;
   wallpaper: string;
+  /**
+   * 自定义壁纸图片路径（wallpaper = 'custom' 时生效）。
+   * 存的是导入进 app_data_dir/wallpapers 的副本路径（经 asset protocol 显示）。
+   */
+  wallpaperImage?: string;
   pages: SlotItem[][];
   /** Dock 只放应用（原始 appKey） */
   dock: string[];
@@ -33,7 +48,21 @@ export interface HomeLayout {
   customized?: boolean;
 }
 
-export const WALLPAPERS: Record<string, { name: string; css: string }> = {
+/** 壁纸：CSS 渐变（css）或图片（image = 打包资源；imagePath = 本机文件路径） */
+export interface Wallpaper {
+  name: string;
+  /** CSS 渐变背景（兜底层：图片加载失败时依然是协调的底色） */
+  css?: string;
+  /** 内置图片壁纸的打包资源地址（构建期 hash URL，直接可用） */
+  image?: string;
+  /** 本机图片路径（自定义壁纸，渲染时需转 asset protocol URL） */
+  imagePath?: string;
+}
+
+/** 自定义壁纸的 wallpaper id（图片本体在 layout.wallpaperImage） */
+export const CUSTOM_WALLPAPER_ID = 'custom';
+
+export const WALLPAPERS: Record<string, Wallpaper> = {
   /** macOS 桌面风：深夜网格渐变（多层 radial 光晕 + 纵向暗角） */
   midnight: {
     name: '深夜',
@@ -65,11 +94,45 @@ export const WALLPAPERS: Record<string, { name: string; css: string }> = {
     ].join(', '),
   },
   hamster: { name: '胡萝卜', css: 'linear-gradient(160deg,#ffb26b 0%,#ff8a3d 40%,#8f3e12 100%)' },
+  /** 内置插画壁纸（AI 生成，随应用打包）：小仓鼠仰望吊灯的木屋小窝 */
+  burrow: {
+    name: '松果窝',
+    image: burrowWallpaper,
+    css: 'linear-gradient(180deg,#8a6a4a 0%,#5a422c 55%,#3a2a1a 100%)',
+  },
+  /** 内置插画壁纸（AI 生成，随应用打包）：小仓鼠从花田探出头看日落 */
+  meadow: {
+    name: '花田暮色',
+    image: meadowWallpaper,
+    css: 'linear-gradient(180deg,#3a2c52 0%,#8a4a2c 55%,#2c2014 100%)',
+  },
   dusk: { name: '暮色', css: 'linear-gradient(180deg,#1a1a40 0%,#4a1e5c 55%,#c33764 100%)' },
   mint: { name: '薄荷', css: 'linear-gradient(160deg,#43cea2 0%,#185a9d 100%)' },
   sakura: { name: '樱花', css: 'linear-gradient(160deg,#ffdde1 0%,#ee9ca7 55%,#a56a73 100%)' },
   ink: { name: '墨色', css: 'linear-gradient(180deg,#16161a 0%,#3a3a44 100%)' },
 };
+
+/**
+ * 当前生效壁纸：custom → 用户导入的图片（缺图回退胡萝卜渐变）；
+ * 未知 id（历史数据）→ 胡萝卜渐变兜底。渲染层统一走这里取壁纸。
+ */
+export function resolveWallpaper(
+  layout: Pick<HomeLayout, 'wallpaper' | 'wallpaperImage'>,
+): Wallpaper {
+  if (layout.wallpaper === CUSTOM_WALLPAPER_ID) {
+    return layout.wallpaperImage
+      ? { name: '自定义', imagePath: layout.wallpaperImage }
+      : WALLPAPERS.hamster;
+  }
+  return WALLPAPERS[layout.wallpaper] ?? WALLPAPERS.hamster;
+}
+
+/** 壁纸轮换（控制中心磁贴 / 主屏整理模式）：内置清单顺序循环，custom/未知 id 从头开始 */
+export function nextWallpaperId(current: string): string {
+  const ids = Object.keys(WALLPAPERS);
+  const at = ids.indexOf(current);
+  return ids[(at + 1 + ids.length) % ids.length];
+}
 
 export const appIdOf = (key: string) => `app:${key}`;
 export const folderRefOf = (id: string) => `folder:${id}`;

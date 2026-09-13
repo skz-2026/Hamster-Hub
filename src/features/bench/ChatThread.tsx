@@ -9,16 +9,18 @@
 import { ArrowDown, ArrowUp, Square } from 'lucide-react';
 import { ComposerPrimitive, ThreadPrimitive } from '@assistant-ui/react';
 import { createPortal } from 'react-dom';
+import { useI18n } from '@/shared/i18n/provider';
 import { AssistantMessage, UserMessage } from './ChatParts.message';
 
 /** 线程空态（无消息时的欢迎面） */
 function ThreadEmpty() {
+  const { t } = useI18n();
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-      <span className="grid size-14 place-items-center rounded-2xl bg-white/6 text-2xl ring-1 ring-white/10">🐹</span>
+      <span className="grid size-14 place-items-center rounded-2xl bg-[var(--panel)] text-2xl ring-1 ring-[var(--border)]">🐹</span>
       <div>
-        <p className="text-[14px] font-medium text-white/85">开始与编码代理对话</p>
-        <p className="mt-1 text-[12px] text-white/45">选择代理与项目目录后，发送第一条消息</p>
+        <p className="text-[14px] font-medium text-[var(--text)]">{t('bench.chat.emptyTitle')}</p>
+        <p className="mt-1 text-[12px] text-[var(--text-muted)]">{t('bench.chat.emptyHint')}</p>
       </div>
     </div>
   );
@@ -26,20 +28,22 @@ function ThreadEmpty() {
 
 export default function ChatThread({
   composerHost,
-  placeholder = '给代理发消息…（Enter 发送，Shift+Enter 换行）',
+  placeholder,
 }: {
   composerHost?: HTMLElement | null;
   placeholder?: string;
 }) {
+  const { t } = useI18n();
+  const resolvedPlaceholder = placeholder ?? t('bench.chat.composerPlaceholder');
   const composer = (
-    <ComposerPrimitive.Root className="flex items-end gap-2.5 rounded-[22px] bg-black/30 p-2 pl-5 ring-1 ring-white/12 backdrop-blur-xl focus-within:ring-white/25">
+    <ComposerPrimitive.Root className="flex items-end gap-2.5 rounded-[22px] bg-[var(--panel-strong)] p-2 pl-5 ring-1 ring-[var(--border)] backdrop-blur-xl focus-within:ring-[var(--accent)]/40">
       <ComposerPrimitive.Input
         rows={1}
         autoFocus
-        placeholder={placeholder}
-        className="max-h-28 min-h-[28px] flex-1 resize-none bg-transparent py-1.5 text-[13.5px] text-white outline-none placeholder:text-white/40"
+        placeholder={resolvedPlaceholder}
+        className="max-h-28 min-h-[28px] flex-1 resize-none bg-transparent py-1.5 text-[13.5px] text-[var(--text)] outline-none placeholder:text-[var(--text-muted)]"
       />
-      <ComposerPrimitive.Cancel className="grid size-9 shrink-0 place-items-center rounded-full bg-white/12 text-white transition-colors hover:bg-white/20">
+      <ComposerPrimitive.Cancel className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--panel)] text-[var(--text-muted)] transition-colors hover:bg-[var(--hover)] hover:text-[var(--text)]">
         <Square size={13} strokeWidth={2.4} />
       </ComposerPrimitive.Cancel>
       <ComposerPrimitive.Send className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--accent)] text-white transition-all hover:brightness-110 disabled:opacity-35 disabled:hover:brightness-100">
@@ -65,7 +69,7 @@ export default function ChatThread({
           }`}
         >
           <ThreadPrimitive.ScrollToBottom asChild>
-            <button className="pointer-events-auto grid size-8 place-items-center rounded-full bg-white/10 text-white/70 ring-1 ring-white/15 backdrop-blur transition-colors hover:bg-white/20 hover:text-white">
+            <button className="pointer-events-auto grid size-8 place-items-center rounded-full bg-[var(--panel-strong)] text-[var(--text-muted)] ring-1 ring-[var(--border)] backdrop-blur transition-colors hover:text-[var(--text)]">
               <ArrowDown size={15} />
             </button>
           </ThreadPrimitive.ScrollToBottom>

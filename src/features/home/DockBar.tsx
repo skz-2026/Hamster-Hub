@@ -7,6 +7,9 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { LayoutGrid, LogOut, Bot, MonitorSmartphone, Plus, Search, Settings } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { commands, isTauri, type AppEntry } from '@/shared/lib/ipc';
+import { useI18n } from '@/shared/i18n/provider';
+import { getLang } from '@/shared/i18n/core';
+import type { TKey } from '@/shared/i18n/core';
 import { useTopApps } from '@/features/dashboard/hooks';
 import TrayButton from './TrayArea';
 import { useApps, useHomeLayout } from './hooks';
@@ -24,7 +27,7 @@ interface DockBarProps {
 
 /** 系统入口项：to = 应用内路由；onClick = 模式动作（如进入桌面） */
 type SystemEntry = {
-  label: string;
+  labelKey: TKey;
   Icon: LucideIcon;
   to?: string;
   onClick?: () => void;
@@ -32,10 +35,10 @@ type SystemEntry = {
 
 /** 系统入口（任务栏左端 / 胶囊右段）：应用内路由 */
 const SYSTEM_ICONS: SystemEntry[] = [
-  { label: '代理', to: '/bench', Icon: Bot },
-  { label: '主屏', to: '/home', Icon: LayoutGrid },
-  { label: '搜索', to: '/search', Icon: Search },
-  { label: '设置', to: '/settings', Icon: Settings },
+  { labelKey: 'chrome.nav.agent', to: '/bench', Icon: Bot },
+  { labelKey: 'chrome.nav.home', to: '/home', Icon: LayoutGrid },
+  { labelKey: 'chrome.nav.search', to: '/search', Icon: Search },
+  { labelKey: 'chrome.nav.settings', to: '/settings', Icon: Settings },
 ];
 
 /**
@@ -44,6 +47,7 @@ const SYSTEM_ICONS: SystemEntry[] = [
  * 悬停放大上浮 + tooltip + 活动路由指示点；拖拽编辑在 HomeScreen 的交互 Dock。
  */
 export function DockBar({ desktop }: DockBarProps) {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { pathname } = useLocation();
@@ -77,14 +81,16 @@ export function DockBar({ desktop }: DockBarProps) {
   const systemEntries: SystemEntry[] = desktop
     ? SYSTEM_ICONS
     : SYSTEM_ICONS.map((e) =>
-        e.to === '/home' ? { label: '桌面模式', Icon: MonitorSmartphone, onClick: enterDesktop } : e,
+        e.to === '/home'
+          ? { labelKey: 'chrome.nav.desktopMode', Icon: MonitorSmartphone, onClick: enterDesktop }
+          : e,
       );
   /** 系统入口组（两形态共用渲染；桌面任务栏只吃原生 tooltip） */
   const renderSystem = (nativeTipOnly: boolean) =>
-    systemEntries.map(({ label, to, Icon, onClick }) => (
+    systemEntries.map(({ labelKey, to, Icon, onClick }) => (
       <DockItem
-        key={label}
-        label={label}
+        key={labelKey}
+        label={t(labelKey)}
         active={to !== undefined && pathname === to}
         nativeTipOnly={nativeTipOnly}
         onClick={to !== undefined ? () => goRoute(to) : onClick!}
@@ -135,7 +141,7 @@ export function DockBar({ desktop }: DockBarProps) {
       <div className="relative z-30 flex shrink-0">
         <div className={barCls}>
           {/* 开始：Windows 徽标位（唤出系统真实开始菜单，非仿制面板） */}
-          <DockItem label="开始" nativeTipOnly={desktop} onClick={openStartMenu}>
+          <DockItem label={t('chrome.action.start')} nativeTipOnly={desktop} onClick={openStartMenu}>
             <StartLogo size={size} />
           </DockItem>
           {renderSystem(true)}
@@ -162,8 +168,8 @@ export function DockBar({ desktop }: DockBarProps) {
           {layout.dock.length < DOCK_CAPACITY && (
             <button
               onClick={openPicker}
-              title="添加应用到任务栏"
-              aria-label="添加应用到任务栏"
+              title={t('chrome.action.addAppToDock')}
+              aria-label={t('chrome.action.addAppToDock')}
               className="group grid size-[44px] place-items-center rounded-xl bg-white/[0.08] text-white/55 ring-1 ring-white/12 transition-all hover:bg-white/16 hover:text-white/90"
             >
               <Plus size={19} />
@@ -174,7 +180,7 @@ export function DockBar({ desktop }: DockBarProps) {
             <AppDockItem key={a.app_key} app={a} size={size} nativeTipOnly={desktop} onLaunch={launchApp} />
           ))}
           <div className="ml-auto flex items-end gap-2 pl-3">
-            <DockItem label="退出桌面模式" nativeTipOnly={desktop} onClick={exitDesktop}>
+            <DockItem label={t('chrome.action.exitDesktop')} nativeTipOnly={desktop} onClick={exitDesktop}>
               <span
                 className="squircle grid place-items-center bg-red-500/45 text-white ring-1 ring-white/25"
                 style={{ width: size, height: size }}
@@ -201,18 +207,18 @@ export function DockBar({ desktop }: DockBarProps) {
             style={{ left: Math.min(menu.x, window.innerWidth - 200) }}
             onPointerDown={(e) => e.stopPropagation()}
           >
-            <span className="text-white/50">定制区</span>
+            <span className="text-white/50">{t('chrome.dock.customZone')}</span>
             <button
               onClick={() => removeDockItem(menu.idx)}
               className="rounded-lg bg-red-500/25 px-2.5 py-1 font-medium text-red-200 transition-colors hover:bg-red-500/40"
             >
-              移除
+              {t('chrome.action.remove')}
             </button>
             <button
               onClick={() => setMenu(null)}
               className="rounded-lg bg-white/8 px-2.5 py-1 transition-colors hover:bg-white/16"
             >
-              取消
+              {t('chrome.action.cancel')}
             </button>
           </div>
         )}
@@ -377,6 +383,10 @@ function useClockMinute() {
     return () => clearInterval(t);
   }, []);
   const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  const date = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(now);
+  const date = new Intl.DateTimeFormat(getLang() === 'en' ? 'en-US' : 'zh-CN', {
+    month: 'long',
+    day: 'numeric',
+    weekday: 'long',
+  }).format(now);
   return { time, date };
 }

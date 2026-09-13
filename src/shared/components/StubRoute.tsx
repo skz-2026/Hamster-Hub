@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
+import { useI18n } from '@/shared/i18n/provider';
 
 /** 里程碑占位页：模块排期中，保持信息架构完整 */
 export function StubRoute({
@@ -12,6 +13,7 @@ export function StubRoute({
   milestone: string;
   features: string[];
 }) {
+  const { t } = useI18n();
   return (
     <div className="mx-auto max-w-5xl">
       <h1 className="mb-5 text-xl font-semibold">{title}</h1>
@@ -20,7 +22,7 @@ export function StubRoute({
           <Icon size={26} strokeWidth={1.8} />
         </span>
         <div className="text-[15px] font-medium">
-          {milestone} 里程碑上线
+          {t('chrome.stub.milestoneLive', { milestone })}
         </div>
         <ul className="flex max-w-md flex-wrap justify-center gap-2">
           {features.map((f) => (

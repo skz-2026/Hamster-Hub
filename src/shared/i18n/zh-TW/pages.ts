@@ -1,0 +1,87 @@
+import type { pages as pagesZh } from '../zh-CN/pages';
+
+/** 繁体中文译法需符合台湾习惯用词（如 设置→設定、文件→檔案、网络→網路） */
+export const pages: Record<keyof typeof pagesZh, string> = {
+  // —— 工作台 ——
+  'pages.workbench.motd': '今天也要元氣滿滿哦',
+  'pages.workbench.weather': '天氣',
+  'pages.workbench.weatherError': '天氣取得失敗',
+  'pages.workbench.weatherRetry': '檢查網路後自動重試',
+  'pages.workbench.tempRange': '最低 {min}° · 最高 {max}°',
+  'pages.workbench.countdown': '倒數日',
+  'pages.workbench.countdownEmpty': '暫無倒數日',
+  'pages.workbench.countdownToday': '就是今天',
+  'pages.workbench.countdownDays': '{days} 天',
+  'pages.workbench.recentFiles': '最近檔案',
+  'pages.workbench.fileCount': '{count} 個',
+  'pages.workbench.recentFilesEmpty': '暫無最近檔案',
+  'pages.workbench.topApps': '常用應用',
+  'pages.workbench.byFrequency': '按使用頻率',
+  'pages.workbench.topAppsEmptyHint1': '啟動幾個應用後',
+  'pages.workbench.topAppsEmptyHint2': '這裡會顯示你的常用榜',
+  'pages.workbench.lunarDate': '農曆{month}月{day} {year}年',
+  'pages.workbench.lunarFallback': '農曆',
+
+  // —— 時段問候 ——
+  'pages.greeting.lateNight': '夜深了',
+  'pages.greeting.earlyMorning': '早安',
+  'pages.greeting.morning': '早安',
+  'pages.greeting.noon': '午安',
+  'pages.greeting.afternoon': '午安',
+  'pages.greeting.evening': '晚安',
+
+  // —— 週幾（週一起始，配合字面量 key 陣列使用） ——
+  'pages.weekday.mon': '一',
+  'pages.weekday.tue': '二',
+  'pages.weekday.wed': '三',
+  'pages.weekday.thu': '四',
+  'pages.weekday.fri': '五',
+  'pages.weekday.sat': '六',
+  'pages.weekday.sun': '日',
+
+  // —— 行程 ——
+  'pages.schedule.title': '行程',
+  'pages.schedule.monthTitle': '{year} 年 {month} 月',
+  'pages.schedule.thisMonth': '本月',
+  'pages.schedule.countdown': '倒數日',
+  'pages.schedule.eventPlaceholder': '事件名稱',
+  'pages.schedule.countdownHint': '新增自訂倒數日，月曆會自動標出',
+  'pages.schedule.today': '今天',
+  'pages.schedule.daysLater': '{days} 天',
+  'pages.schedule.expired': '已過期',
+  'pages.schedule.notes': '便條',
+  'pages.schedule.noteCount': '{count} 條',
+  'pages.schedule.notePlaceholder': '記一條便條',
+  'pages.schedule.notesEmpty': '還沒有便條',
+  'pages.schedule.doubleClickEdit': '雙擊編輯',
+  'pages.schedule.pin': '置頂',
+  'pages.schedule.unpin': '取消置頂',
+  'pages.schedule.delete': '刪除',
+
+  // —— 檔案頁 ——
+  'pages.files.title': '檔案',
+  'pages.files.reindex': '重建索引',
+  'pages.files.reindexTitle': '全量重掃檔案索引（watcher 平時自動增量維護）',
+  'pages.files.searchPlaceholder': '搜尋檔案（拼音 / 首字母 / 檔名）…',
+  'pages.files.all': '全部',
+  'pages.files.kindFile': '檔案',
+  'pages.files.noMatch': '沒有符合「{q}」的檔案',
+  'pages.files.emptyIndex': '索引還沒有內容：點右上角「重建索引」掃描一遍（索引範圍見設定 file_index.roots）',
+  'pages.files.reveal': '在檔案總管中顯示',
+
+  // —— 應用頁 ——
+  'pages.apps.title': '應用',
+  'pages.apps.indexing': '索引中…',
+  'pages.apps.summary': '共 {count} 個 · 點擊啟動',
+  'pages.apps.emptyCategory': '該分類下暫無應用',
+
+  // —— 應用分類 ——
+  'pages.cat.all': '全部',
+  'pages.cat.communication': '溝通',
+  'pages.cat.office': '辦公',
+  'pages.cat.dev': '開發',
+  'pages.cat.entertainment': '娛樂',
+  'pages.cat.tools': '工具',
+  'pages.cat.system': '系統',
+  'pages.cat.other': '其他',
+};

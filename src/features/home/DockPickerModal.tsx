@@ -3,6 +3,7 @@ import { Loader2, Search, X } from 'lucide-react';
 import { useApps, useHomeLayout } from './hooks';
 import { AppIcon } from './AppIcon';
 import { DOCK_CAPACITY } from './layout';
+import { useI18n } from '@/shared/i18n/provider';
 
 /**
  * 「添加到 Dock」选择器（主窗口居中弹层；任务栏窗口太小放不下弹层，
@@ -10,6 +11,7 @@ import { DOCK_CAPACITY } from './layout';
  * 候选按常用度排序（常用在前），避免百余个字母序应用里难以找到目标。
  */
 export function DockPickerModal({ onClose }: { onClose: () => void }) {
+  const { t } = useI18n();
   const { data: apps = [], isLoading } = useApps();
   const { layout, usageRank, commit } = useHomeLayout(apps);
   const [q, setQ] = useState('');
@@ -44,7 +46,7 @@ export function DockPickerModal({ onClose }: { onClose: () => void }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3">
-          <h2 className="text-[15px] font-semibold">添加到任务栏</h2>
+          <h2 className="text-[15px] font-semibold">{t('chrome.action.addToDock')}</h2>
           <span className="text-[11.5px] text-white/45 tabular-nums">
             {layout.dock.length}/{DOCK_CAPACITY}
           </span>
@@ -54,14 +56,14 @@ export function DockPickerModal({ onClose }: { onClose: () => void }) {
               autoFocus
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="搜索应用"
+              placeholder={t('chrome.picker.searchApps')}
               className="h-8 w-full rounded-full bg-white/10 pl-8 pr-3 text-[12.5px] text-white outline-none ring-1 ring-white/12 placeholder:text-white/40 focus:ring-white/30"
             />
           </div>
           <button
             onClick={onClose}
             className="grid size-8 place-items-center rounded-full bg-white/10 text-white/70 transition-colors hover:bg-white/20 hover:text-white"
-            aria-label="关闭"
+            aria-label={t('chrome.action.close')}
           >
             <X size={14} />
           </button>
@@ -73,11 +75,11 @@ export function DockPickerModal({ onClose }: { onClose: () => void }) {
           </div>
         ) : full ? (
           <p className="grid flex-1 place-items-center text-[13px] text-white/50">
-            任务栏定制区已满（{DOCK_CAPACITY} 个）——右键图标可移除后再添加
+            {t('chrome.picker.dockFull', { n: DOCK_CAPACITY })}
           </p>
         ) : candidates.length === 0 ? (
           <p className="grid flex-1 place-items-center text-[13px] text-white/50">
-            {query ? `没有匹配「${q}」的应用` : '没有可添加的应用'}
+            {query ? t('chrome.picker.noMatch', { q }) : t('chrome.picker.noApps')}
           </p>
         ) : (
           <div className="grid flex-1 auto-rows-min grid-cols-7 content-start justify-items-center gap-y-5 overflow-y-auto px-1">
@@ -85,7 +87,7 @@ export function DockPickerModal({ onClose }: { onClose: () => void }) {
               <button
                 key={a.app_key}
                 onClick={() => add(a.app_key)}
-                title={`添加 ${a.display_name}`}
+                title={t('chrome.picker.addTitle', { name: a.display_name })}
                 className="rounded-2xl p-1 transition-transform hover:scale-105"
               >
                 <AppIcon

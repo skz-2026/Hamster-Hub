@@ -359,7 +359,7 @@ pub fn plugin_bridge_call(
                 .unwrap_or_default()
                 .trim()
                 .to_string();
-            let todo = store::todo::create(&conn, &content)?;
+            let todo = store::todo::create(&conn, &content, None, false)?;
             serde_json::to_value(todo).map_err(|e| AppError::new("PLUGIN_BRIDGE", e.to_string()))?
         }
         "apps.launch" | "apps.search" => {

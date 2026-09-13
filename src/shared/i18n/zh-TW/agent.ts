@@ -1,0 +1,76 @@
+import type { agent as agentZh } from '../zh-CN/agent';
+
+/** 繁体中文译法需符合台湾习惯用词（如 设置→設定、文件→檔案、网络→網路） */
+export const agent: Record<keyof typeof agentZh, string> = {
+  // 通用
+  'agent.assistantName': '桌面助理',
+  'agent.send': '傳送',
+  'agent.retry': '重試',
+  'agent.fileFallback': '檔案',
+
+  // AI 助理頁（/agent）
+  'agent.title': 'AI 助理',
+  'agent.systemPrompt': '你是倉鼠Hub 桌面助理內建的 AI 助理，回答簡潔、友善、實用，使用繁體中文回答。',
+  'agent.requestFailed': '請求失敗：{msg}',
+  'agent.tab.assistant': '桌面助理',
+  'agent.tab.quickAsk': '快問',
+  'agent.subtitleAssistant': 'Agent 驅動 · 可操作桌面',
+  'agent.subtitleQuick': '快問 · AI 直連補全',
+  'agent.placeholderQuick': '問點什麼…（Enter 傳送，Shift+Enter 換行）',
+  'agent.placeholderAssistant': '對桌面助理下達任務…（如「把「週五交週報」記成待辦，然後開啟計算機」）',
+  'agent.launchAssistant': '啟動桌面助理',
+  'agent.clearSession': '清空對話',
+  'agent.sessionActive': '助理對話進行中（結束按鈕在對話頂部）',
+  'agent.emptyTitle': '有什麼可以幫你？',
+  'agent.emptySubtitle': '問答、寫作、翻譯、點子……設定模型後即可開始',
+  'agent.suggestion.weeklyReport': '幫我寫一段週報開頭',
+  'agent.suggestion.tools': '推薦幾個效率工具',
+  'agent.suggestion.mcp': '解釋一下什麼是 MCP',
+  'agent.unconfiguredHint': '尚未設定 AI 模型——請先到設定頁填寫 API 位址、模型名稱與 Key。',
+  'agent.goConfigure': '前往設定',
+
+  // AssistantPanel：錯誤引導 / 對話橫幅 / 歡迎狀態
+  'agent.errMcpMissingTitle': '缺少桌面 MCP server',
+  'agent.errMcpMissingDetail': 'hamster-mcp.exe 不存在：請重新建置（cargo build -p hamster-mcp）或重新安裝應用程式。',
+  'agent.errNoAgentTitle': '沒有可用的 Agent CLI',
+  'agent.errNoAgentDetail': '桌面助理由本機已安裝的 Agent 驅動（Claude Code / ZCode 等），請先安裝任一個。',
+  'agent.errStartFailedTitle': '桌面助理啟動失敗',
+  'agent.mcpInjectedTitle': '本對話注入了 hamster-desktop MCP server：應用程式/檔案/待辦/音量 + 瀏覽器/桌面操作（後者受安全開關控管，所有呼叫皆留稽核）',
+  'agent.desktopToolsOn': '桌面工具已整合',
+  'agent.computerUseOff': ' · 桌面點擊/鍵入未開啟（可在設定頁開啟）',
+  'agent.composerPlaceholder': '傳訊息給桌面助理…（Enter 傳送，Shift+Enter 換行）',
+  'agent.fallbackQuickAsk': '改用快問模式繼續（AI 直連）',
+  'agent.welcomeTitle': '桌面助理 · 聽得懂話，也動得了手',
+  'agent.welcomeDesc': '由本機 Agent 驅動，透過桌面工具直接操作這台電腦：啟動應用程式、找檔案、記待辦、調整音量，需要時還能開瀏覽器查資料。所有工具呼叫皆留稽核記錄。',
+  'agent.computerUseHint': '桌面點擊/鍵入（computer use）預設關閉，可在設定頁「允許操作電腦」中開啟',
+
+  // 桌面 MCP 分發卡片
+  'agent.mcpCardTitle': '桌面 MCP · 分發到 Agent',
+  'agent.mcpCardDesc': '把倉鼠Hub 的桌面能力（應用程式/檔案/待辦/音量/瀏覽器/螢幕）以標準 MCP 設定寫入指定 agent——開啟即生效，移除即摘除；寫入前自動備份，可還原。',
+  'agent.copyUrl': '複製 URL',
+  'agent.toggleToken': '顯示/隱藏權杖',
+  'agent.copyToken': '複製權杖',
+  'agent.regenerateToken': '重新產生（舊權杖立即失效，已分發的設定需更新）',
+  'agent.portFallback': '首選連接埠 {port} 被佔用，本次改用隨機連接埠——已分發設定中的 URL 暫時無法使用，釋放連接埠後重新啟動應用程式即可恢復。',
+  'agent.noAgents': '未偵測到支援 MCP 分發的 agent（安裝 Claude Code / Codex 等後會自動出現）。',
+  'agent.distributeTo': '分發桌面 MCP 到 {name}',
+
+  // 搜尋頁 / Spotlight
+  'agent.groupApps': '應用程式',
+  'agent.groupFiles': '檔案',
+  'agent.groupWeb': '網頁',
+  'agent.groupAi': 'AI',
+  'agent.appEnterHint': '應用程式 · Enter 啟動',
+  'agent.searchTitle': '搜尋',
+  'agent.searchHint': '拼音 / 首字母縮寫 / 中文子字串均可命中',
+  'agent.searchPlaceholder': '搜尋應用程式、檔案、網頁…',
+  'agent.emptyHint': '輸入即搜：應用程式（如「微信」「wx」「weixin」）、本機檔案、網頁與問 AI。',
+  'agent.spotlightHint': '全域隨時可用 Alt+Space 呼出 Spotlight，與本頁使用同一套檢索。',
+  'agent.webSearch': '搜尋「{q}」',
+  'agent.webBaidu': '網頁 · 百度',
+  'agent.askAi': '問 AI：「{q}」',
+  'agent.aiAssistant': 'AI 助理',
+  'agent.todoQuickAdd': '記待辦：「{q}」',
+  'agent.todoNoDue': '無截止時間',
+  'agent.noResults': '沒有符合「{q}」的結果',
+};
