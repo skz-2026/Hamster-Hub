@@ -136,3 +136,46 @@ export function useSingleInstanceApps(keys: string[]) {
   });
   return useMemo(() => new Set(q.data ?? []), [q.data]);
 }
+
+/**
+ * 托管分屏会话（桌面接管态）。2.5s 轮询：分屏里的窗口可能被用户在别处关掉
+ * （任务栏、应用自己退出），Rust 侧读快照时顺手剔除死窗并让剩下的补位——
+ * 轮询就能拿到补位后的新布局。不开分屏（enabled=false）时不轮询。
+ */
+export function useSplitState(enabled: boolean) {
+  const qc = useQueryClient();
+  // 分屏动作可能发生在另一个窗口（任务栏胶囊 ↔ 置顶管理弹层各自一份 Query 缓存），
+  // 变更方广播事件，这里失效重取，胶囊状态才不会慢半拍
+  useEffect(() => {
+    if (!isTauri) return;
+    let un: (() => void) | undefined;
+    listen('hamster:split-changed', () => qc.invalidateQueries({ queryKey: ['split'] }))
+      .then((fn) => (un = fn))
+      .catch(console.error);
+    return () => un?.();
+  }, [qc]);
+  return useQuery({
+    queryKey: ['split', 'state'],
+    queryFn: () => commands.splitState(),
+    enabled,
+    refetchInterval: enabled ? 2500 : false,
+    staleTime: 1500,
+  });
+}
+
+/** 分屏动作：加窗 / 移出 / 退出。Rust 返回新快照，直接写进缓存省一轮往返 */
+export function useSplitActions() {
+  const qc = useQueryClient();
+  const put = (s: Awaited<ReturnType<typeof commands.splitState>>) => {
+    qc.setQueryData(['split', 'state'], s);
+    if (isTauri) emit('hamster:split-changed').catch(console.error);
+  };
+  return {
+    add: useMutation({ mutationFn: (appKey: string) => commands.splitAdd(appKey), onSuccess: put }),
+    remove: useMutation({
+      mutationFn: (windowId: number) => commands.splitRemove(windowId),
+      onSuccess: put,
+    }),
+    exit: useMutation({ mutationFn: () => commands.splitExit(), onSuccess: put }),
+  };
+}

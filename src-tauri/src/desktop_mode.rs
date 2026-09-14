@@ -196,6 +196,10 @@ pub fn exit(app: &tauri::AppHandle) -> Result<(), crate::error::AppError> {
     // ⓪ 先撤 Win+D 守卫：还原期间按键立即交还系统原生行为
     hamster_platform::wind_guard::stop();
 
+    // ⓪' 结束托管分屏：任务栏（与胶囊入口）马上要藏起来，会话留着就再也退不掉了，
+    // 分屏内的窗口会永远钉在分屏位置。先让它们各回原位，再还原系统。
+    crate::split_mode::exit();
+
     // ① 按快照还原系统状态（任务栏可见性 + 桌面图标），并删除快照。
     // 快照删除后看门狗下一次轮询（≤2s）即自行退出。
     if let Some(path) = hamster_platform::snapshot::snapshot_path() {

@@ -14,3 +14,6 @@ pub mod todo;
 pub mod tray;
 pub mod updater;
 pub mod vault;
+// 托管式分屏（dock 右键「分屏添加」→ 会话维持 → 随时移出/退出；
+// 会话在 src/split_mode.rs，几何与窗口状态在 hamster-platform::tile）
+pub mod split;

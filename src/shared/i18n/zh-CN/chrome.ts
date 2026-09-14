@@ -43,6 +43,9 @@ export const chrome = {
   'chrome.dock.newInstance': '多开应用',
   'chrome.dock.pickWindow': '选择要前置的窗口',
   'chrome.dock.minimized': '已最小化',
+  'chrome.dock.splitAdd': '分屏添加',
+  'chrome.dock.splitRemove': '移出分屏',
+  'chrome.dock.splitFull': '分屏已满（4/4）',
 
   // 应用选择器弹层
   'chrome.picker.searchApps': '搜索应用',

@@ -283,6 +283,56 @@ test.describe('仓鼠Hub 冒烟（浏览器预览 + IPC mock）', () => {
   });
 });
 
+test.describe('托管分屏（dock 右键「分屏添加」→ 胶囊 → 管理 → 退出）', () => {
+  test('加两扇 → 胶囊计数 → 菜单转「移出」→ 管理弹层 → 退出清空', async ({ page }) => {
+    await page.goto('/#/');
+    await page.waitForTimeout(1200);
+
+    // 分屏入口只在桌面接管态给：先切到接管形态（窗口化胶囊态无分屏项）
+    await page.getByRole('button', { name: '进入桌面模式' }).click();
+    await page.waitForTimeout(700);
+    const dock = page.locator('.ios-dock');
+    await expect(dock).toBeVisible();
+
+    // 右键运行中的应用（常用组：微信）→ 菜单出现「分屏添加」。
+    // 菜单项用 dispatchEvent 派发：预览态左下角有 WebDebugBar（z-999）会压住
+    // 菜单的命中区，真机没有这层调试浮层——这里验的是动作链路本身
+    await dock.getByRole('button', { name: '微信' }).click({ button: 'right' });
+    const addItem = page.getByRole('button', { name: '分屏添加' });
+    await expect(addItem).toBeVisible();
+    await addItem.dispatchEvent('click');
+    // 加入第一扇 → 任务栏出现状态胶囊
+    await expect(page.getByText('分屏 1/4')).toBeVisible();
+
+    // 第二扇（Steam）→ 2/4
+    await dock.getByRole('button', { name: 'Steam' }).click({ button: 'right' });
+    await page.getByRole('button', { name: '分屏添加' }).dispatchEvent('click');
+    await expect(page.getByText('分屏 2/4')).toBeVisible();
+
+    // 已在分屏里的应用：菜单那一行换成「移出分屏」
+    await dock.getByRole('button', { name: 'Steam' }).click({ button: 'right' });
+    await expect(page.getByRole('button', { name: '移出分屏' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', { name: '移出分屏' })).toHaveCount(0);
+
+    // 点胶囊 → 管理弹层：两行成员 + 行内移出/关闭 + 底部「退出分屏」
+    await page.getByText('分屏 2/4').click();
+    const panel = page.getByRole('dialog');
+    await expect(panel).toBeVisible();
+    await expect(panel.getByText('主窗口')).toHaveCount(2);
+    await expect(panel.getByTitle('移出分屏')).toHaveCount(2);
+    await expect(panel.getByRole('button', { name: '退出分屏' })).toBeVisible();
+
+    // 移出一扇：窗口留下，会话继续 → 胶囊回到 1/4
+    await panel.getByTitle('移出分屏').first().click();
+    await expect(page.getByText('分屏 1/4')).toBeVisible();
+
+    // 退出分屏：全清 → 胶囊消失（窗口各自还原）
+    await panel.getByRole('button', { name: '退出分屏' }).click();
+    await expect(page.getByText(/分屏 \d\/4/)).toHaveCount(0);
+  });
+});
+
 test.describe('代理工作台（bench，上游域层整合 MVP）', () => {
   test('GUI 流式对话：首页 composer 创建会话 → 假代理流式回一轮', async ({ page }) => {
     await page.goto('/#/bench');

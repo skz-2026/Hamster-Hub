@@ -13,6 +13,7 @@ mod error;
 mod events;
 mod mcp_server;
 mod plugins;
+mod split_mode;
 mod store;
 
 use std::sync::Mutex;
@@ -80,10 +81,17 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::apps::app_close,
             commands::apps::apps_running,
             commands::apps::app_search,
+            // 托管式分屏（dock 右键「分屏添加」→ 会话维持 → 移出/退出还原）
+            commands::split::split_state,
+            commands::split::split_add,
+            commands::split::split_remove,
+            commands::split::split_exit,
             // dock 右键菜单弹窗（任务栏条内放不下纵向菜单，弹独立置顶小窗）
             commands::dock::dock_menu_open,
             commands::dock::dock_menu_payload,
             commands::dock::dock_menu_hide,
+            // 任务栏「分屏 n/4」胶囊的管理弹层（同一置顶小窗，kind=split）
+            commands::dock::split_menu_open,
             commands::todo::todo_list,
             commands::todo::todo_create,
             commands::todo::todo_toggle,

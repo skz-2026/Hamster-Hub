@@ -6,6 +6,7 @@ import { home } from "./home";
 import { pages } from "./pages";
 import { vault } from "./vault";
 import { notifications } from "./notifications";
+import { split } from "./split";
 
 /** 简体中文 = 基准词典；en / zh-TW 必须包含完全相同的 key（编译期强制） */
-export const zhCN = { ...chrome, ...settings, ...agent, ...bench, ...home, ...pages, ...vault, ...notifications } as const;
+export const zhCN = { ...chrome, ...settings, ...agent, ...bench, ...home, ...pages, ...vault, ...notifications, ...split } as const;

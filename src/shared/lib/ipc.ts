@@ -40,6 +40,8 @@ export type {
   Note,
   ProcInfo,
   Settings,
+  SplitMember,
+  SplitState,
   SystemSnapshot,
   Todo,
   TodoReminder,

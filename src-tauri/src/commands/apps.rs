@@ -34,8 +34,8 @@ pub fn app_search(
     appindex::search(&conn, &query, limit.unwrap_or(8))
 }
 
-/// app_key → exec_target（app_meta 单行查询）
-fn exec_target_of(conn: &rusqlite::Connection, app_key: &str) -> Option<String> {
+/// app_key → exec_target（app_meta 单行查询）。分屏命令也要用，故 crate 内可见
+pub(crate) fn exec_target_of(conn: &rusqlite::Connection, app_key: &str) -> Option<String> {
     conn.query_row(
         "SELECT exec_target FROM app_meta WHERE app_key = ?1",
         [app_key],

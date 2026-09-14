@@ -8,5 +8,6 @@ import { home } from './home';
 import { pages } from './pages';
 import { vault } from './vault';
 import { notifications } from './notifications';
+import { split } from './split';
 
-export const en: Record<keyof typeof zhCN, string> = { ...chrome, ...settings, ...agent, ...bench, ...home, ...pages, ...vault, ...notifications };
+export const en: Record<keyof typeof zhCN, string> = { ...chrome, ...settings, ...agent, ...bench, ...home, ...pages, ...vault, ...notifications, ...split };

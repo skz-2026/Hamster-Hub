@@ -12,9 +12,11 @@ import { getLang } from '@/shared/i18n/core';
 import type { TKey } from '@/shared/i18n/core';
 import { useTopApps } from '@/features/dashboard/hooks';
 import TrayButton from './TrayArea';
-import { useApps, useHomeLayout, useRunningAppKeys, useSingleInstanceApps } from './hooks';
+import { useApps, useHomeLayout, useRunningAppKeys, useSingleInstanceApps, useSplitActions, useSplitState } from './hooks';
 import DockAppMenu from './DockAppMenu';
 import DockWindowsCard from './DockWindowsCard';
+import SplitPill from './SplitPill';
+import SplitPanel from './SplitPanel';
 import { Monogram } from './AppIcon';
 import { DOCK_CAPACITY, removeFromDock } from './layout';
 
@@ -95,6 +97,19 @@ export function DockBar({ desktop }: DockBarProps) {
   const runningKeys = useRunningAppKeys(dockAppKeys);
   // 已知单实例应用（内置名单 + 自学习）：菜单隐藏「多开应用」
   const singleApps = useSingleInstanceApps(dockAppKeys);
+  // 托管分屏（仅桌面接管态）：胶囊状态 + 右键菜单那一行的三态（添加/移出/已满）。
+  // 会话由 Rust 维持，这里 2.5s 轮询快照；窗口化胶囊形态不开放分屏入口，
+  // 故 enabled=desktop——不轮询也就没有后台开销
+  const split = useSplitState(!!desktop);
+  const splitActions = useSplitActions();
+  const splitMembers = useMemo(
+    () => new Set((split.data?.members ?? []).map((m) => m.appKey)),
+    [split.data],
+  );
+  const splitCount = split.data?.members.length ?? 0;
+  const splitFull = splitCount >= (split.data?.capacity ?? 4);
+  // 本地（浏览器预览/主窗口内）分屏管理浮层：任务栏窗一条高放不下，走独立弹窗
+  const [splitPanelOpen, setSplitPanelOpen] = useState(false);
   const exitDesktop = () => commands.desktopModeExit().catch(console.error);
   const enterDesktop = () => commands.desktopModeEnter().catch(console.error);
   /** 开始：注入 Ctrl+Esc 召出系统真实开始菜单（全局键注入，任务栏窗口内调用同样有效） */
@@ -147,6 +162,19 @@ export function DockBar({ desktop }: DockBarProps) {
     setMenu(null);
   };
 
+  /** 分屏添加：把该应用的窗口纳入托管（会话由 Rust 维持，胶囊随轮询出现） */
+  const splitAdd = (key: string) => {
+    // 已满 4 扇 / 该应用没有可分屏的窗口：后端拒绝，这里只记日志（入口已按状态收窄）
+    splitActions.add.mutate(key, { onError: (e) => console.error('[split] 加入分屏失败', e) });
+    setMenu(null);
+  };
+  /** 分屏移出：把该应用在分屏里的那扇窗口移出并还原到加入前的位置 */
+  const splitRemove = (key: string) => {
+    const m = split.data?.members.find((x) => x.appKey === key);
+    if (m) splitActions.remove.mutate(m.windowId);
+    setMenu(null);
+  };
+
   /** 任务栏定制组的增删（主屏编辑模式之外的第二入口） */
   const removeDockItem = (key: string) => {
     const idx = layout.dock.indexOf(key);
@@ -182,6 +210,11 @@ export function DockBar({ desktop }: DockBarProps) {
                 removable: false,
                 running: true,
                 multi: true,
+                // 悬停卡片不含分屏项（它是「挑一扇窗口前置」的菜单）
+                splitAvailable: false,
+                splitMember: false,
+                splitFull: false,
+                splitCount: 0,
                 windows,
               })
               .catch(console.error);
@@ -235,6 +268,13 @@ export function DockBar({ desktop }: DockBarProps) {
           removable,
           running: runningKeys.has(key),
           multi: !singleApps.has(key),
+          // 分屏那一行：桌面接管态 + 应用在运行才给；已在分屏里就显示「移出」，
+          // 满了显示禁用行说明原因（不做静默隐藏，否则用户以为功能丢了）
+          splitAvailable:
+            !!desktop && runningKeys.has(key) && (splitMembers.has(key) || !splitFull),
+          splitMember: splitMembers.has(key),
+          splitFull,
+          splitCount: 0,
           windows: [],
         })
         .catch(console.error);
@@ -252,6 +292,23 @@ export function DockBar({ desktop }: DockBarProps) {
       window.dispatchEvent(new CustomEvent('hamster:open-app-picker'));
     }
   };
+  /** 分屏胶囊：任务栏窗弹独立置顶弹层（一条高放不下成员列表）；浏览器预览/主窗口内本地浮层 */
+  const openSplitPanel = (x: number) => {
+    if (inTaskbarWindow) commands.splitMenuOpen(x, splitCount).catch(console.error);
+    else setSplitPanelOpen(true);
+  };
+
+  // 本地分屏浮层：点外面/Esc 收回（浮层自身 stopPropagation，不会误关）
+  useEffect(() => {
+    if (!splitPanelOpen) return;
+    const close = () => setSplitPanelOpen(false);
+    window.addEventListener('pointerdown', close);
+    window.addEventListener('keydown', close);
+    return () => {
+      window.removeEventListener('pointerdown', close);
+      window.removeEventListener('keydown', close);
+    };
+  }, [splitPanelOpen]);
 
   // 点击菜单外 / Esc 关闭
   useEffect(() => {
@@ -296,8 +353,8 @@ export function DockBar({ desktop }: DockBarProps) {
   // 监听器必须挂载一次：top 每 30s 轮询 + 每次启动都失效重取，若依赖
   // [layout, top] 反复重挂，退订又是 listen() 异步赋值——竞态漏退订会让
   // 监听器叠加，一次「多开」被放大成 N 个窗口。handler 走 ref 取最新。
-  const actionHandlers = useRef({ closeApp, launchNew, removeDockItem });
-  actionHandlers.current = { closeApp, launchNew, removeDockItem };
+  const actionHandlers = useRef({ closeApp, launchNew, removeDockItem, splitAdd, splitRemove });
+  actionHandlers.current = { closeApp, launchNew, removeDockItem, splitAdd, splitRemove };
   useEffect(() => {
     if (!isTauri) return;
     let un: (() => void) | undefined;
@@ -315,6 +372,8 @@ export function DockBar({ desktop }: DockBarProps) {
       if (action === 'close') h.closeApp(key);
       else if (action === 'new') h.launchNew(key);
       else if (action === 'remove') h.removeDockItem(key);
+      else if (action === 'split-add') h.splitAdd(key);
+      else if (action === 'split-remove') h.splitRemove(key);
     })
       .then((fn) => {
         // cleanup 先于 promise 到达：立即退订，杜绝泄漏
@@ -397,6 +456,12 @@ export function DockBar({ desktop }: DockBarProps) {
             />
           ))}
           <div className="ml-auto flex items-end gap-2 pl-3">
+            {/* 分屏状态胶囊（没开分屏时自身不渲染）：点开管理，✕ 一键退出 */}
+            <SplitPill
+              state={split.data}
+              onManage={openSplitPanel}
+              onExit={() => splitActions.exit.mutate()}
+            />
             {/* 设置入口（右端）：与胶囊系统组末位同一渲染 */}
             <DockItem
               label={t('chrome.nav.settings')}
@@ -427,7 +492,7 @@ export function DockBar({ desktop }: DockBarProps) {
           </div>
         </div>
 
-        {/* 右键菜单：关闭窗口（运行中）/ 多开 / 移除（定制组）。
+        {/* 右键菜单：关闭窗口（运行中）/ 多开 / 分屏添加或移出（接管态）/ 移除（定制组）。
             任务栏独立窗口 72px 高 → 横向贴顶胶囊；主窗口内 → 纵向弹上方 */}
         {menu && (
           <DockAppMenu
@@ -435,9 +500,18 @@ export function DockBar({ desktop }: DockBarProps) {
             running={runningKeys.has(menu.key)}
             removable={menu.removable}
             multiCapable={!singleApps.has(menu.key)}
+            splitEnabled={
+              !!desktop &&
+              runningKeys.has(menu.key) &&
+              (splitMembers.has(menu.key) || !splitFull)
+            }
+            splitMember={splitMembers.has(menu.key)}
+            splitFull={splitFull}
             onCloseApp={() => closeApp(menu.key)}
             onNewInstance={() => launchNew(menu.key)}
             onRemove={() => removeDockItem(menu.key)}
+            onSplitAdd={() => splitAdd(menu.key)}
+            onSplitRemove={() => splitRemove(menu.key)}
           />
         )}
         {/* 悬停窗口卡片（浏览器预览/主窗口内嵌形态；真任务栏窗走独立弹窗） */}
@@ -453,6 +527,10 @@ export function DockBar({ desktop }: DockBarProps) {
               setPeek(null);
             }}
           />
+        )}
+        {/* 分屏管理浮层（浏览器预览/主窗口内嵌形态；真任务栏窗走独立置顶弹窗） */}
+        {splitPanelOpen && (
+          <SplitPanel initialCount={splitCount} onDismiss={() => setSplitPanelOpen(false)} />
         )}
       </div>
     );

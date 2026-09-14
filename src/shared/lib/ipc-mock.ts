@@ -16,6 +16,7 @@ import type {
   Note,
   ProcInfo,
   Settings,
+  SplitState,
   SystemSnapshot,
   Todo,
   TodoReminder,
@@ -128,6 +129,10 @@ let MOCK_DOCK_MENU: DockMenuPayload | null = {
   removable: true,
   running: true,
   multi: false,
+  splitAvailable: true,
+  splitMember: false,
+  splitFull: false,
+  splitCount: 0,
   windows: [],
 };
 
@@ -358,6 +363,44 @@ function vaultStrengthMock(password: string): number {
   if (1 - unique / password.length > 0.6) score = Math.min(score, 2);
   return score;
 }
+
+// ===== 托管式分屏（mock） =====
+// 真机由 Rust 的 split_mode 维持会话（会话状态 + Win32 摆窗，见 src-tauri/src/split_mode.rs）；
+// 浏览器预览没有后端，这里维护一份同构假会话，让「分屏添加 → 胶囊 → 管理弹层 → 退出」
+// 整条链路在预览里可点。布局映射与 Rust 的 tile::layout_for 同值。
+
+/** 成员数 → 布局（与 tile::layout_for 同值：1~2 扇 → 左右，3 扇 → 三分，4 扇 → 四分） */
+const MOCK_SPLIT_LAYOUTS = [
+  { id: 'lr', slots: 2 },
+  { id: 'cols3', slots: 3 },
+  { id: 'quad', slots: 4 },
+] as const;
+
+/** 分屏成员（顺序 = 格序；窗口清单是唯一事实源，关掉窗口即从会话消失） */
+let MOCK_SPLIT: { windowId: number; appKey: string }[] = [];
+
+function mockSplitState(): SplitState {
+  const n = MOCK_SPLIT.length;
+  const layout = n === 0 ? null : MOCK_SPLIT_LAYOUTS[n <= 2 ? 0 : n === 3 ? 1 : 2];
+  return {
+    active: n > 0,
+    layout: layout?.id ?? '',
+    slots: layout?.slots ?? 0,
+    capacity: 4,
+    members: MOCK_SPLIT.map((m, slot) => ({
+      windowId: m.windowId,
+      appKey: m.appKey,
+      title: MOCK_WINDOWS.find((w) => w.id === m.windowId)?.title ?? '',
+      process: MOCK_PROCESS_OF.get(m.appKey) ?? m.appKey,
+      png: '',
+      slot,
+    })),
+  };
+}
+
+
+/** 窗口所属应用的显示名（mock 里当作 process 展示） */
+const MOCK_PROCESS_OF = new Map(APPS.map((a) => [a.app_key, a.display_name]));
 
 // ===== mock commands（与生成契约同签名） =====
 
@@ -733,6 +776,49 @@ export const mockCommands = {
         MOCK_RUNNING.delete(rm.appKey);
       }
     }
+    return null;
+  },
+  // ===== 托管式分屏 =====
+  async splitState(): Promise<SplitState> {
+    // 真机顺带自愈（剔除已被关掉的窗口）；mock 里窗口清单就是事实源，同样对齐
+    MOCK_SPLIT = MOCK_SPLIT.filter((m) => MOCK_WINDOWS.some((w) => w.id === m.windowId));
+    return mockSplitState();
+  },
+  async splitAdd(appKey: string): Promise<SplitState> {
+    if (MOCK_SPLIT.length >= 4) throw new Error('分屏已满（最多 4 个窗口）');
+    const taken = new Set(MOCK_SPLIT.map((m) => m.windowId));
+    // 真机取该进程「尚未在分屏里」的最上层窗口；mock 按清单顺序取首个
+    const win = MOCK_WINDOWS.find((w) => w.appKey === appKey && !taken.has(w.id));
+    if (!win) throw new Error('该应用没有可加入分屏的窗口');
+    MOCK_SPLIT.push({ windowId: win.id, appKey });
+    console.log('[mock] 分屏添加', appKey, win.title);
+    return mockSplitState();
+  },
+  async splitRemove(windowId: number): Promise<SplitState> {
+    MOCK_SPLIT = MOCK_SPLIT.filter((m) => m.windowId !== windowId);
+    console.log('[mock] 移出分屏', windowId);
+    return mockSplitState();
+  },
+  async splitExit(): Promise<SplitState> {
+    MOCK_SPLIT = [];
+    console.log('[mock] 退出分屏');
+    return mockSplitState();
+  },
+  async splitMenuOpen(x: number, count: number): Promise<null> {
+    console.log('[mock] 打开分屏管理弹层', x, count);
+    MOCK_DOCK_MENU = {
+      kind: 'split',
+      appKey: '',
+      x,
+      removable: false,
+      running: false,
+      multi: false,
+      splitAvailable: false,
+      splitMember: false,
+      splitFull: false,
+      splitCount: count,
+      windows: [],
+    };
     return null;
   },
   // dock 右键菜单弹窗（真机是独立置顶小窗；浏览器内仅 /dock-menu 路由预览用，

@@ -110,3 +110,21 @@
     另：本地跑 Rust 门禁时若 `pnpm tauri dev` 还开着，`target/` 被占用会报
     `build.rs: tauri-build: os error 32`。用 `CARGO_TARGET_DIR=src-tauri/target-verify` 换个目标目录即可绕开，
     不必杀掉正在接管桌面的 dev 实例。
+    **补充（2026-09-14 加窗口分屏命令时实测）**：dev 实例占位还有第二种表现——`pnpm codegen:ipc`
+    （= `cargo test export_bindings`）会在**链接 bin** 时炸：`LINK : fatal error LNK1104: 无法打开文件
+    "target\debug\deps\hamster-hub.exe"`（运行中的实例锁着这个 exe），整个命令 exit 101，**ipc.ts 不会更新**，
+    而报错信息里的 `error: could not compile hamster-hub (bin "hamster-hub")` 看着像代码写错了，极易误判。
+    判据：只有 bin 挂、`Compiling hamster-hub` 的 lib 早过了。绕法：codegen 只需要 lib 测试目标，
+    跑 `cargo test --manifest-path src-tauri/Cargo.toml --lib export_bindings` 即可（lib 测试产物是
+    `deps/hamster_hub_lib-<hash>.exe`，与 bin 不同路径，不冲突），**不必**换 target 目录、更不必杀实例。
+    同理 `cargo clippy`（只做检查不链接）不受影响，可照常跑全量门禁；只有 `cargo test --workspace`
+    的全量跑（含 `tests/live_agent_chat.rs` 等集成测试）会被卡住。
+    **再补充（2026-09-14 晚实测）**：还有第三种表现——**进程已经不在，exe 仍被占用**。
+    `Get-Process -Name hamster-hub` 查不到、`tasklist` 也空，但 `cargo test --workspace` /
+    `pnpm codegen:ipc` 报 `failed to remove file ...\target\debug\hamster-hub.exe: 拒绝访问 (os error 5)`，
+    连 `rm -f` 都删不掉（残留句柄：崩溃后的映像/杀软扫描/被挂起的僵尸进程都可能）。
+    这时**不要**去猜是谁占着，重命名备份都没用——直接分开跑：
+      · `cargo clippy --workspace --all-targets -- -D warnings`（检查不链接 → 覆盖到 bin 的编译检查）
+      · `cargo test --workspace --lib`（lib 测试产物在 `deps/hamster_hub_lib-<hash>.exe`，与 bin 不同路径）
+    两条合起来与全量门禁等价（bin 只有 `main.rs` 薄壳、无单测），比换 `CARGO_TARGET_DIR`
+    全量重编（Tauri 依赖树，分钟级）划算得多。

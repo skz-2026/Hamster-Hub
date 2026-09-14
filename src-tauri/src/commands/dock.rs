@@ -20,7 +20,7 @@ use crate::error::AppError;
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct DockMenuPayload {
-    /// "menu" = 右键菜单；"hover" = 悬停窗口卡片
+    /// "menu" = 右键菜单；"hover" = 悬停窗口卡片；"split" = 分屏管理弹层
     pub kind: String,
     pub app_key: String,
     /// 锚点 x（任务栏窗口内逻辑 px，用于水平居中弹窗）
@@ -31,7 +31,15 @@ pub struct DockMenuPayload {
     pub running: bool,
     /// 支持多开才显示「多开应用」（menu；单实例应用点了只会收敛回已有窗口）
     pub multi: bool,
-    /// 悬停卡片窗口清单（hover；menu 为空）
+    /// 桌面接管态才给分屏入口（menu 里显示「分屏添加/移出/已满」一行）
+    pub split_available: bool,
+    /// 该应用已在分屏中 → 那一行换成「移出分屏」
+    pub split_member: bool,
+    /// 分屏已满 4/4 且该应用不在其中 → 那一行显示为禁用的「分屏已满」
+    pub split_full: bool,
+    /// kind=split：当前成员数（弹窗高度按行数算）
+    pub split_count: u32,
+    /// 悬停卡片窗口清单（hover；menu/split 为空）
     pub windows: Vec<AppWindowInfo>,
 }
 
@@ -60,12 +68,47 @@ const HOVER_ITEM_H: f64 = 40.0;
 const PAD_H: f64 = 8.0;
 /// 悬停卡片最大高度（逻辑 px；窗口更多时内部滚动）
 const HOVER_MAX_H: f64 = 440.0;
+/// 分屏管理弹层宽度（逻辑 px；要放下窗口标题 + 行尾「关闭」）
+const SPLIT_W: f64 = 280.0;
+/// 分屏弹层标题行高（逻辑 px，与 SplitPanel 的 h-[30px] 对齐）
+const SPLIT_HEAD_H: f64 = 30.0;
+/// 分屏弹层成员行高（逻辑 px，与 SplitPanel 的 h-[34px] 对齐）
+const SPLIT_ITEM_H: f64 = 34.0;
+/// 分屏弹层底部「退出分屏」按钮行高（逻辑 px，与 h-[44px] 对齐）
+const SPLIT_FOOT_H: f64 = 44.0;
 
 /// 打开（或换目标重开）dock 弹窗：水平钳进任务栏范围，垂直落在任务栏条
-/// 上沿上方 8px。menu 抢焦点（失焦即收）；hover 不抢焦点（跟随悬停）。
+/// 上沿上方 8px。menu/split 抢焦点（失焦即收）；hover 不抢焦点（跟随悬停）。
 #[tauri::command]
 #[specta::specta]
 pub fn dock_menu_open(app: AppHandle, payload: DockMenuPayload) -> Result<(), AppError> {
+    show(&app, payload)
+}
+
+/// 打开「管理分屏」弹层（任务栏胶囊点击）：与右键菜单同一置顶小窗，
+/// 只是 kind=split、尺寸按成员行数算（行数由调用方给，避免弹窗自己再查一遍会话）。
+#[tauri::command]
+#[specta::specta]
+pub fn split_menu_open(app: AppHandle, x: f64, count: u32) -> Result<(), AppError> {
+    show(
+        &app,
+        DockMenuPayload {
+            kind: "split".into(),
+            app_key: String::new(),
+            x,
+            removable: false,
+            running: false,
+            multi: false,
+            split_available: false,
+            split_member: false,
+            split_full: false,
+            split_count: count,
+            windows: Vec::new(),
+        },
+    )
+}
+
+fn show(app: &AppHandle, payload: DockMenuPayload) -> Result<(), AppError> {
     let tb = app
         .get_webview_window("taskbar")
         .ok_or_else(|| AppError::new("DOCK_MENU", "taskbar 窗口不存在（未处于桌面模式）"))?;
@@ -81,15 +124,25 @@ pub fn dock_menu_open(app: AppHandle, payload: DockMenuPayload) -> Result<(), Ap
         .outer_size()
         .map_err(|e| AppError::new("DOCK_MENU", e.to_string()))?;
 
-    // 尺寸按 kind：菜单 = 条目数 × 行高；悬停卡片 = 窗口数 × 行高（封顶滚动）
+    // 尺寸按 kind：菜单 = 条目数 × 行高；悬停卡片 = 窗口数 × 行高（封顶滚动）；
+    // 分屏弹层 = 标题行 + 成员行数 × 行高 + 底部按钮
     let (w_logical, h_logical) = if payload.kind == "hover" {
         let rows = payload.windows.len().max(1) as f64;
         (
             HOVER_W,
             ((rows * HOVER_ITEM_H + PAD_H) * scale).min(HOVER_MAX_H * scale) / scale,
         )
+    } else if payload.kind == "split" {
+        let rows = (payload.split_count.max(1) as usize).min(crate::split_mode::CAPACITY) as f64;
+        (
+            SPLIT_W,
+            PAD_H + SPLIT_HEAD_H + rows * SPLIT_ITEM_H + SPLIT_FOOT_H,
+        )
     } else {
-        let items = payload.multi as i32 + payload.removable as i32 + payload.running as i32;
+        let items = payload.multi as i32
+            + payload.removable as i32
+            + payload.running as i32
+            + payload.split_available as i32;
         (MENU_W, items as f64 * MENU_ITEM_H + PAD_H)
     };
     let w = (w_logical * scale).round() as i32;

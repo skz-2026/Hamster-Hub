@@ -39,6 +39,9 @@ export const chrome: Record<keyof typeof chromeZh, string> = {
   'chrome.dock.newInstance': 'New window',
   'chrome.dock.pickWindow': 'Pick a window to bring to front',
   'chrome.dock.minimized': 'Minimized',
+  'chrome.dock.splitAdd': 'Add to split',
+  'chrome.dock.splitRemove': 'Remove from split',
+  'chrome.dock.splitFull': 'Split is full (4/4)',
 
   'chrome.picker.searchApps': 'Search apps',
   'chrome.picker.dockFull': 'Custom area is full ({n} apps) — right-click an icon to remove one first',

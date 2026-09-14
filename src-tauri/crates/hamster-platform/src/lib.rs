@@ -5,6 +5,7 @@ pub mod icons;
 pub mod shell;
 pub mod snapshot;
 pub mod taskbar;
+pub mod tile;
 pub mod tray;
 pub mod volume;
 pub mod wind_guard;

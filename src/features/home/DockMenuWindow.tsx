@@ -1,14 +1,16 @@
 /**
- * dock 弹窗的内容体（路由 /dock-menu，由 Rust dock_menu_open 定位显示）。
+ * dock 弹窗的内容体（路由 /dock-menu，由 Rust dock_menu_open/split_menu_open 定位显示）。
  * kind = menu：右键菜单（载荷拉取 + 事件增量 + 动作广播给渲染 DockBar 的
  * 窗口执行 + 失焦/Esc 收回）；kind = hover：悬停窗口卡片（点行直接
- * app_window_activate，鼠标离开/任务栏图标离开收回，不抢焦点）。
+ * app_window_activate，鼠标离开/任务栏图标离开收回，不抢焦点）；
+ * kind = split：分屏管理弹层（自带取数，成员变化时重开同步高度）。
  */
 import { useEffect, useRef, useState } from 'react';
 import { emit, listen } from '@tauri-apps/api/event';
 import { commands, type DockMenuPayload } from '@/shared/lib/ipc';
 import DockAppMenu from './DockAppMenu';
 import DockWindowsCard from './DockWindowsCard';
+import SplitPanel from './SplitPanel';
 
 export default function DockMenuWindow() {
   const [payload, setPayload] = useState<DockMenuPayload | null>(null);
@@ -107,8 +109,17 @@ export default function DockMenuWindow() {
     );
   }
 
+  if (payload.kind === 'split') {
+    // 分屏管理弹层：数据自带（split_state 轮询），载荷只给锚点与初始成员数
+    return (
+      <div className="h-screen w-full">
+        <SplitPanel inPopup anchorX={payload.x} initialCount={payload.splitCount} />
+      </div>
+    );
+  }
+
   /** 动作广播给渲染 DockBar 的窗口执行（remove 需 layout commit；close/new 失效其查询） */
-  const act = (action: 'close' | 'new' | 'remove') => {
+  const act = (action: 'close' | 'new' | 'remove' | 'split-add' | 'split-remove') => {
     emit('hamster:dock-menu-action', { action, key: payload.appKey }).catch(console.error);
     commands.dockMenuHide().catch(console.error);
   };
@@ -120,9 +131,14 @@ export default function DockMenuWindow() {
         running={payload.running}
         removable={payload.removable}
         multiCapable={payload.multi}
+        splitEnabled={payload.splitAvailable}
+        splitMember={payload.splitMember}
+        splitFull={payload.splitFull}
         onNewInstance={() => act('new')}
         onCloseApp={() => act('close')}
         onRemove={() => act('remove')}
+        onSplitAdd={() => act('split-add')}
+        onSplitRemove={() => act('split-remove')}
       />
     </div>
   );

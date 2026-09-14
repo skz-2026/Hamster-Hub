@@ -118,8 +118,34 @@ async appSearch(query: string, limit: number | null) : Promise<AppEntry[]> {
     return await TAURI_INVOKE("app_search", { query, limit });
 },
 /**
+ * 分屏会话快照。读的时候会自愈：已被关掉的窗口剔除、剩下的按新成员数补位。
+ */
+async splitState() : Promise<SplitState> {
+    return await TAURI_INVOKE("split_state");
+},
+/**
+ * 把应用的一扇窗口加入分屏（同一应用多次调用依次加入它的多扇窗口）。
+ * 首次调用即建立会话；已满 4 扇或该应用没有可分屏的窗口时报错（前端据此提示）。
+ */
+async splitAdd(appKey: string) : Promise<SplitState> {
+    return await TAURI_INVOKE("split_add", { appKey });
+},
+/**
+ * 把某扇窗口移出分屏：它回到加入前的位置/状态，剩下的补位。
+ * （「关闭窗口」是另一回事，前端调 app_window_close + split_state 补位。）
+ */
+async splitRemove(windowId: number) : Promise<SplitState> {
+    return await TAURI_INVOKE("split_remove", { windowId });
+},
+/**
+ * 退出分屏：全部窗口回到加入前的位置与显示状态。
+ */
+async splitExit() : Promise<SplitState> {
+    return await TAURI_INVOKE("split_exit");
+},
+/**
  * 打开（或换目标重开）dock 弹窗：水平钳进任务栏范围，垂直落在任务栏条
- * 上沿上方 8px。menu 抢焦点（失焦即收）；hover 不抢焦点（跟随悬停）。
+ * 上沿上方 8px。menu/split 抢焦点（失焦即收）；hover 不抢焦点（跟随悬停）。
  */
 async dockMenuOpen(payload: DockMenuPayload) : Promise<null> {
     return await TAURI_INVOKE("dock_menu_open", { payload });
@@ -135,6 +161,13 @@ async dockMenuPayload() : Promise<DockMenuPayload | null> {
  */
 async dockMenuHide() : Promise<null> {
     return await TAURI_INVOKE("dock_menu_hide");
+},
+/**
+ * 打开「管理分屏」弹层（任务栏胶囊点击）：与右键菜单同一置顶小窗，
+ * 只是 kind=split、尺寸按成员行数算（行数由调用方给，避免弹窗自己再查一遍会话）。
+ */
+async splitMenuOpen(x: number, count: number) : Promise<null> {
+    return await TAURI_INVOKE("split_menu_open", { x, count });
 },
 async todoList() : Promise<Todo[]> {
     return await TAURI_INVOKE("todo_list");
@@ -757,7 +790,7 @@ mount: string; total_gb: number; used_gb: number; percent: number }
  */
 export type DockMenuPayload = { 
 /**
- * "menu" = 右键菜单；"hover" = 悬停窗口卡片
+ * "menu" = 右键菜单；"hover" = 悬停窗口卡片；"split" = 分屏管理弹层
  */
 kind: string; appKey: string; 
 /**
@@ -777,7 +810,23 @@ running: boolean;
  */
 multi: boolean; 
 /**
- * 悬停卡片窗口清单（hover；menu 为空）
+ * 桌面接管态才给分屏入口（menu 里显示「分屏添加/移出/已满」一行）
+ */
+splitAvailable: boolean; 
+/**
+ * 该应用已在分屏中 → 那一行换成「移出分屏」
+ */
+splitMember: boolean; 
+/**
+ * 分屏已满 4/4 且该应用不在其中 → 那一行显示为禁用的「分屏已满」
+ */
+splitFull: boolean; 
+/**
+ * kind=split：当前成员数（弹窗高度按行数算）
+ */
+splitCount: number; 
+/**
+ * 悬停卡片窗口清单（hover；menu/split 为空）
  */
 windows: AppWindowInfo[] }
 export type FileHit = { path: string; name: string; ext: string | null; kind: string; size: number; mtime: number }
@@ -991,6 +1040,50 @@ export type SnapshotRole = "user" | "assistant" |
  * 思考/推理内容（默认折叠展示）
  */
 "thinking" | "tool" | "system"
+/**
+ * 一扇被托管的窗口（对外快照）
+ */
+export type SplitMember = { 
+/**
+ * 窗口句柄数值（退出/移出/关闭都用它）
+ */
+windowId: number; 
+/**
+ * 来源应用（菜单据此判断「该应用是否已在分屏里」）
+ */
+appKey: string; 
+/**
+ * 窗口标题（列表主文案；多开的应用靠它区分）
+ */
+title: string; 
+/**
+ * 进程名（标题为空时的兜底文案）
+ */
+process: string; 
+/**
+ * 窗口图标 PNG 的 data URL（空串时前端回退首字占位）
+ */
+png: string; 
+/**
+ * 0 起的格序（UI 显示时 +1）
+ */
+slot: number }
+/**
+ * 分屏会话快照（`active=false` 时其余字段为空值）
+ */
+export type SplitState = { active: boolean; 
+/**
+ * 布局 id（`tile::TileLayout::id`）；空串 = 无会话
+ */
+layout: string; 
+/**
+ * 布局格数（空位数 = slots − members.len()）
+ */
+slots: number; 
+/**
+ * 上限（= 4）
+ */
+capacity: number; members: SplitMember[] }
 /**
  * 创建流式会话（官方 headless 协议）。事件经 BenchStreamEvent 推送；
  * first_prompt 非空时握手后立即发起首轮。

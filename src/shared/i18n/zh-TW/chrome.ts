@@ -40,6 +40,9 @@ export const chrome: Record<keyof typeof chromeZh, string> = {
   'chrome.dock.newInstance': '開新視窗',
   'chrome.dock.pickWindow': '選擇要帶到最前的視窗',
   'chrome.dock.minimized': '已最小化',
+  'chrome.dock.splitAdd': '加入分割畫面',
+  'chrome.dock.splitRemove': '移出分割畫面',
+  'chrome.dock.splitFull': '分割畫面已滿（4/4）',
 
   'chrome.picker.searchApps': '搜尋應用程式',
   'chrome.picker.dockFull': '工作列自訂區已滿（{n} 個）——右鍵圖示可移除後再新增',

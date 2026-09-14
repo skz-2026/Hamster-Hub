@@ -61,9 +61,11 @@ pnpm tauri dev    # vite + cargo run 一键起
 src/
   app/            壳：AppShell(路由/事件导航)、SideNav、TitleBar、providers、router.tsx
     routes/       AppShell 内：home(iOS 主屏) desktop agent bench workbench(仪表盘,默认/) search
-                  schedule apps files settings；AppShell 外独立窗口：spotlight / taskbar
+                  schedule apps files settings；AppShell 外独立窗口：spotlight / taskbar / dock-menu
   features/
-    home/         iOS 主屏：HomeScreen、AppIcon、DockBar、TrayArea、HomeWidget、layout.ts(纯函数+单测)
+    home/         iOS 主屏：HomeScreen、AppIcon、DockBar、TrayArea、HomeWidget、layout.ts(纯函数+单测)。
+                  托管分屏的 dock 侧 UI 也在这：DockAppMenu 的「分屏添加/移出」行、
+                  SplitPill(任务栏 n/4 胶囊)、SplitPanel(管理弹层)——会话与摆窗在 Rust
     bench/        代理工作台：ChatThread/ChatSessionView/TerminalView(xterm)/SessionSidebar、
                   stream-registry + timeline-logic(流→UI 时间线,含单测)、registry、AgentAvatar
     agent/        桌面助手：AssistantPanel(persona 面板)、McpSyncCard(MCP 接入状态/开关)
@@ -84,8 +86,11 @@ src-tauri/
   src/
     bench/        代理工作台装配：commands(全部 bench_* IPC)、assistant(persona+MCP 注入+接入信息)
     commands/     其余 IPC 薄层：settings/system/apps/desktop/files/todo/note/dashboard/sysinfo/control/tray/ai
+                  split(托管分屏：split_state/split_add/split_remove/split_exit；Win32 摆窗在平台层)
     core/         appindex(.lnk 扫描+图标缓存)、fileindex(FTS5+拼音+watcher)、pinyin、weather、countdown
-    desktop_mode.rs  系统接管/还原/巡检/看门狗拉起/窗口形态
+    desktop_mode.rs  系统接管/还原/巡检/看门狗拉起/窗口形态（退出时先收掉托管分屏）
+    split_mode.rs    托管分屏会话：成员清单 + 加入前的窗口状态（退出/移出还原）、
+                     成员数→布局重排（1 扇左半/2 扇左右/3 扇三分/4 扇四分）、死窗自愈补位
     mcp_server.rs    McpHub：内嵌 HTTP MCP server（127.0.0.1 + 双令牌）
     plugins/      UI 插件宿主（首启自举示例/存储/bridge）
     store/        主库 hamsterhub.db：db(迁移链)、settings、todo、note、config
@@ -97,6 +102,8 @@ src-tauri/
     hamster-index/     跨 Agent 会话全文索引（FTS5；派生库，可重建）
     hamster-mcp/       桌面 MCP server：desktop/browser/computer 工具组 + 审计（含 mcp serve stdio）
     hamster-platform/  Win32 共享层：taskbar/desktop_icons/snapshot/icons/shell/tray/volume/wind_guard
+                       tile(窗口平铺：布局几何纯函数+单测、成员数→布局映射、不可见边框补偿、
+                            显示器工作区、窗口状态快照/还原 capture_restore/apply_restore)
                        （主程序与看门狗共用）
     hamster-watchdog/  看门狗 bin（主进程死亡→按快照还原系统）
   app.manifest    comctl32 v6 + DPI（测试二进制必需，勿删）
