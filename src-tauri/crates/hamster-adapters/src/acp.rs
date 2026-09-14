@@ -626,8 +626,8 @@ impl AgentAdapter for AcpAgentAdapter {
     }
 }
 
-/// 可执行探测统一走 `crate::resolve_best_program`（npm 全局 → PATH 收集候选，
-/// 多版本按 `--version` 择优，带 TTL 缓存）；本模块不再单独维护一份查找逻辑。
+// 可执行探测统一走 `crate::resolve_best_program`（npm 全局 → PATH 收集候选，
+// 多版本按 `--version` 择优，带 TTL 缓存）；本模块不再单独维护一份查找逻辑。
 
 #[cfg(test)]
 mod tests {

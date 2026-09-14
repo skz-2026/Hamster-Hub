@@ -4,12 +4,17 @@ node_modules/
 # build
 dist/
 dist-docs/
-src-tauri/target/
-src-tauri/target-live-test/
+# src-tauri/target*/ 覆盖 target / target-verify / target-live-test 等一切 cargo 目标目录
+# （target-verify 是绕开「运行中的 dev 实例占用 target/ 文件锁」时用的独立目标目录）
+src-tauri/target*/
 src-tauri/gen/
 
 # generated（可重新生成，提交以方便纯前端改动）
 # src/shared/types/ipc.ts
+
+# ts-rs：crates/* 里 #[ts(export)] 的类型，在 cargo test 时导出到各 crate 的 bindings/
+# （前端不用这些文件，规范 TS 类型来自 src/shared/types/ipc.ts）
+src-tauri/crates/*/bindings/
 
 # editor / os
 .vscode/
