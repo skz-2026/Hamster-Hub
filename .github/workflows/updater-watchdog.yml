@@ -1,0 +1,40 @@
+name: Updater Watchdog
+
+# 为什么要有这个工作流：
+# 自更新是「发布后才发现坏了就晚了」的功能。最典型的隐性故障是 release 停在草稿
+# （release.yml 里 releaseDraft: true），此时 GitHub 的 /releases/latest 会 404，
+# **所有已安装用户静默收不到更新**，而发布者本地毫无感知。
+# 这里每天以「未认证的普通用户视角」跑一次端到端校验：端点可达 + 平台键齐全 +
+# 安装包签名与内嵌公钥配对 + .sig 与 latest.json 一致。任一环断裂即 job 失败并通知。
+on:
+  schedule:
+    # 每天 01:20 UTC（北京时间 09:20）巡检一次
+    - cron: '20 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-updater:
+    name: 线上更新链路端到端校验
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # 无依赖纯 Node 脚本（fetch + node:crypto），不需要 pnpm install
+      - name: 校验 latest.json / 平台键 / 安装包签名
+        run: node scripts/verify-updater.mjs --no-version-check
+
+      - name: 失败时给出排查顺序
+        if: failure()
+        run: |
+          echo "::error title=用户将收不到更新::线上更新链路校验失败，排查顺序见下方 ⬇️"
+          echo "1) Release 是否已 Publish（停在草稿或标了 prerelease 都不会进 /releases/latest）"
+          echo "2) Release 的 assets 是否已全部上传（latest.json / exe / exe.sig）"
+          echo "3) 平台键是否仍为 windows-x86_64-nsis"
+          echo "4) 签名私钥是否与 tauri.conf.json 内嵌公钥配对"

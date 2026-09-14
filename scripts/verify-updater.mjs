@@ -14,6 +14,8 @@
  *   node scripts/verify-updater.mjs                 # 校验配置里的全部端点
  *   node scripts/verify-updater.mjs --endpoint <url> # 校验指定端点（如发布前用 draft 的直链）
  *   node scripts/verify-updater.mjs --skip-download  # 只验 latest.json 结构，不下载安装包
+ *   node scripts/verify-updater.mjs --no-version-check # 只验链路完整性，不管本地版本是否已发布
+ *                                                      # （定时巡检用：开发中版本号领先线上时不该报警）
  *
  * 退出码：0 全绿；1 有失败项（CI / 发布清单里可直接当门禁用）。
  */
@@ -37,6 +39,7 @@ const valueOf = (name) => {
 
 const endpoints = valueOf('--endpoint') ? [valueOf('--endpoint')] : configuredEndpoints;
 const skipDownload = flag('--skip-download');
+const noVersionCheck = flag('--no-version-check');
 
 const b64 = (s) => Buffer.from(s, 'base64');
 const b64url = (buf) => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -192,15 +195,21 @@ for (const endpoint of endpoints) {
   const verdict = verifySignature(pub, artifact, entry.signature);
   if (verdict.ok) ok(`签名校验通过（模式 ${verdict.alg}，与内嵌公钥配对，用户端可安装）`);
   else bad(`签名校验失败：${verdict.why}`);
-  // 顺带确认签名文件本身也在链上（.sig 资产）
+  // 顺带确认签名文件本身也在链上（.sig 资产），并核对它与 latest.json 里的 signature 一致
   const sigUrl = artUrlToSigUrl(entry.url);
   if (sigUrl) {
     try {
-      const { res } = await fetchWithTimeout(sigUrl);
-      if (res.ok) ok('.sig 资产存在（部分手动安装流程需要）');
-      else console.log('  ⚠️ .sig 资产不存在（%s → HTTP %s），自动更新不需要它，手动校验会缺一份', sigUrl.split('/').pop(), res.status);
-    } catch {
-      console.log('  ⚠️ .sig 资产探测失败（网络原因，忽略）');
+      const { res, body } = await fetchWithTimeout(sigUrl, true);
+      if (!res.ok) {
+        console.log('  ⚠️ .sig 资产不存在（%s → HTTP %s）：自动更新不需要它，手动离线校验会缺一份', sigUrl.split('/').pop(), res.status);
+      } else {
+        const sigFile = body.toString('utf8').trim();
+        const fromJson = String(entry.signature || '').trim();
+        if (sigFile === fromJson) ok('.sig 资产存在，且与 latest.json 的 signature 一致');
+        else console.log('  ⚠️ .sig 资产存在但与 latest.json 的 signature 不一致——手动校验与自动更新会得到不同结果，建议重新上传 .sig');
+      }
+    } catch (e) {
+      console.log('  ⚠️ .sig 资产探测失败（%s：%s），该资产非自动更新必需，忽略', e.name, e.message);
     }
   }
 }
@@ -214,6 +223,8 @@ function artUrlToSigUrl(url) {
 console.log('\n== 版本结论 ==');
 if (!latestVersionSeen) {
   console.log('  ⚠️ 未取到任何发布版本，无法判断用户能否升级（见上方失败项）');
+} else if (noVersionCheck) {
+  console.log('  线上发布版本 %s（已跳过与本地版本 %s 的比较）', latestVersionSeen, currentVersion);
 } else {
   const cmp = compareVersions(latestVersionSeen, currentVersion);
   console.log('  线上发布版本 %s vs 本地构建版本 %s', latestVersionSeen, currentVersion);

@@ -15,7 +15,8 @@
     "e2e": "playwright test",
     "tauri": "tauri",
     "icon": "node scripts/make-icon.mjs",
-    "codegen:ipc": "cargo test --manifest-path src-tauri/Cargo.toml export_bindings"
+    "codegen:ipc": "cargo test --manifest-path src-tauri/Cargo.toml export_bindings",
+    "verify:updater": "node scripts/verify-updater.mjs"
   },
   "engines": {
     "node": ">=22.13"
