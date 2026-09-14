@@ -81,3 +81,32 @@
     症状特征：只读 payload 的消费方「在真机好、在浏览器预览没反应」。
     修法：mock 的载荷字段名一律**照抄 `src/shared/types/ipc.ts` 生成类型**（snake_case），
     新增事件时先打开生成类型对照；只 `listen(() => …)` 不读 payload 的消费方会掩盖问题，别据此判断 mock 正确。
+25. **Tauri release 草稿会让「自更新」对所有已装用户静默失效**（2026-09-13 验更新链路时实测）：
+    `release.yml` 里 `releaseDraft: true`（有意为之，防发半成品），代价是 release 建好后停在草稿，
+    此时 GitHub 的 `/releases/latest` 对未认证请求返回 **404**（草稿与 prerelease 都不参与 latest 解析），
+    而应用端 updater 正是打这个端点 → 每个用户点「检查更新」都报错，**发布者本地毫无感知**。
+    同一症状还有第二个成因：release 已 Publish 但 **assets 一个没传**（或只传了一部分）→ 同样 404 / 下载 404。
+    症状特征：本地 `pnpm tauri build` + 手动指定本地 latest.json 一切正常，线上就是不行。
+    修法/规避：①发版后**手动到 Releases 页面点 Publish**，并确认 `latest.json` / `*_x64-setup.exe` / `*.exe.sig`
+    三个 assets 都显示 uploaded；②每次发布会后跑 `pnpm verify:updater`（未认证视角端到端断言，退出码可当门禁）；
+    ③仓库已加 `updater-watchdog.yml`，每天 09:20 自动巡检线上链路，坏了 CI 报警。
+    另注：`latest.json` 的 `signature` 字段与 `.sig` 资产内容**是同一串文本**（Tauri 把 minisign 文本又 base64 了一层，
+    故解析要解两层），脚本已核对二者一致；`.sig` 不是自动更新的必需品（签名取自 latest.json），但手动离线校验要用。
+26. **`cargo clippy/test --manifest-path src-tauri/Cargo.toml` 不带 `--workspace` 时只覆盖主包**（2026-09-14 发现）：
+    局部现象：本地 `cargo clippy -p hamster-adapters --all-targets -- -D warnings` 稳定报
+    `error: empty line after doc comment`（acp.rs 里 `///` 文档注释与 `#[cfg(test)]` 之间夹了空行），
+    而 GitHub CI 的 rust job 从该代码引入起（`50ac4db`）**一直全绿**，同一 rustc/clippy 1.98.0，百思不得其解。
+    根因：`src-tauri/Cargo.toml` 既是 workspace 根**也是**一个包，`workspace_default_members` 只有
+    `["hamster-hub"]`（可用 `cargo metadata --no-deps | jq .workspace_default_members` 验证）。
+    不带 `--workspace` / `-p` 时 cargo **只选默认成员**，于是：
+      ① 7 个 `crates/*` 兄弟包的 clippy 只作为「依赖的 lib target」被顺带编译，**没有 test target**；
+      ② 该 lint 只在 `#[cfg(test)]` 模块真正参与编译时才触发（不带 `--all-targets` 实测不报）→ 永不触发；
+      ③ `cargo test` 同理，兄弟包的单测在 CI 里**从未运行过**。
+    为什么 `cargo fmt --all` 反而能发现同类问题：`--all` 就是全工作区，不受默认成员影响。
+    修法：CI 两条命令都补 `--workspace`（本仓 ci.yml 已改）。自查口诀：
+    `cargo metadata --manifest-path src-tauri/Cargo.toml --no-deps` 看 `workspace_default_members`
+    是不是只有主包；凡是 CI 里的 cargo 命令，先问一句「它到底选中了哪些包」。
+    附带心得：判断 lint 是否真会被 CI 抓到，别只看「CI 绿」，用 `-p <包名> --all-targets` 手动复现一次。
+    另：本地跑 Rust 门禁时若 `pnpm tauri dev` 还开着，`target/` 被占用会报
+    `build.rs: tauri-build: os error 32`。用 `CARGO_TARGET_DIR=src-tauri/target-verify` 换个目标目录即可绕开，
+    不必杀掉正在接管桌面的 dev 实例。

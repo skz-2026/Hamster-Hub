@@ -170,11 +170,16 @@ Rust：
 ## 提交门禁（scripts/check.ps1 一键跑）
 
 - check.ps1 实跑：`pnpm typecheck` + `pnpm build`（tsc --noEmit + vite build）+
-  `cargo fmt --check` + `cargo clippy --all-targets -- -D warnings` + `cargo test`（manifest 指 src-tauri）。
+  `cargo fmt --all --check` + `cargo clippy --workspace --all-targets -- -D warnings` + `cargo test --workspace`（manifest 指 src-tauri）。
+- ⚠️ **`--workspace` 不能省**：src-tauri/Cargo.toml 既是 workspace 根也是主包，省掉它只会检查
+  `hamster-hub`，crates/* 下 7 个兄弟包的 clippy 与单测全被跳过（详见 docs/05-pitfalls.md 坑 26）。
+- dev 实例开着时 `target/` 被占，报 `tauri-build: os error 32`；设 `CARGO_TARGET_DIR=<root>\src-tauri\target-verify`
+  换目标目录即可绕开，别杀正在接管桌面的进程。
 - **未进门禁、改到相关文件时本地自跑**：`pnpm test`（vitest：layout/stream-registry/timeline-logic 等）、
   `pnpm e2e`（Playwright 冒烟，mock 层驱动）。
+- 发版相关：`pnpm verify:updater`（更新链路端到端校验，退出码可当门禁；发布后必跑，见坑 25）。
 - CI（.github/workflows/ci.yml）：frontend(typecheck+build) / e2e(Playwright) / rust(fmt+clippy+test)
-  三 job；tag 触发 release.yml 出 NSIS。
+  三 job；tag 触发 release.yml 出 NSIS；另有 updater-watchdog.yml 每日巡检线上更新链路。
 
 ## 已知坑（踩过的，别再踩）
 
