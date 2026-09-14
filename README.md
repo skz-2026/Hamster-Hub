@@ -97,17 +97,6 @@ move to `pnpm tauri dev` for the system-level integration layer.
 
 Released under the MIT License.
 
-## 4. Community & Support
-
-<div align="center">
-<table>
-  <tr>
-    <td align="center" width="260"><img src="./docs/contact/we-chat-room.jpg" width="220" alt="WeChat group QR code" /><br><sub><b>WeChat group</b> · 扫码进群，反馈与交流</sub></td>
-    <td align="center" width="260"><img src="./docs/contact/we-chat-pay.jpg" width="220" alt="WeChat donation QR code" /><br><sub><b>Sponsor</b> · 请仓鼠吃点坚果 🥕</sub></td>
-  </tr>
-</table>
-</div>
-
 <div align="center">
 <sub>把桌面，囤进一个窝。· Hoard your desktop into one cozy nest.</sub>
 </div>
