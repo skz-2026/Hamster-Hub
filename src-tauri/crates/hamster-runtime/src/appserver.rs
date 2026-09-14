@@ -310,7 +310,7 @@ impl StreamSession {
         let handshake: Result<()> = (|| {
             let init = session.request(
                 "initialize",
-                serde_json::json!({ "clientInfo": { "name": "上游", "version": "0.1.0" } }),
+                serde_json::json!({ "clientInfo": { "name": "上游", "version": env!("CARGO_PKG_VERSION") } }),
             )?;
             let _ = init; // serverInfo/codexHome，暂不消费
             session.notify("initialized", serde_json::json!({}))?;

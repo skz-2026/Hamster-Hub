@@ -394,7 +394,7 @@ export const mockCommands = {
     return null;
   },
   async appHealth(): Promise<AppHealth> {
-    return { name: 'hamster-hub', version: '0.1.0-web' };
+    return { name: 'hamster-hub', version: `${__APP_VERSION__}-web` };
   },
   async updateCheck(): Promise<UpdateInfo | null> {
     // 假更新：让浏览器层能走完「发现新版本 → 下载进度 → 安装」全流程 UI

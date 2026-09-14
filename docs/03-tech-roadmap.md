@@ -125,14 +125,18 @@
 - **发布即生效的两个前置（2026-09-14 校验发现）**：
   1. `release.yml` 用 `releaseDraft: true` 建**草稿** release，而 GitHub 的 `/releases/latest` **不解析草稿与预发布**——
      草稿状态下端点返回 404，**所有用户都收不到更新**（应用会显示检查失败，不是「已是最新」）。发版后必须到
-     Releases 页面手动 **Publish release**，这一步不可省。当前 v0.1.1 即停在此处（Release 工作流 2026-09-13
-     12:34 UTC 已成功，但未 Publish）。
+     Releases 页面手动 **Publish release**，这一步不可省。v0.1.1 即踩过此坑：Release 工作流 2026-09-13 12:34 UTC
+     就已成功，却因未 Publish（以及 assets 未传齐）导致端点 404；**2026-09-14 手动 Publish 并补传 3 个 assets 后
+     复验全绿**（端点 200、签名与内嵌公钥配对、`.sig` 与 latest.json 一致）。
   2. 端点与安装包资产都走 github.com / `objects.githubusercontent.com`，国内直连常被限速或阻断；目前是**单端点无镜像兜底**，
      需要时在 `plugins.updater.endpoints` 追加国内可达镜像（Tauri 按顺序尝试）。
-- **校验工具**：`node scripts/verify-updater.mjs`——按应用运行时同一套逻辑做端到端断言（拉 latest.json →
-  平台键 `windows-x86_64-nsis` → 下载安装包 → 用**内嵌公钥**验 minisign 签名 → 语义化版本比较判断用户能否收到）。
+- **校验工具**：`node scripts/verify-updater.mjs`（或 `pnpm verify:updater`）——按应用运行时同一套逻辑做端到端断言
+  （拉 latest.json → 平台键 `windows-x86_64-nsis` → 下载安装包 → 用**内嵌公钥**验 minisign 签名 → 语义化版本比较判断
+  用户能否收到；`--no-version-check` 供定时巡检只断链路不管版本）。
   发布前后各跑一次；退出码非 0 可直接当发布门禁。自检已覆盖：正向（真签名可过）、篡改字节（必失败）、
   草稿/404（给出排查方向）。（2026-09-14 已确认本地签名私钥与内嵌公钥配对，key_id `0563a36a97d03674`，签名模式 ED 预哈希。）
+- **日常巡检**：`.github/workflows/updater-watchdog.yml` 每日 01:20 UTC（北京 09:20）以未认证的普通用户视角复查线上链路，
+  断裂即 CI 报警——覆盖「发布后又被人改回草稿 / assets 丢失」这类事后发生的问题。
 
 ## 4. 阶段技术路线（与产品里程碑对齐）
 
@@ -154,7 +158,7 @@
 - 超范围提前交付：小组件×6、控制中心（真实音量）、待办/便签/倒数日/日程、AI 兜底问答、贴边常驻任务栏（独立置顶窗 + 定制/常用分组）、bench 代理工作台（上游 vendor 四 crate）。
 - 代码签名未做 → 移入 M3（发布硬门槛）。
 
-### M3 接管收尾 & 公开发布（2-3 周，v0.2.0 首个公开版）
+### M3 接管收尾 & 公开发布（2-3 周，v0.1.2 首个公开版）
 - 任务栏托盘区：✅ 消除枚举期任务栏闪烁（`tray.rs` `OpaqueDockGuard` 闪现期切不透明 + `open_overflow` 置顶压制）；⬜ 托盘区右键转发（当前仅左键 Invoke 语义）。
 - ✅ 通知中心 v1（2026-09-14，commit `4fdedff`）：按日分组的通知面板（待办/番茄钟/AI Agent 会话/更新就绪四事件源）、未读角标、已读/移除/跳转，为 M4 agent 后台任务通知预留通道。
 - ✅ /search、/files 路由页已补齐（非 Stub；`shared/components/StubRoute.tsx` 现已无引用，可删）。

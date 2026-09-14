@@ -24,7 +24,8 @@ use crate::home;
 
 pub const PROTOCOL_VERSION: &str = "2024-11-05";
 pub const SERVER_NAME: &str = "hamster-desktop";
-pub const SERVER_VERSION: &str = "0.1.0";
+/// 直接取 crate 版本（继承 [workspace.package]），别再手写一遍——手写会漂。
+pub const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// computer use 安全门的环境变量名（"1"/"true"/"on" = 放行，默认关）
 pub const ENV_CU_MODE: &str = "HAMSTER_CU_MODE";

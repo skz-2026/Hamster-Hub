@@ -1,6 +1,7 @@
 [package]
 name = "hamster-hub"
-version = "0.1.1"
+# 版本从 [workspace.package] 继承，避免主包与兄弟包各写一份（发布时只改一处 Cargo 版本）
+version.workspace = true
 description = "仓鼠Hub —— 把桌面，囤进一个窝。Windows 上的 iOS 风格桌面"
 authors = ["hamster-hub"]
 license = "MIT"
@@ -22,7 +23,9 @@ members = [
 
 # vendor crate 以 workspace = true 引用的共享依赖（与 上游 仓库同版本）
 [workspace.package]
-version = "0.2.0"
+# 全工作区唯一的版本来源：主包 + 全部 crates/* 都从这里继承。
+# 发版改这里 + package.json + tauri.conf.json 三处（installer/updater 读后两者）。
+version = "0.1.2"
 edition = "2021"
 license = "MIT"
 

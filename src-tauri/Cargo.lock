@@ -1964,7 +1964,7 @@ dependencies = [
 
 [[package]]
 name = "hamster-adapters"
-version = "0.2.0"
+version = "0.1.2"
 dependencies = [
  "chrono",
  "hamster-core",
@@ -1976,7 +1976,7 @@ dependencies = [
 
 [[package]]
 name = "hamster-core"
-version = "0.2.0"
+version = "0.1.2"
 dependencies = [
  "chrono",
  "serde",
@@ -1992,7 +1992,7 @@ dependencies = [
 
 [[package]]
 name = "hamster-hub"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -2035,7 +2035,7 @@ dependencies = [
 
 [[package]]
 name = "hamster-index"
-version = "0.2.0"
+version = "0.1.2"
 dependencies = [
  "hamster-adapters",
  "hamster-core",
@@ -2046,7 +2046,7 @@ dependencies = [
 
 [[package]]
 name = "hamster-mcp"
-version = "0.2.0"
+version = "0.1.2"
 dependencies = [
  "base64 0.22.1",
  "chromiumoxide",
@@ -2064,7 +2064,7 @@ dependencies = [
 
 [[package]]
 name = "hamster-platform"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "base64 0.22.1",
  "image 0.25.10",
@@ -2079,7 +2079,7 @@ dependencies = [
 
 [[package]]
 name = "hamster-runtime"
-version = "0.2.0"
+version = "0.1.2"
 dependencies = [
  "hamster-core",
  "portable-pty",
@@ -2090,7 +2090,7 @@ dependencies = [
 
 [[package]]
 name = "hamster-watchdog"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "hamster-platform",
  "windows 0.61.3",

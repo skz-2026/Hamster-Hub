@@ -1,7 +1,7 @@
 {
   "name": "hamster-hub",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "license": "MIT",
   "description": "仓鼠Hub —— 把桌面，囤进一个窝。Windows 本地优先的智能桌面助手",
   "type": "module",
