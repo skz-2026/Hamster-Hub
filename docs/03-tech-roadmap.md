@@ -122,6 +122,17 @@
 - 本地 `pnpm tauri build` 会因 createUpdaterArtifacts 要求签名环境：
   PowerShell `setx TAURI_SIGNING_PRIVATE_KEY_PATH "$env:USERPROFILE\.tauri\hamsterhub-updater.key"`（重开终端生效）。
 - 代码签名证书（杀软误报）仍按计划 M3 购置，与本签名体系互不影响。
+- **发布即生效的两个前置（2026-09-14 校验发现）**：
+  1. `release.yml` 用 `releaseDraft: true` 建**草稿** release，而 GitHub 的 `/releases/latest` **不解析草稿与预发布**——
+     草稿状态下端点返回 404，**所有用户都收不到更新**（应用会显示检查失败，不是「已是最新」）。发版后必须到
+     Releases 页面手动 **Publish release**，这一步不可省。当前 v0.1.1 即停在此处（Release 工作流 2026-09-13
+     12:34 UTC 已成功，但未 Publish）。
+  2. 端点与安装包资产都走 github.com / `objects.githubusercontent.com`，国内直连常被限速或阻断；目前是**单端点无镜像兜底**，
+     需要时在 `plugins.updater.endpoints` 追加国内可达镜像（Tauri 按顺序尝试）。
+- **校验工具**：`node scripts/verify-updater.mjs`——按应用运行时同一套逻辑做端到端断言（拉 latest.json →
+  平台键 `windows-x86_64-nsis` → 下载安装包 → 用**内嵌公钥**验 minisign 签名 → 语义化版本比较判断用户能否收到）。
+  发布前后各跑一次；退出码非 0 可直接当发布门禁。自检已覆盖：正向（真签名可过）、篡改字节（必失败）、
+  草稿/404（给出排查方向）。（2026-09-14 已确认本地签名私钥与内嵌公钥配对，key_id `0563a36a97d03674`，签名模式 ED 预哈希。）
 
 ## 4. 阶段技术路线（与产品里程碑对齐）
 
